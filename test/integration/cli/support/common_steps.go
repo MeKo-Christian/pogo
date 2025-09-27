@@ -285,12 +285,17 @@ func (testCtx *TestContext) iRunCommandInternal(command string) error {
 		parts = parts[1:]
 	}
 
-	// Add models-dir flag if GO_OAR_OCR_MODELS_DIR is set
-	for _, envVar := range testCtx.EnvVars {
-		if strings.HasPrefix(envVar, "GO_OAR_OCR_MODELS_DIR=") {
-			modelsDir := strings.TrimPrefix(envVar, "GO_OAR_OCR_MODELS_DIR=")
-			parts = append(parts, "--models-dir", modelsDir)
+	// Add models-dir flag if GO_OAR_OCR_MODELS_DIR is set and not already present
+	hasModelsDir := false
+	for i, part := range parts {
+		if part == "--models-dir" && i < len(parts)-1 {
+			hasModelsDir = true
 			break
+		}
+	}
+	if !hasModelsDir {
+		if modelsDir := os.Getenv("GO_OAR_OCR_MODELS_DIR"); modelsDir != "" {
+			parts = append(parts, "--models-dir", modelsDir)
 		}
 	}
 

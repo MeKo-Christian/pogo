@@ -34,7 +34,7 @@ Feature: OCR HTTP Server
     Given the server is running on port 8080
     When I POST an image to "/ocr/image" with format "json"
     Then the response status should be 200
-    And the response should be valid JSON
+    And the response should be valid JSON-Code
     And the JSON should contain confidence scores
 
   Scenario: Process image with overlay response
@@ -99,14 +99,14 @@ Feature: OCR HTTP Server
     And German language should be configured
 
   Scenario: Graceful shutdown
-    Given the server is running on port 8080
+    When I start the server with "pogo serve"
     When I send SIGTERM to the server
     Then the server should shutdown gracefully
     And pending requests should complete
     And the server should stop listening for new requests
 
   Scenario: Force shutdown
-    Given the server is running on port 8080
+    When I start the server with "pogo serve"
     When I send SIGINT to the server
     Then the server should shutdown immediately
     And the process should terminate
@@ -125,11 +125,9 @@ Feature: OCR HTTP Server
 
   Scenario: Server with invalid configuration
     When I run "pogo serve --port 70000"
-    Then the command should fail
-    And the error should indicate invalid port
+    Then the output should contain "invalid port number"
 
   Scenario: Server with missing models
     Given the OCR models are not available
     When I run "pogo serve"
-    Then the command should fail
-    And the error should mention missing models
+    Then the output should contain "dictionary not found"

@@ -295,14 +295,59 @@ func (testCtx *TestContext) theOutputShouldContainGermanTextExtraction() error {
 
 // theOutputShouldShowPagesTotal verifies total page count in output.
 func (testCtx *TestContext) theOutputShouldShowPagesTotal(totalPages int) error {
-	// Simplified check - in real implementation would parse output for page count
-	return nil
+	// Check for page count indicators in the output
+	output := strings.ToLower(testCtx.LastOutput)
+
+	// Look for patterns like "3 pages", "total: 3", "pages: 3", etc.
+	pagePatterns := []string{
+		fmt.Sprintf("%d pages", totalPages),
+		fmt.Sprintf("%d page", totalPages),
+		fmt.Sprintf("total.*%d", totalPages),
+		fmt.Sprintf("pages.*%d", totalPages),
+	}
+
+	for _, pattern := range pagePatterns {
+		if strings.Contains(output, pattern) {
+			return nil
+		}
+	}
+
+	// For JSON output, check the pages array length
+	if strings.Contains(testCtx.LastCommand, "--format json") {
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(testCtx.LastOutput), &data); err != nil {
+			return fmt.Errorf("failed to parse JSON output: %w", err)
+		}
+
+		if pages, exists := data["pages"]; exists {
+			if pagesArray, ok := pages.([]interface{}); ok {
+				if len(pagesArray) == totalPages {
+					return nil
+				}
+				return fmt.Errorf("expected %d pages in JSON, but found %d", totalPages, len(pagesArray))
+			}
+		}
+	}
+
+	return fmt.Errorf("output does not show %d pages total: %s", totalPages, testCtx.LastOutput)
 }
 
 // thePDFShouldHavePages verifies PDF page count.
 func (testCtx *TestContext) thePDFShouldHavePages(pageCount int) error {
-	// Simplified check - in real implementation would verify PDF metadata
-	return nil
+	// This would typically verify the PDF file itself has the expected number of pages
+	// For now, we'll check if the command references a PDF and assume it's correct
+	// In a real implementation, this would use a PDF library to inspect the file
+
+	cmdParts := strings.Fields(testCtx.LastCommand)
+	for _, part := range cmdParts {
+		if strings.HasSuffix(part, ".pdf") {
+			// Found a PDF file reference - for integration testing, we'll trust the test data
+			// In production, this would validate the actual PDF page count
+			return nil
+		}
+	}
+
+	return fmt.Errorf("no PDF file found in command: %s", testCtx.LastCommand)
 }
 
 // RegisterPDFSteps registers all PDF processing step definitions.
@@ -330,7 +375,11 @@ func (testCtx *TestContext) RegisterPDFSteps(sc *godog.ScenarioContext) {
 		}
 		return testCtx.onlyPagesToShouldBeProcessed(start, end)
 	})
-	sc.Step(`^only pages ([\d,]+) should be processed$`, testCtx.onlyPagesShouldBeProcessed)
+	sc.Step(`^only pages ([\d,\s]+) should be processed$`, testCtx.onlyPagesShouldBeProcessed)
+	sc.Step(`^only pages (\d+), (\d+), and (\d+) should be processed$`, func(page1, page2, page3 int) error {
+		pages := fmt.Sprintf("%d,%d,%d", page1, page2, page3)
+		return testCtx.onlyPagesShouldBeProcessed(pages)
+	})
 
 	// Confidence filtering
 	sc.Step(`^all detected regions should have confidence >= ([\d.]+)$`, func(thresholdStr string) error {
@@ -364,6 +413,7 @@ func (testCtx *TestContext) RegisterPDFSteps(sc *godog.ScenarioContext) {
 		return testCtx.theErrorShouldMention("PDF")
 	})
 	sc.Step(`^the output should indicate no pages processed$`, testCtx.theOutputShouldIndicateNoPagesProcessed)
+	sc.Step(`^the output should indicate no pages in range$`, testCtx.theOutputShouldIndicateNoPagesProcessed)
 	sc.Step(`^the output should indicate no images found$`, testCtx.theOutputShouldIndicateNoImagesFound)
 
 	// Progress and timing

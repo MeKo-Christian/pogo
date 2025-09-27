@@ -1,0 +1,12 @@
+[
+  {
+    "filename": "testdata/documents/empty.pdf",
+    "total_pages": 0,
+    "pages": null,
+    "processing": {
+      "extraction_time_ms": 0,
+      "detection_time_ms": 0,
+      "total_time_ms": 0
+    }
+  }
+]

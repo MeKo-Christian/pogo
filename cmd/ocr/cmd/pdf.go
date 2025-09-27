@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -28,7 +29,7 @@ Examples:
   pogo pdf document.pdf
   pogo pdf *.pdf --format json
   pogo pdf scan.pdf --pages 1-5`,
-	Args:         cobra.MinimumNArgs(1),
+	Args:         cobra.ArbitraryArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return processPDFs(cmd, args)
@@ -64,7 +65,9 @@ func init() {
 
 // processPDFs handles the main PDF processing logic.
 func processPDFs(cmd *cobra.Command, args []string) error {
-	fmt.Printf("Processing %d PDF(s): %v\n", len(args), args)
+	if len(args) == 0 {
+		return errors.New("no input files provided")
+	}
 
 	// Flags
 	detConf, _ := cmd.Flags().GetFloat64("confidence")
@@ -87,6 +90,58 @@ func processPDFs(cmd *cobra.Command, args []string) error {
 	rectifyMask, _ := cmd.Flags().GetFloat64("rectify-mask-threshold")
 	rectifyHeight, _ := cmd.Flags().GetInt("rectify-height")
 	rectifyDebugDir, _ := cmd.Flags().GetString("rectify-debug-dir")
+
+	// Validate confidence threshold
+	if detConf < 0 || detConf > 1 {
+		return fmt.Errorf("invalid confidence threshold: %.2f (must be between 0.0 and 1.0)", detConf)
+	}
+
+	// Validate output format
+	validFormats := []string{"text", "json", "csv"}
+	isValidFormat := false
+	for _, f := range validFormats {
+		if format == f {
+			isValidFormat = true
+			break
+		}
+	}
+	if !isValidFormat {
+		return fmt.Errorf("invalid output format: %s (must be one of: %s)", format, strings.Join(validFormats, ", "))
+	}
+
+	// Validate page range
+	if pages != "" {
+		if err := validatePageRange(pages); err != nil {
+			return fmt.Errorf("invalid page range: %w", err)
+		}
+	}
+
+	// Validate recognition height
+	if recH < 0 {
+		return fmt.Errorf("invalid recognition height: %d (must be positive)", recH)
+	}
+
+	// Validate orientation threshold
+	if orientThresh < 0 || orientThresh > 1 {
+		return fmt.Errorf("invalid orientation threshold: %.2f (must be between 0.0 and 1.0)", orientThresh)
+	}
+
+	// Validate textline threshold
+	if textlineThresh < 0 || textlineThresh > 1 {
+		return fmt.Errorf("invalid textline threshold: %.2f (must be between 0.0 and 1.0)", textlineThresh)
+	}
+
+	// Validate rectify mask threshold
+	if rectifyMask < 0 || rectifyMask > 1 {
+		return fmt.Errorf("invalid rectify mask threshold: %.2f (must be between 0.0 and 1.0)", rectifyMask)
+	}
+
+	// Validate rectify height
+	if rectifyHeight <= 0 {
+		return fmt.Errorf("invalid rectify height: %d (must be positive)", rectifyHeight)
+	}
+
+	fmt.Printf("Processing %d PDF(s): %v\n", len(args), args)
 
 	// Build pipeline
 	b := pipeline.NewBuilder().WithModelsDir(modelsDir).WithLanguage(lang)
@@ -371,4 +426,39 @@ func containsCSVSpecialChar(field string) bool {
 		}
 	}
 	return false
+}
+
+// validatePageRange validates a page range string.
+func validatePageRange(pages string) error {
+	// Simple validation for ranges like "1-5", "1,3,5"
+	parts := strings.Split(pages, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.Contains(part, "-") {
+			rangeParts := strings.Split(part, "-")
+			if len(rangeParts) != 2 {
+				return fmt.Errorf("invalid range format: %s", part)
+			}
+			start, err1 := strconv.Atoi(strings.TrimSpace(rangeParts[0]))
+			end, err2 := strconv.Atoi(strings.TrimSpace(rangeParts[1]))
+			if err1 != nil || err2 != nil {
+				return fmt.Errorf("invalid page numbers in range: %s", part)
+			}
+			if start > end {
+				return fmt.Errorf("invalid page range: start (%d) > end (%d)", start, end)
+			}
+			if start < 1 || end < 1 {
+				return fmt.Errorf("page numbers must be positive: %s", part)
+			}
+		} else {
+			pageNum, err := strconv.Atoi(part)
+			if err != nil {
+				return fmt.Errorf("invalid page number: %s", part)
+			}
+			if pageNum < 1 {
+				return fmt.Errorf("page number must be positive: %d", pageNum)
+			}
+		}
+	}
+	return nil
 }

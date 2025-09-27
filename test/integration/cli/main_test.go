@@ -116,6 +116,7 @@ func TestMain(m *testing.M) {
 	// Prepend project bin dir to PATH so plain "pogo" resolves consistently.
 	_ = os.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	_ = os.Setenv("GO_OAR_OCR_BIN", binPath)
+	_ = os.Setenv("GO_OAR_OCR_MODELS_DIR", filepath.Join(root, "models"))
 
 	os.Exit(m.Run())
 }

@@ -54,6 +54,11 @@ Examples:
 		dictCSV, _ := cmd.Flags().GetString("dict")
 		dictLangs, _ := cmd.Flags().GetString("dict-langs")
 
+		// Validate port number
+		if port < 1 || port > 65535 {
+			return fmt.Errorf("invalid port number: %d (must be between 1 and 65535)", port)
+		}
+
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 

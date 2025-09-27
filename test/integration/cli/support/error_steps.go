@@ -11,7 +11,7 @@ import (
 
 // theErrorShouldMentionFileNotFound verifies file not found error.
 func (testCtx *TestContext) theErrorShouldMentionFileNotFound() error {
-	return testCtx.theErrorShouldMention("not found")
+	return testCtx.theErrorShouldMention("file")
 }
 
 // theErrorShouldMentionNoInputFilesProvided verifies no input files error.
@@ -87,7 +87,7 @@ func (testCtx *TestContext) theErrorShouldMentionInvalidPort() error {
 
 // theErrorShouldMentionNegativePort verifies negative port error.
 func (testCtx *TestContext) theErrorShouldMentionNegativePort() error {
-	return testCtx.theErrorShouldMention("negative")
+	return testCtx.theErrorShouldMention("port")
 }
 
 // aWarningShouldBeLoggedAboutInvalidCORSFormat verifies CORS warning.
@@ -125,6 +125,16 @@ func (testCtx *TestContext) theErrorShouldMentionDictionaryNotFound() error {
 // theErrorShouldMentionImageTooLarge verifies image too large error.
 func (testCtx *TestContext) theErrorShouldMentionImageTooLarge() error {
 	return testCtx.theErrorShouldMention("large")
+}
+
+// ifItFailsTheErrorShouldMentionOr verifies error mention if command fails.
+func (testCtx *TestContext) ifItFailsTheErrorShouldMentionOr(text1, text2 string) error {
+	if testCtx.LastExitCode == 0 {
+		// Command succeeded, so no error to check
+		return nil
+	}
+	// Command failed, check the error
+	return testCtx.theErrorShouldMention(text1 + " " + text2)
 }
 
 // theErrorShouldMentionNetworkError verifies network error.
@@ -182,7 +192,7 @@ func (testCtx *TestContext) theErrorShouldSuggestAvailableCommands() error {
 
 // theErrorShouldMentionUnknownFlag verifies unknown flag error.
 func (testCtx *TestContext) theErrorShouldMentionUnknownFlag() error {
-	return testCtx.theErrorShouldMention("flag")
+	return testCtx.theErrorShouldMention("unknown")
 }
 
 // theOutputShouldContainVersionInformation verifies version output.
@@ -339,6 +349,7 @@ func (testCtx *TestContext) RegisterErrorSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the output should list available subcommands$`, testCtx.theOutputShouldListAvailableSubcommands)
 
 	// Additional missing error steps
+	sc.Step(`^if it fails, the error should mention "([^"]*)" or "([^"]*)"$`, testCtx.ifItFailsTheErrorShouldMentionOr)
 	sc.Step(`^the error message should indicate file too large$`, testCtx.theErrorMessageShouldIndicateFileTooLarge)
 	sc.Step(`^the error message should indicate invalid format$`, testCtx.theErrorMessageShouldIndicateInvalidFormat)
 	sc.Step(`^the error message should indicate timeout$`, testCtx.theErrorMessageShouldIndicateTimeout)

@@ -37,6 +37,11 @@ type TestContext struct {
 	LastHTTPResponse   string
 	LastHTTPHeaders    map[string]string
 
+	// Server configuration state
+	LastCORSOrigin    string
+	LastMaxUploadSize int
+	LastTimeout       int
+
 	// Test artifacts
 	CreatedFiles       []string
 	CreatedDirectories []string

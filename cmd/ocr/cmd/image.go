@@ -29,7 +29,7 @@ Examples:
   pogo image photo.jpg
   pogo image *.png --format json
   pogo image document.jpg --output results.json`,
-	Args:         cobra.MinimumNArgs(1),
+	Args:         cobra.ArbitraryArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Help handling for tests
@@ -38,9 +38,6 @@ Examples:
 		}
 		if len(args) == 0 {
 			return errors.New("no input files provided")
-		}
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Processing %d image(s)\n", len(args)); err != nil {
-			return fmt.Errorf("failed to write to stdout: %w", err)
 		}
 
 		confFlag, _ := cmd.Flags().GetFloat64("confidence")
@@ -68,6 +65,53 @@ Examples:
 		useGPU, _ := cmd.Flags().GetBool("gpu")
 		gpuDevice, _ := cmd.Flags().GetInt("gpu-device")
 		gpuMemLimit, _ := cmd.Flags().GetString("gpu-mem-limit")
+
+		// Validate confidence threshold
+		if confFlag < 0 || confFlag > 1 {
+			return fmt.Errorf("invalid confidence threshold: %.2f (must be between 0.0 and 1.0)", confFlag)
+		}
+
+		// Validate output format
+		validFormats := []string{"text", "json", "csv"}
+		isValidFormat := false
+		for _, f := range validFormats {
+			if format == f {
+				isValidFormat = true
+				break
+			}
+		}
+		if !isValidFormat {
+			return fmt.Errorf("invalid output format: %s (must be one of: %s)", format, strings.Join(validFormats, ", "))
+		}
+
+		// Validate recognition height
+		if recH < 0 {
+			return fmt.Errorf("invalid recognition height: %d (must be positive)", recH)
+		}
+
+		// Validate orientation threshold
+		if orientThresh < 0 || orientThresh > 1 {
+			return fmt.Errorf("invalid orientation threshold: %.2f (must be between 0.0 and 1.0)", orientThresh)
+		}
+
+		// Validate textline threshold
+		if textlineThresh < 0 || textlineThresh > 1 {
+			return fmt.Errorf("invalid textline threshold: %.2f (must be between 0.0 and 1.0)", textlineThresh)
+		}
+
+		// Validate rectify mask threshold
+		if rectifyMask < 0 || rectifyMask > 1 {
+			return fmt.Errorf("invalid rectify mask threshold: %.2f (must be between 0.0 and 1.0)", rectifyMask)
+		}
+
+		// Validate rectify height
+		if rectifyHeight <= 0 {
+			return fmt.Errorf("invalid rectify height: %d (must be positive)", rectifyHeight)
+		}
+
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Processing %d image(s)\n", len(args)); err != nil {
+			return fmt.Errorf("failed to write to stdout: %w", err)
+		}
 
 		// Parse GPU memory limit
 		var gpuMemLimitBytes uint64

@@ -18,6 +18,9 @@ import (
 
 // StartServer starts the OCR server with the given command.
 func (testCtx *TestContext) StartServer(command string) error {
+	// Set LastCommand for verification steps
+	testCtx.LastCommand = command
+
 	// Parse command to extract port and other options
 	if err := testCtx.parseServerCommand(command); err != nil {
 		return err

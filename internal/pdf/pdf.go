@@ -22,6 +22,25 @@ func ExtractImages(filename string, pageRange string) (map[int][]image.Image, er
 		return nil, fmt.Errorf("invalid page range %q: %w", pageRange, err)
 	}
 
+	// Get total page count
+	pageCount, err := api.PageCountFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get page count: %w", err)
+	}
+
+	// Filter page numbers to valid range
+	var validPages []int
+	for _, page := range pageNumbers {
+		if page >= 1 && page <= pageCount {
+			validPages = append(validPages, page)
+		}
+	}
+
+	// If no valid pages, return empty result
+	if len(pageNumbers) > 0 && len(validPages) == 0 {
+		return make(map[int][]image.Image), nil
+	}
+
 	// Create temporary directory for extracted images
 	tempDir, err := os.MkdirTemp("", "pdf-extract-*")
 	if err != nil {
@@ -31,9 +50,9 @@ func ExtractImages(filename string, pageRange string) (map[int][]image.Image, er
 
 	// Convert page numbers to strings if provided
 	var pageStrings []string
-	if len(pageNumbers) > 0 {
-		pageStrings = make([]string, len(pageNumbers))
-		for i, pageNum := range pageNumbers {
+	if len(validPages) > 0 {
+		pageStrings = make([]string, len(validPages))
+		for i, pageNum := range validPages {
 			pageStrings[i] = strconv.Itoa(pageNum)
 		}
 	}
