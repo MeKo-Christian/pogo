@@ -180,15 +180,69 @@ func ValidateModelExists(modelPath string) error {
 // ListAvailableModels returns information about available models.
 func ListAvailableModels() []ModelInfo {
 	return []ModelInfo{
-		{Name: "mobile-detection", Type: TypeDetection, Variant: VariantMobile, Description: "Mobile detection model", Filename: DetectionMobile},
-		{Name: "server-detection", Type: TypeDetection, Variant: VariantServer, Description: "Server detection model", Filename: DetectionServer},
-		{Name: "mobile-recognition", Type: TypeRecognition, Variant: VariantMobile, Description: "Mobile recognition model", Filename: RecognitionMobile},
-		{Name: "server-recognition", Type: TypeRecognition, Variant: VariantServer, Description: "Server recognition model", Filename: RecognitionServer},
-		{Name: "pplcnet-x0.25-textline", Type: TypeLayout, Variant: "", Description: "PPLCNet x0.25 textline model", Filename: LayoutPPLCNetX025Textline},
-		{Name: "pplcnet-x1.0-doc", Type: TypeLayout, Variant: "", Description: "PPLCNet x1.0 document model", Filename: LayoutPPLCNetX10Doc},
-		{Name: "pplcnet-x1.0-textline", Type: TypeLayout, Variant: "", Description: "PPLCNet x1.0 textline model", Filename: LayoutPPLCNetX10Textline},
-		{Name: "uvdoc", Type: TypeLayout, Variant: "", Description: "UVDoc layout model", Filename: LayoutUVDoc},
-		{Name: "ppocr-keys-v1", Type: TypeDictionaries, Variant: "", Description: "PPOCR character dictionary v1", Filename: DictionaryPPOCRKeysV1},
+		{
+			Name:        "mobile-detection",
+			Type:        TypeDetection,
+			Variant:     VariantMobile,
+			Description: "Mobile detection model",
+			Filename:    DetectionMobile,
+		},
+		{
+			Name:        "server-detection",
+			Type:        TypeDetection,
+			Variant:     VariantServer,
+			Description: "Server detection model",
+			Filename:    DetectionServer,
+		},
+		{
+			Name:        "mobile-recognition",
+			Type:        TypeRecognition,
+			Variant:     VariantMobile,
+			Description: "Mobile recognition model",
+			Filename:    RecognitionMobile,
+		},
+		{
+			Name:        "server-recognition",
+			Type:        TypeRecognition,
+			Variant:     VariantServer,
+			Description: "Server recognition model",
+			Filename:    RecognitionServer,
+		},
+		{
+			Name:        "pplcnet-x0.25-textline",
+			Type:        TypeLayout,
+			Variant:     "",
+			Description: "PPLCNet x0.25 textline model",
+			Filename:    LayoutPPLCNetX025Textline,
+		},
+		{
+			Name:        "pplcnet-x1.0-doc",
+			Type:        TypeLayout,
+			Variant:     "",
+			Description: "PPLCNet x1.0 document model",
+			Filename:    LayoutPPLCNetX10Doc,
+		},
+		{
+			Name:        "pplcnet-x1.0-textline",
+			Type:        TypeLayout,
+			Variant:     "",
+			Description: "PPLCNet x1.0 textline model",
+			Filename:    LayoutPPLCNetX10Textline,
+		},
+		{
+			Name:        "uvdoc",
+			Type:        TypeLayout,
+			Variant:     "",
+			Description: "UVDoc layout model",
+			Filename:    LayoutUVDoc,
+		},
+		{
+			Name:        "ppocr-keys-v1",
+			Type:        TypeDictionaries,
+			Variant:     "",
+			Description: "PPOCR character dictionary v1",
+			Filename:    DictionaryPPOCRKeysV1,
+		},
 	}
 }
 

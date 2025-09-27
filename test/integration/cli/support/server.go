@@ -161,7 +161,7 @@ func (testCtx *TestContext) waitForServerReady() error {
 // isServerHealthy checks if the server responds to health endpoint.
 func (testCtx *TestContext) isServerHealthy() bool {
 	client := &http.Client{Timeout: time.Second}
-	url := fmt.Sprintf("http://%s:%d/health", testCtx.ServerHost, testCtx.ServerPort)
+	url := "http://" + net.JoinHostPort(testCtx.ServerHost, strconv.Itoa(testCtx.ServerPort)) + "/health"
 
 	resp, err := client.Get(url)
 	if err != nil {
@@ -183,7 +183,7 @@ func (testCtx *TestContext) GetServerURL() string {
 		return testCtx.HTTPTestServer.Server.URL
 	}
 	// Fallback to process-based server
-	return fmt.Sprintf("http://%s:%d", testCtx.ServerHost, testCtx.ServerPort)
+	return "http://" + net.JoinHostPort(testCtx.ServerHost, strconv.Itoa(testCtx.ServerPort))
 }
 
 // SendSignalToServer sends a signal to the running server.

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -93,7 +94,7 @@ func (testCtx *TestContext) theModelsEndpointShouldBeAccessible() error {
 // theHealthEndpointShouldBeAccessibleOnPort verifies health endpoint on specific port.
 func (testCtx *TestContext) theHealthEndpointShouldBeAccessibleOnPort(port int) error {
 	client := &http.Client{Timeout: 5 * time.Second}
-	url := fmt.Sprintf("http://%s:%d/health", testCtx.ServerHost, port)
+	url := "http://" + net.JoinHostPort(testCtx.ServerHost, strconv.Itoa(port)) + "/health"
 
 	resp, err := client.Get(url)
 	if err != nil {
@@ -863,7 +864,7 @@ func (testCtx *TestContext) theServerShouldStartOnHostAndPort(host string, port 
 
 	// Verify server is actually responding on the specified host and port
 	client := &http.Client{Timeout: 5 * time.Second}
-	url := fmt.Sprintf("http://%s:%d/health", host, port)
+	url := "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/health"
 
 	resp, err := client.Get(url)
 	if err != nil {

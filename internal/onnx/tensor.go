@@ -59,10 +59,11 @@ func ValidateNCHW(shape []int64) error {
 }
 
 // TensorStats computes simple statistics for debug output.
-func TensorStats(data []float32) (minVal, maxVal, mean float32) {
+func TensorStats(data []float32) (float32, float32, float32) {
 	if len(data) == 0 {
 		return 0, 0, 0
 	}
+	var minVal, maxVal, mean float32
 	minVal, maxVal = data[0], data[0]
 	var sum float64
 	for _, v := range data {

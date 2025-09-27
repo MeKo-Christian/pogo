@@ -88,7 +88,7 @@ func (c *ConsoleProgressCallback) OnStart(total int) {
 	c.startTime = time.Now()
 	c.lastUpdate = time.Time{}
 
-	fmt.Fprintf(c.writer, "%s0/%d (0.0%%)\n", c.prefix, total)
+	_, _ = fmt.Fprintf(c.writer, "%s0/%d (0.0%%)\n", c.prefix, total)
 }
 
 func (c *ConsoleProgressCallback) OnProgress(current, total int) {
@@ -109,14 +109,14 @@ func (c *ConsoleProgressCallback) OnComplete() {
 	defer c.mutex.Unlock()
 
 	elapsed := time.Since(c.startTime)
-	fmt.Fprintf(c.writer, "\n%sCompleted in %v\n", c.prefix, elapsed.Round(time.Millisecond))
+	_, _ = fmt.Fprintf(c.writer, "\n%sCompleted in %v\n", c.prefix, elapsed.Round(time.Millisecond))
 }
 
 func (c *ConsoleProgressCallback) OnError(current int, err error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	fmt.Fprintf(c.writer, "\n%sError at item %d: %v\n", c.prefix, current, err)
+	_, _ = fmt.Fprintf(c.writer, "\n%sError at item %d: %v\n", c.prefix, current, err)
 }
 
 func (c *ConsoleProgressCallback) drawProgressBar(current, total int, now time.Time) {
@@ -133,13 +133,13 @@ func (c *ConsoleProgressCallback) drawProgressBar(current, total int, now time.T
 	status := fmt.Sprintf("\r%s[%s] %d/%d (%.1f%%)", c.prefix, bar, current, total, percent)
 
 	// Add rate and ETA if enabled
-	if !(c.showRate || c.showETA) {
-		fmt.Fprint(c.writer, status)
+	if !c.showRate && !c.showETA {
+		_, _ = fmt.Fprint(c.writer, status)
 		return
 	}
 	elapsed := now.Sub(c.startTime)
 	if elapsed <= 0 || current <= 0 {
-		fmt.Fprint(c.writer, status)
+		_, _ = fmt.Fprint(c.writer, status)
 		return
 	}
 	if c.showRate {
@@ -153,7 +153,7 @@ func (c *ConsoleProgressCallback) drawProgressBar(current, total int, now time.T
 		status += fmt.Sprintf(" ETA: %v", eta.Round(time.Second))
 	}
 
-	fmt.Fprint(c.writer, status)
+	_, _ = fmt.Fprint(c.writer, status)
 }
 
 // LogProgressCallback logs progress updates using slog.
