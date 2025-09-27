@@ -18,14 +18,14 @@ func argmax(v []float32) (int, float32) {
 		return -1, 0
 	}
 	idx := 0
-	max := v[0]
+	maxVal := v[0]
 	for i := 1; i < len(v); i++ {
-		if v[i] > max {
-			max = v[i]
+		if v[i] > maxVal {
+			maxVal = v[i]
 			idx = i
 		}
 	}
-	return idx, max
+	return idx, maxVal
 }
 
 // softmaxProbOfIndex computes the softmax probability of v[idx] among v.

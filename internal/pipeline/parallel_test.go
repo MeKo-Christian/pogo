@@ -51,7 +51,7 @@ func TestProcessImagesParallel_NilPipeline(t *testing.T) {
 func TestProcessImagesParallel_SingleWorker(t *testing.T) {
 	// Create mock pipeline
 	p := createMockPipeline(t)
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	config := DefaultParallelConfig()
 	config.MaxWorkers = 1
@@ -75,7 +75,7 @@ func TestProcessImagesParallel_SingleWorker(t *testing.T) {
 func TestProcessImagesParallel_MultipleWorkers(t *testing.T) {
 	// Create mock pipeline
 	p := createMockPipeline(t)
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	config := DefaultParallelConfig()
 	config.MaxWorkers = 4
@@ -103,7 +103,7 @@ func TestProcessImagesParallel_MultipleWorkers(t *testing.T) {
 func TestProcessImagesParallel_WithProgressCallback(t *testing.T) {
 	// Create mock pipeline
 	p := createMockPipeline(t)
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	// Mock progress callback
 	progressCalls := make([]struct{ current, total int }, 0)

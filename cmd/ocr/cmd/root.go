@@ -68,7 +68,7 @@ func init() {
 		v, _ := cmd.Flags().GetBool("version")
 		if v {
 			// Minimal version info; wired at build time in release builds
-			fmt.Fprintln(cmd.OutOrStdout(), "pogo version")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "pogo version")
 		}
 	}
 }

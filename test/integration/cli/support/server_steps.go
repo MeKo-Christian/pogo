@@ -550,7 +550,7 @@ func (testCtx *TestContext) iPOSTAnImageLargerThan1MBTo(endpoint string) error {
 	testCtx.LastHTTPStatusCode = 413 // Request Entity Too Large
 	testCtx.LastHTTPResponse = `{"error": "file too large"}`
 	testCtx.LastOutput = `{"error": "file too large"}`
-	testCtx.LastError = fmt.Errorf("HTTP 413")
+	testCtx.LastError = errors.New("HTTP 413")
 	testCtx.LastExitCode = 1
 	return nil
 }
@@ -623,7 +623,7 @@ func (testCtx *TestContext) iPOSTAnImageThatTakesLongerThanSecondsToProcess(seco
 	testCtx.LastHTTPStatusCode = 408 // Request Timeout
 	testCtx.LastHTTPResponse = `{"error": "request timeout"}`
 	testCtx.LastOutput = `{"error": "request timeout"}`
-	testCtx.LastError = fmt.Errorf("HTTP 408")
+	testCtx.LastError = errors.New("HTTP 408")
 	testCtx.LastExitCode = 1
 	return nil
 }
@@ -757,7 +757,7 @@ func (testCtx *TestContext) iSendMultipleConcurrentRequestsTo(endpoint string) e
 	var wg sync.WaitGroup
 	errChan := make(chan error, numRequests)
 
-	for i := 0; i < numRequests; i++ {
+	for range numRequests {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -887,6 +887,7 @@ func (testCtx *TestContext) theServerWasRunningAndCrashed() error {
 	}
 	return nil
 }
+
 func (testCtx *TestContext) RegisterServerSteps(sc *godog.ScenarioContext) {
 	// Server lifecycle
 	sc.Step(`^the server is not already running$`, testCtx.theServerIsNotAlreadyRunning)

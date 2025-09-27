@@ -19,14 +19,18 @@ func sizeClass(n int) int {
 	return r * step
 }
 
-// GetFloat32 acquires a buffer with length n (capacity >= n). The returned slice's
-// length is set to n.
 func GetFloat32(n int) []float32 {
 	cls := sizeClass(n)
 	pAny, _ := pools.LoadOrStore(cls, &sync.Pool{New: func() any { return make([]float32, cls) }})
-	p := pAny.(*sync.Pool)
-	buf := p.Get().([]float32)
-	if cap(buf) < n {
+	p, ok := pAny.(*sync.Pool)
+	if !ok {
+		// Fallback
+		buf := make([]float32, cls)
+		return buf[:n]
+	}
+	bufAny := p.Get()
+	buf, ok := bufAny.([]float32)
+	if !ok {
 		buf = make([]float32, cls)
 	}
 	return buf[:n]
@@ -39,7 +43,10 @@ func PutFloat32(buf []float32) {
 	}
 	cls := sizeClass(cap(buf))
 	pAny, _ := pools.LoadOrStore(cls, &sync.Pool{New: func() any { return make([]float32, cls) }})
-	p := pAny.(*sync.Pool)
+	p, ok := pAny.(*sync.Pool)
+	if !ok {
+		return // skip
+	}
 	// Reset length to full cap to avoid keeping len from caller; contents need not be zeroed.
 	p.Put(buf[:cap(buf)])
 }

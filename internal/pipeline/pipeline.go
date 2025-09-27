@@ -298,9 +298,9 @@ func (b *Builder) WithMemoryLimit(bytes uint64) *Builder {
 }
 
 // WithMaxGoroutines sets the maximum number of concurrent goroutines.
-func (b *Builder) WithMaxGoroutines(max int) *Builder {
-	if max > 0 {
-		b.cfg.Resource.MaxGoroutines = max
+func (b *Builder) WithMaxGoroutines(maxGoroutines int) *Builder {
+	if maxGoroutines > 0 {
+		b.cfg.Resource.MaxGoroutines = maxGoroutines
 	}
 	return b
 }

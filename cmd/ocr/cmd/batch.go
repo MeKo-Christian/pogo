@@ -166,7 +166,7 @@ func runBatchCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	if !quiet {
-		fmt.Fprintf(cmd.OutOrStdout(), "Found %d image files to process\n", len(imageFiles))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found %d image files to process\n", len(imageFiles))
 	}
 
 	// Load images
@@ -271,27 +271,27 @@ func runBatchCommand(cmd *cobra.Command, args []string) error {
 
 	// Write output
 	if outputFile != "" {
-		if err := os.WriteFile(outputFile, []byte(output), 0o644); err != nil {
+		if err := os.WriteFile(outputFile, []byte(output), 0o600); err != nil {
 			return fmt.Errorf("failed to write output file: %w", err)
 		}
 		if !quiet {
-			fmt.Fprintf(cmd.OutOrStdout(), "Results written to %s\n", outputFile)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Results written to %s\n", outputFile)
 		}
 	} else {
-		fmt.Fprint(cmd.OutOrStdout(), output)
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), output)
 	}
 
 	// Show statistics
 	if showStats && !quiet {
 		stats := pipeline.CalculateParallelStats(nil, results, duration, workers)
-		fmt.Fprintf(cmd.OutOrStdout(), "\nProcessing Statistics:\n")
-		fmt.Fprintf(cmd.OutOrStdout(), "  Total images: %d\n", stats.TotalImages)
-		fmt.Fprintf(cmd.OutOrStdout(), "  Processed: %d\n", stats.ProcessedImages)
-		fmt.Fprintf(cmd.OutOrStdout(), "  Failed: %d\n", stats.FailedImages)
-		fmt.Fprintf(cmd.OutOrStdout(), "  Workers: %d\n", stats.WorkerCount)
-		fmt.Fprintf(cmd.OutOrStdout(), "  Duration: %v\n", stats.TotalDuration.Round(time.Millisecond))
-		fmt.Fprintf(cmd.OutOrStdout(), "  Avg per image: %v\n", stats.AveragePerImage.Round(time.Millisecond))
-		fmt.Fprintf(cmd.OutOrStdout(), "  Throughput: %.1f images/sec\n", stats.ThroughputPerSec)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nProcessing Statistics:\n")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Total images: %d\n", stats.TotalImages)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Processed: %d\n", stats.ProcessedImages)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Failed: %d\n", stats.FailedImages)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Workers: %d\n", stats.WorkerCount)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Duration: %v\n", stats.TotalDuration.Round(time.Millisecond))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Avg per image: %v\n", stats.AveragePerImage.Round(time.Millisecond))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Throughput: %.1f images/sec\n", stats.ThroughputPerSec)
 	}
 
 	return nil
@@ -493,11 +493,8 @@ func discoverImageFiles(args []string, recursive bool, includePatterns, excludeP
 				return nil, err
 			}
 			imageFiles = append(imageFiles, files...)
-		} else {
-			// Check if single file matches patterns
-			if matchesPatterns(arg, includePatterns) && !matchesPatterns(arg, excludePatterns) {
-				imageFiles = append(imageFiles, arg)
-			}
+		} else if matchesPatterns(arg, includePatterns) && !matchesPatterns(arg, excludePatterns) {
+			imageFiles = append(imageFiles, arg)
 		}
 	}
 

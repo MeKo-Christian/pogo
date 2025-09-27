@@ -83,5 +83,7 @@ func TestNewRecognizer_ValidModel(t *testing.T) {
 	info := r.GetModelInfo()
 	assert.Equal(t, modelPath, info["model_path"])
 	assert.Equal(t, dictPath, info["dict_path"])
-	assert.Positive(t, info["charset_size"].(int))
+	charsetSize, ok := info["charset_size"].(int)
+	assert.True(t, ok)
+	assert.Positive(t, charsetSize)
 }

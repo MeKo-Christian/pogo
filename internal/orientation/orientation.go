@@ -234,16 +234,16 @@ func (c *Classifier) Predict(img image.Image) (Result, error) {
 	}
 	logits := t.GetData()
 	// Softmax
-	max := float32(-1e9)
+	maxLogit := float32(-1e9)
 	for i := 0; i < 4 && i < len(logits); i++ {
-		if logits[i] > max {
-			max = logits[i]
+		if logits[i] > maxLogit {
+			maxLogit = logits[i]
 		}
 	}
 	var sum float64
 	probs := make([]float64, 4)
 	for i := 0; i < 4 && i < len(logits); i++ {
-		v := math.Exp(float64(logits[i] - max))
+		v := math.Exp(float64(logits[i] - maxLogit))
 		probs[i] = v
 		sum += v
 	}

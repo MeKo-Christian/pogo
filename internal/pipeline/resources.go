@@ -202,7 +202,7 @@ func (rm *ResourceManager) GetOptimalWorkerCount() int {
 
 	// Reduce workers if under memory pressure
 	if rm.CheckMemoryPressure() {
-		optimal = optimal / 2
+		optimal /= 2
 		if optimal < 1 {
 			optimal = 1
 		}

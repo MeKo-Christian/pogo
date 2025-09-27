@@ -135,7 +135,9 @@ func ConvexHull(pts []Point) []Point {
 		upper = append(upper, pt)
 	}
 	// Concatenate lower and upper to get full hull, excluding last point of each (duplicate)
-	hull := append(lower[:len(lower)-1], upper[:len(upper)-1]...)
+	hull := make([]Point, 0, len(lower)+len(upper)-2)
+	hull = append(hull, lower[:len(lower)-1]...)
+	hull = append(hull, upper[:len(upper)-1]...)
 	return hull
 }
 

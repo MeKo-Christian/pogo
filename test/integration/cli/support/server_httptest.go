@@ -128,6 +128,8 @@ func (m *MockPipeline) Close() error {
 
 // createTestHTTPServer creates an httptest server with mock handlers.
 func (testCtx *TestContext) createTestHTTPServer(port int) error {
+	const mockBase64ImageData = "base64encodedimagedata"
+
 	// Create mock pipeline
 	mockPipeline := &MockPipeline{
 		ShouldFail: false,
@@ -228,12 +230,6 @@ func (testCtx *TestContext) createTestHTTPServer(port int) error {
 			img := testCtx.createSimpleTestImage(100, 50)
 			result, _ := mockPipeline.ProcessImage(img)
 
-			// Get format parameter
-			format := r.FormValue("format")
-			if format == "" {
-				format = "json"
-			}
-
 			w.Header().Set("Content-Type", "application/json")
 
 			response := map[string]interface{}{
@@ -250,8 +246,8 @@ func (testCtx *TestContext) createTestHTTPServer(port int) error {
 
 			// Check for overlay request
 			if r.FormValue("overlay") == "true" || strings.Contains(r.URL.Path, "overlay") {
-				response["overlay"] = "base64encodedimagedata"
-				response["image_data"] = "base64encodedimagedata"
+				response["overlay"] = mockBase64ImageData
+				response["image_data"] = mockBase64ImageData
 			}
 
 			json.NewEncoder(w).Encode(response)
@@ -308,8 +304,8 @@ func (testCtx *TestContext) createTestHTTPServer(port int) error {
 
 			// Check for overlay request
 			if r.FormValue("overlay") == "true" || strings.Contains(r.URL.Path, "overlay") {
-				response["overlay"] = "base64encodedimagedata"
-				response["image_data"] = "base64encodedimagedata"
+				response["overlay"] = mockBase64ImageData
+				response["image_data"] = mockBase64ImageData
 			}
 
 			json.NewEncoder(w).Encode(response)

@@ -156,11 +156,11 @@ func TestLoadImageFile(t *testing.T) {
 	// Save the test image
 	file, err := os.Create(imagePath) //nolint:gosec // G304: Test file creation with controlled path
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// For testing, we'll just create an empty file as we can't easily
 	// encode PNG without additional dependencies in tests
-	file.Close()
+	_ = file.Close()
 
 	t.Run("non-existent file", func(t *testing.T) {
 		_, err := loadImageFile("/non/existent/file.png")

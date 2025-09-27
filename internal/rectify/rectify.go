@@ -386,14 +386,14 @@ func solve8x8(A [8][8]float64, b [8]float64) ([8]float64, bool) {
 	for i := range 8 {
 		// Pivot
 		pivot := i
-		max := abs(A[i][i])
+		maxAbs := abs(A[i][i])
 		for r := i + 1; r < 8; r++ {
-			if abs(A[r][i]) > max {
-				max = abs(A[r][i])
+			if abs(A[r][i]) > maxAbs {
+				maxAbs = abs(A[r][i])
 				pivot = r
 			}
 		}
-		if max == 0 {
+		if maxAbs == 0 {
 			return [8]float64{}, false
 		}
 		if pivot != i {
@@ -428,13 +428,13 @@ func solve8x8(A [8][8]float64, b [8]float64) ([8]float64, bool) {
 	return x, true
 }
 
-func applyHomography(H [9]float64, x, y float64) (float64, float64) {
-	denom := H[6]*x + H[7]*y + H[8]
+func applyHomography(h [9]float64, x, y float64) (float64, float64) {
+	denom := h[6]*x + h[7]*y + h[8]
 	if denom == 0 {
 		return -1e9, -1e9
 	}
-	sx := (H[0]*x + H[1]*y + H[2]) / denom
-	sy := (H[3]*x + H[4]*y + H[5]) / denom
+	sx := (h[0]*x + h[1]*y + h[2]) / denom
+	sy := (h[3]*x + h[4]*y + h[5]) / denom
 	return sx, sy
 }
 
@@ -483,7 +483,7 @@ func abs(v float64) float64 {
 }
 
 func dumpMaskPNG(dir string, mask []float32, w, h int, thr float64) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 	ts := time.Now().UnixNano()
@@ -511,7 +511,7 @@ func dumpMaskPNG(dir string, mask []float32, w, h int, thr float64) error {
 }
 
 func dumpOverlayPNG(dir string, src image.Image, quad []utils.Point) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 	ts := time.Now().UnixNano()
@@ -545,7 +545,7 @@ func clamp01(v float64) float64 {
 }
 
 func dumpComparePNG(dir string, src image.Image, srcQuad []utils.Point, dst image.Image) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 	ts := time.Now().UnixNano()

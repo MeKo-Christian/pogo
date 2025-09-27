@@ -285,7 +285,7 @@ func (p *Pipeline) ProcessPDFContext(ctx context.Context, filename string, pageR
 	extractNs := time.Since(extractStart).Nanoseconds()
 
 	// Process each page
-	var pages []OCRPDFPageResult
+	pages := make([]OCRPDFPageResult, 0, len(pageImages))
 	for pageNum, images := range pageImages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -321,7 +321,7 @@ func (p *Pipeline) ProcessPDFContext(ctx context.Context, filename string, pageR
 func (p *Pipeline) processPDFPage(ctx context.Context, pageNum int, images []image.Image) (*OCRPDFPageResult, error) {
 	pageStart := time.Now()
 
-	var imageResults []OCRPDFImageResult
+	imageResults := make([]OCRPDFImageResult, 0, len(images))
 	var pageWidth, pageHeight int
 
 	for i, img := range images {

@@ -79,21 +79,21 @@ func saveResultsToFile(filename string, results []benchmark.GPUVSCPUBenchmarkRes
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Write header
-	fmt.Fprintln(file, "pogo GPU vs CPU Benchmark Results")
-	fmt.Fprintln(file, "======================================")
-	fmt.Fprintln(file)
+	_, _ = fmt.Fprintln(file, "pogo GPU vs CPU Benchmark Results")
+	_, _ = fmt.Fprintln(file, "======================================")
+	_, _ = fmt.Fprintln(file)
 
 	// Write individual results
 	for _, result := range results {
 		fmt.Fprintf(file, "%s\n", result.String())
 	}
 
-	fmt.Fprintln(file)
-	fmt.Fprintln(file, "CSV Format:")
-	fmt.Fprintln(file, "Image,Size,CPU_Duration_ms,GPU_Duration_ms,Speedup,Memory_Diff_KB,GPU_Available")
+	_, _ = fmt.Fprintln(file)
+	_, _ = fmt.Fprintln(file, "CSV Format:")
+	_, _ = fmt.Fprintln(file, "Image,Size,CPU_Duration_ms,GPU_Duration_ms,Speedup,Memory_Diff_KB,GPU_Available")
 
 	for _, result := range results {
 		cpuMs := float64(result.CPUResult.Duration.Nanoseconds()) / 1e6

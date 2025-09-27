@@ -64,7 +64,10 @@ func connectedComponents(mask []bool, prob []float32, w, h int) ([]compStats, []
 			for q.Len() > 0 {
 				e := q.Front()
 				q.Remove(e)
-				ci := e.Value.(int)
+				ci, ok := e.Value.(int)
+				if !ok {
+					continue // skip invalid
+				}
 				cx, cy := ci%w, ci/w
 				st.count++
 				st.sum += float64(prob[ci])

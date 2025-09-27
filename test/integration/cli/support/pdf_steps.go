@@ -418,11 +418,11 @@ func (testCtx *TestContext) RegisterPDFSteps(sc *godog.ScenarioContext) {
 
 	// Progress and timing
 	sc.Step(`^the output should show (\d+) pages maximum$`, func(maxStr string) error {
-		max, err := strconv.Atoi(maxStr)
+		maxPages, err := strconv.Atoi(maxStr)
 		if err != nil {
 			return fmt.Errorf("invalid max pages: %s", maxStr)
 		}
-		return testCtx.theOutputShouldShowMaximumPages(max)
+		return testCtx.theOutputShouldShowMaximumPages(maxPages)
 	})
 	sc.Step(`^processing information should be displayed$`, testCtx.processingInformationShouldBeDisplayed)
 	sc.Step(`^the command should complete within reasonable time$`, testCtx.theCommandShouldCompleteWithinReasonableTime)

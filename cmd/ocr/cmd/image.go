@@ -17,6 +17,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	outputFormatJSON = "json"
+	outputFormatCSV  = "csv"
+	outputFormatText = "text"
+)
+
 // imageCmd represents the image command.
 var imageCmd = &cobra.Command{
 	Use:   "image",
@@ -72,7 +78,7 @@ Examples:
 		}
 
 		// Validate output format
-		validFormats := []string{"text", "json", "csv"}
+		validFormats := []string{outputFormatText, outputFormatJSON, outputFormatCSV}
 		isValidFormat := false
 		for _, f := range validFormats {
 			if format == f {
@@ -267,14 +273,17 @@ Examples:
 				}
 			}
 			switch format {
-			case "json":
+			case outputFormatJSON:
 				obj := struct {
 					File string                   `json:"file"`
 					OCR  *pipeline.OCRImageResult `json:"ocr"`
 				}{File: meta.Path, OCR: res}
-				bts, _ := json.MarshalIndent(obj, "", "  ")
+				bts, err := json.MarshalIndent(obj, "", "  ")
+				if err != nil {
+					return fmt.Errorf("failed to marshal JSON: %w", err)
+				}
 				outputs = append(outputs, string(bts))
-			case "csv":
+			case outputFormatCSV:
 				s, err := pipeline.ToCSVImage(res)
 				if err != nil {
 					return fmt.Errorf("format csv failed: %w", err)

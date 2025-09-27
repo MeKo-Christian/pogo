@@ -33,7 +33,7 @@ func (p *Processor) ProcessFile(filename string, pageRange string) (*DocumentRes
 	extractTime := time.Since(extractStart)
 
 	// Process each page
-	var pages []PageResult
+	pages := make([]PageResult, 0, len(pageImages))
 	var totalDetectionTime time.Duration
 
 	for pageNum, images := range pageImages {
@@ -64,7 +64,7 @@ func (p *Processor) ProcessFile(filename string, pageRange string) (*DocumentRes
 
 // processPage processes all images from a single PDF page.
 func (p *Processor) processPage(pageNum int, images []image.Image) (*PageResult, time.Duration, error) {
-	var imageResults []ImageResult
+	imageResults := make([]ImageResult, 0, len(images))
 	var totalDetectionTime time.Duration
 	var pageWidth, pageHeight int
 
@@ -128,7 +128,7 @@ func (p *Processor) processPage(pageNum int, images []image.Image) (*PageResult,
 
 // ProcessFiles processes multiple PDF files.
 func (p *Processor) ProcessFiles(filenames []string, pageRange string) ([]*DocumentResult, error) {
-	var results []*DocumentResult
+	results := make([]*DocumentResult, 0, len(filenames))
 
 	for _, filename := range filenames {
 		result, err := p.ProcessFile(filename, pageRange)

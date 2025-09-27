@@ -101,13 +101,13 @@ func collectExtractedImages(dir string) (map[int][]image.Image, error) {
 		pageNum, err := parsePageFromFilename(info.Name())
 		if err != nil {
 			// Skip files we can't parse as page images
-			return nil
+			return nil //nolint:nilerr // Continue processing other files
 		}
 
 		img, err := loadImageFile(path)
 		if err != nil {
 			// Skip unreadable images
-			return nil
+			return nil //nolint:nilerr // Continue processing other files
 		}
 
 		if img != nil {

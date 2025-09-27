@@ -107,7 +107,7 @@ type testProcessor struct {
 func (tp *testProcessor) processPage(_pageNum int, images []image.Image) (*PageResult, time.Duration, error) {
 	startTime := time.Now()
 
-	var imageResults []ImageResult
+	imageResults := make([]ImageResult, 0, len(images))
 	var pageWidth, pageHeight int
 
 	for i, img := range images {

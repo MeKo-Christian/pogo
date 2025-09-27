@@ -31,9 +31,7 @@ Examples:
   pogo pdf scan.pdf --pages 1-5`,
 	Args:         cobra.ArbitraryArgs,
 	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return processPDFs(cmd, args)
-	},
+	RunE:         processPDFs,
 }
 
 func init() {
@@ -200,7 +198,7 @@ func processPDFs(cmd *cobra.Command, args []string) error {
 
 	// Extract images per page
 	// For each file, produce a DocumentResult aggregating per-page results
-	var results []*pdf.DocumentResult
+	results := make([]*pdf.DocumentResult, 0, len(args))
 	for _, file := range args {
 		pageImages, err := pdf.ExtractImages(file, pages)
 		if err != nil {

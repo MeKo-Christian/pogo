@@ -142,9 +142,21 @@ build:
     COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
     BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     mkdir -p bin/
-    just go-onnx build \
-        -ldflags "-X github.com/MeKo-Tech/pogo/internal/version.Version=${VERSION} -X github.com/MeKo-Tech/pogo/internal/version.GitCommit=${COMMIT} -X github.com/MeKo-Tech/pogo/internal/version.BuildDate=${BUILD_DATE}" \
-        -o bin/pogo ./cmd/ocr
+    # Check if direnv variables are already set
+    if [[ -n "$CGO_CFLAGS" && "$CGO_CFLAGS" == *"onnxruntime"* ]]; then
+        # direnv is active, use it
+        go build \
+            -ldflags "-X github.com/MeKo-Tech/pogo/internal/version.Version=$VERSION -X github.com/MeKo-Tech/pogo/internal/version.GitCommit=$COMMIT -X github.com/MeKo-Tech/pogo/internal/version.BuildDate=$BUILD_DATE" \
+            -o bin/pogo ./cmd/ocr
+    else
+        # direnv not active, set environment manually
+        export CGO_CFLAGS="-I{{justfile_directory()}}/onnxruntime/include"
+        export CGO_LDFLAGS="-L{{justfile_directory()}}/onnxruntime/lib -lonnxruntime"
+        export LD_LIBRARY_PATH="{{justfile_directory()}}/onnxruntime/lib:$LD_LIBRARY_PATH"
+        go build \
+            -ldflags "-X github.com/MeKo-Tech/pogo/internal/version.Version=$VERSION -X github.com/MeKo-Tech/pogo/internal/version.GitCommit=$COMMIT -X github.com/MeKo-Tech/pogo/internal/version.BuildDate=$BUILD_DATE" \
+            -o bin/pogo ./cmd/ocr
+    fi
 
 # Build the binary without version info (faster for development)
 build-dev:

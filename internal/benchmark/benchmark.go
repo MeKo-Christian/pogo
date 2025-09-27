@@ -3,6 +3,7 @@ package benchmark
 import (
 	"context"
 	"fmt"
+	"math"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -363,15 +364,23 @@ func (b *GPUVSCPUBenchmark) benchmarkImage(img TestImage, iterations int) (GPUVS
 	if err != nil {
 		// GPU not available or failed
 		result.GPUAvailable = false
-		return result, nil
+		return result, err
 	}
 	result.GPUResult = gpuResult
 
 	// Calculate performance metrics
 	if result.GPUAvailable {
 		result.SpeedupFactor = float64(cpuResult.Duration.Nanoseconds()) / float64(gpuResult.Duration.Nanoseconds())
-		cpuMemDiff := int64(cpuResult.MemoryAfter.AllocBytes - cpuResult.MemoryBefore.AllocBytes)
-		gpuMemDiff := int64(gpuResult.MemoryAfter.AllocBytes - gpuResult.MemoryBefore.AllocBytes)
+		cpuDiff := cpuResult.MemoryAfter.AllocBytes - cpuResult.MemoryBefore.AllocBytes
+		gpuDiff := gpuResult.MemoryAfter.AllocBytes - gpuResult.MemoryBefore.AllocBytes
+		cpuMemDiff := int64(cpuDiff)
+		if cpuDiff > math.MaxInt64 {
+			cpuMemDiff = math.MaxInt64
+		}
+		gpuMemDiff := int64(gpuDiff)
+		if gpuDiff > math.MaxInt64 {
+			gpuMemDiff = math.MaxInt64
+		}
 		result.MemoryDiff = (gpuMemDiff - cpuMemDiff) / 1024 // Convert to KB
 	}
 
@@ -387,7 +396,7 @@ func (b *GPUVSCPUBenchmark) benchmarkCPU(imagePath string, iterations int) (Benc
 	if err != nil {
 		return BenchmarkResult{}, fmt.Errorf("failed to create CPU pipeline: %w", err)
 	}
-	defer pipeline.Close()
+	defer func() { _ = pipeline.Close() }()
 
 	// Load the image once for reuse
 	img, err := testutil.LoadImageFile(imagePath)
@@ -426,7 +435,7 @@ func (b *GPUVSCPUBenchmark) benchmarkGPU(imagePath string, iterations int) (Benc
 	if err != nil {
 		return BenchmarkResult{}, fmt.Errorf("failed to create GPU pipeline: %w", err)
 	}
-	defer pipeline.Close()
+	defer func() { _ = pipeline.Close() }()
 
 	// Load the image once for reuse
 	img, err := testutil.LoadImageFile(imagePath)
@@ -566,15 +575,16 @@ func (b *GPUVSCPUBenchmark) printRecommendations() {
 		}
 	}
 
-	if gpuFasterCount == 0 {
+	switch {
+	case gpuFasterCount == 0:
 		fmt.Println("  • Use CPU processing for better performance")
 		fmt.Println("  • GPU acceleration shows overhead for small images")
 		fmt.Println("  • Consider GPU for batch processing or larger images")
-	} else if gpuFasterCount < len(b.results)/2 {
+	case gpuFasterCount < len(b.results)/2:
 		fmt.Println("  • Mixed results: GPU benefits depend on image size/complexity")
 		fmt.Println("  • Use CPU for small/simple images")
 		fmt.Println("  • Use GPU for large/complex images or batch processing")
-	} else {
+	default:
 		fmt.Println("  • GPU acceleration recommended for most use cases")
 		fmt.Println("  • Consistent performance improvements observed")
 	}

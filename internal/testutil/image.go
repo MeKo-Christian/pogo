@@ -125,6 +125,7 @@ func SaveImage(t *testing.T, img image.Image, path string) {
 	require.NoError(t, EnsureDir(dir), "Failed to create directory %s", dir)
 
 	file, err := os.Create(path) //nolint:gosec // G304: Test file creation with controlled path
+	require.NoError(t, err, "Failed to create file %s", path)
 	defer func() {
 		require.NoError(t, file.Close())
 	}()

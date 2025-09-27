@@ -85,13 +85,13 @@ func PostProcessText(s string, opts CleanOptions) string {
 		}
 		// simple length-desc sort
 		for i := range len(keys) - 1 {
-			max := i
+			maxIdx := i
 			for j := i + 1; j < len(keys); j++ {
-				if len(keys[j]) > len(keys[max]) {
-					max = j
+				if len(keys[j]) > len(keys[maxIdx]) {
+					maxIdx = j
 				}
 			}
-			keys[i], keys[max] = keys[max], keys[i]
+			keys[i], keys[maxIdx] = keys[maxIdx], keys[i]
 		}
 		for _, k := range keys {
 			s = strings.ReplaceAll(s, k, opts.ReplaceMap[k])

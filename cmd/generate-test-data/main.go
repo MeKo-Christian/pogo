@@ -151,10 +151,13 @@ func generateTestImages() error {
 	if err != nil {
 		return fmt.Errorf("failed to create multiline image file: %w", err)
 	}
-	defer file.Close()
 
 	if err := saveImageToFile(img, file); err != nil {
+		_ = file.Close() // ignore error on cleanup
 		return fmt.Errorf("failed to save multiline image: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("failed to close multiline file: %w", err)
 	}
 
 	// Generate rotated images
@@ -210,10 +213,13 @@ func generateTestImages() error {
 	if err != nil {
 		return fmt.Errorf("failed to create scanned document file: %w", err)
 	}
-	defer file.Close()
 
 	if err := saveImageToFile(img, file); err != nil {
+		_ = file.Close() // ignore error on cleanup
 		return fmt.Errorf("failed to save scanned document: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("failed to close scanned file: %w", err)
 	}
 
 	return nil

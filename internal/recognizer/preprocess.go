@@ -73,7 +73,7 @@ func CropRegionImageWithOrienter(img image.Image, region detector.DetectedRegion
 	}
 	res, err := cls.Predict(patch)
 	if err != nil {
-		return patch, false, nil
+		return patch, false, nil //nolint:nilerr // Graceful degradation when prediction fails
 	}
 	switch res.Angle {
 	case 90:
