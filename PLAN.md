@@ -12,10 +12,10 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 1.1 Project Infrastructure
 
-- [x] Initialize Go module `github.com/MeKo-Tech/go-oar-ocr`
+- [x] Initialize Go module `github.com/MeKo-Tech/pogo`
 - [x] Set up project directory structure:
   ```
-  go-oar-ocr/
+  pogo/
   ├── cmd/
   │   └── ocr/
   ├── internal/
@@ -41,37 +41,37 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 - [x] Add `github.com/spf13/cobra` for CLI framework
 - [x] Add `github.com/pdfcpu/pdfcpu` for PDF processing
 - [x] Add testing dependencies (testify)
-- [ ] Configure ONNX Runtime shared library setup
-- [ ] Create setup scripts for ONNX Runtime installation
-- [ ] Verify cgo compilation works correctly
+- [x] Configure ONNX Runtime shared library setup
+- [x] Create setup scripts for ONNX Runtime installation
+- [x] Verify cgo compilation works correctly
 
 ### 1.3 Model and Resource Acquisition
 
-- [ ] Download PaddleOCR PP-OCRv4/v5 detection models:
-  - [ ] Mobile detection model (ppocrv4_mobile_det.onnx ~5MB)
-  - [ ] Server detection model for higher accuracy
-- [ ] Download PaddleOCR recognition models:
-  - [ ] English PP-OCRv4 mobile recognition (en_ppocrv4_mobile_rec.onnx ~7.7MB)
-  - [ ] Character dictionary (en_dict.txt)
-- [ ] Download optional orientation models:
-  - [ ] Document orientation classifier (pplcnet_x1_0_doc_ori.onnx)
-  - [ ] Text line orientation classifier
-- [ ] Verify model compatibility with ONNX Runtime
+- [x] Download PaddleOCR PP-OCRv5 detection models:
+  - [x] Mobile detection model (PP-OCRv5_mobile_det.onnx)
+  - [x] Server detection model for higher accuracy (PP-OCRv5_server_det.onnx)
+- [x] Download PaddleOCR recognition models:
+  - [x] PP-OCRv5 mobile recognition (PP-OCRv5_mobile_rec.onnx)
+  - [x] PP-OCRv5 server recognition (PP-OCRv5_server_rec.onnx)
+- [x] Download optional orientation models:
+  - [x] Document orientation classifier (pplcnet_x1_0_doc_ori.onnx)
+  - [x] Text line orientation classifier (pplcnet_x0_25_textline_ori.onnx & pplcnet_x1_0_textline_ori.onnx)
+- [x] Verify model compatibility with ONNX Runtime
 - [ ] Create model download scripts
 - [ ] Set up model versioning and management
 
 ### 1.4 Initial Testing Framework
 
-- [ ] Create `/testdata` directory structure
-- [ ] Collect sample test images:
-  - [ ] Simple single-word images
-  - [ ] Multi-line text documents
-  - [ ] Rotated text samples
-  - [ ] Scanned document snippets
-- [ ] Generate synthetic test images for unit testing
-- [ ] Set up benchmark test framework
-- [ ] Create test utility functions
-- [ ] Implement ONNX Runtime smoke test
+- [x] Create `/testdata` directory structure
+- [x] Collect sample test images:
+  - [x] Simple single-word images
+  - [x] Multi-line text documents
+  - [x] Rotated text samples
+  - [x] Scanned document snippets
+- [x] Generate synthetic test images for unit testing
+- [x] Set up benchmark test framework
+- [x] Create test utility functions
+- [x] Implement ONNX Runtime smoke test
 
 ---
 
@@ -79,55 +79,55 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 2.1 Core Image Loading
 
-- [ ] Implement image file loading utilities
-  - [ ] Support JPEG, PNG, BMP formats
-  - [ ] Batch image loading functionality
-  - [ ] Error handling for corrupted images
+- [x] Implement image file loading utilities
+  - [x] Support JPEG, PNG, BMP formats
+  - [x] Batch image loading functionality
+  - [x] Error handling for corrupted images
   - [ ] Memory-efficient loading for large images
-- [ ] Create image format validation
-- [ ] Implement image metadata extraction
-- [ ] Add image dimension constraints validation
-- [ ] Write unit tests for image loading
+- [x] Create image format validation
+- [x] Implement image metadata extraction
+- [x] Add image dimension constraints validation
+- [x] Write unit tests for image loading
 
 ### 2.2 Image Preprocessing Pipeline
 
-- [ ] Implement image resizing algorithms:
-  - [ ] Aspect ratio preservation
-  - [ ] Maximum dimension constraints (960px, 1024px)
-  - [ ] Multiple of 32 dimension adjustment
-  - [ ] High-quality resampling (Lanczos filter)
-- [ ] Create image padding functionality:
-  - [ ] Border padding to target dimensions
-  - [ ] Background color configuration (black for OCR)
-  - [ ] Centered image placement
-- [ ] Implement image normalization:
-  - [ ] RGB channel extraction from RGBA
-  - [ ] Pixel value scaling (0-255 → 0-1)
-  - [ ] Channel ordering (RGB → NCHW for ONNX)
-- [ ] Add image quality assessment utilities
-- [ ] Write comprehensive preprocessing tests
+- [x] Implement image resizing algorithms:
+  - [x] Aspect ratio preservation
+  - [x] Maximum dimension constraints (960px, 1024px)
+  - [x] Multiple of 32 dimension adjustment
+  - [x] High-quality resampling (Lanczos filter)
+- [x] Create image padding functionality:
+  - [x] Border padding to target dimensions
+  - [x] Background color configuration (black for OCR)
+  - [x] Centered image placement
+- [x] Implement image normalization:
+  - [x] RGB channel extraction from RGBA
+  - [x] Pixel value scaling (0-255 → 0-1)
+  - [x] Channel ordering (RGB → NCHW for ONNX)
+- [x] Add image quality assessment utilities
+- [x] Write comprehensive preprocessing tests
 
 ### 2.3 Tensor Conversion System
 
-- [ ] Implement ONNX tensor creation:
-  - [ ] Float32 tensor generation
-  - [ ] NCHW layout conversion
-  - [ ] Batch dimension handling
-  - [ ] Memory layout optimization
-- [ ] Create tensor validation utilities
-- [ ] Implement tensor debugging tools
-- [ ] Add tensor dimension verification
-- [ ] Write tensor conversion unit tests
+- [x] Implement ONNX tensor creation:
+  - [x] Float32 tensor generation
+  - [x] NCHW layout conversion
+  - [x] Batch dimension handling
+  - [x] Memory layout optimization
+- [x] Create tensor validation utilities
+- [x] Implement tensor debugging tools
+- [x] Add tensor dimension verification
+- [x] Write tensor conversion unit tests
 
 ### 2.4 Image Utilities
 
-- [ ] Implement coordinate transformation utilities
-- [ ] Create image cropping functions
-- [ ] Add image rotation helpers (90°, 180°, 270°)
-- [ ] Implement bounding box utilities
-- [ ] Create polygon/contour helper functions
-- [ ] Add image visualization tools for debugging
-- [ ] Write utility function tests
+- [x] Implement coordinate transformation utilities
+- [x] Create image cropping functions
+- [x] Add image rotation helpers (90°, 180°, 270°)
+- [x] Implement bounding box utilities
+- [x] Create polygon helper functions
+- [x] Add image visualization tools for debugging
+- [x] Write utility function tests
 
 ---
 
@@ -135,64 +135,75 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 3.1 Detection Model Integration
 
-- [ ] Create Detector struct with ONNX session management
-- [ ] Implement model loading and initialization:
-  - [ ] ONNX session creation
-  - [ ] Input/output tensor name resolution
-  - [ ] Model metadata extraction
-  - [ ] Thread-safe session handling
-- [ ] Add detection configuration management:
-  - [ ] Threshold parameters (det_db_thresh: 0.3, det_db_box_thresh: 0.5)
-  - [ ] Model path configuration
-  - [ ] Runtime optimization settings
-- [ ] Implement model validation
-- [ ] Create detection model benchmarking
-- [ ] Write model loading tests
+- [x] Create Detector struct with ONNX session management
+- [x] Implement model loading and initialization:
+  - [x] ONNX session creation
+  - [x] Input/output tensor name resolution
+  - [x] Model metadata extraction
+  - [x] Thread-safe session handling
+- [x] Add detection configuration management:
+  - [x] Threshold parameters (det_db_thresh: 0.3, det_db_box_thresh: 0.5)
+  - [x] Model path configuration
+  - [x] Runtime optimization settings (threads)
+- [x] Implement model validation
+- [x] Create detection model benchmarking
+- [x] Write model loading tests
 
 ### 3.2 Detection Inference Pipeline
 
-- [ ] Implement detection inference method:
-  - [ ] Image preprocessing integration
-  - [ ] ONNX Runtime session execution
-  - [ ] Output tensor retrieval
-  - [ ] Error handling and validation
-- [ ] Create batch inference support
-- [ ] Add inference timing and profiling
-- [ ] Implement memory management
-- [ ] Write inference unit tests
+- [x] Implement detection inference method:
+  - [x] Image preprocessing integration
+  - [x] ONNX Runtime session execution
+  - [x] Output tensor retrieval
+  - [x] Error handling and validation
+- [x] Create batch inference support
+- [x] Add inference timing and profiling
+- [x] Implement memory management
+- [x] Write inference unit tests
 
 ### 3.3 Detection Post-Processing
 
-- [ ] Implement DB (Differentiable Binarization) algorithm:
-  - [ ] Binary thresholding of probability maps
-  - [ ] Connected component analysis (4-connectivity)
-  - [ ] Flood fill / DFS for region detection
-  - [ ] Region confidence calculation
-- [ ] Create contour extraction system:
-  - [ ] Boundary pixel detection
-  - [ ] Moore-Neighbor tracing algorithm
-  - [ ] Contour simplification
-  - [ ] Polygon approximation
-- [ ] Implement bounding box calculation:
-  - [ ] Axis-aligned bounding rectangles
-  - [ ] Minimum area rectangles
-  - [ ] Convex hull computation
-  - [ ] Rotated rectangle detection
-- [ ] Add coordinate mapping back to original image scale
-- [ ] Create region filtering based on confidence thresholds
-- [ ] Write comprehensive post-processing tests
+- [x] Implement DB (Differentiable Binarization) algorithm:
+  - [x] Binary thresholding of probability maps
+  - [x] Connected component analysis (4-connectivity)
+  - [x] Flood fill / BFS for region detection
+  - [x] Region confidence calculation (average prob)
+- [x] Create contour/polygon approximation (box-based)
+- [x] Implement bounding box calculation (axis-aligned)
+- [x] Add coordinate mapping back to original image scale
+- [x] Create region filtering based on confidence thresholds
+- [x] Write post-processing unit tests
 
 ### 3.4 Detection Result Management
 
-- [ ] Define TextRegion data structures:
-  - [ ] Polygon coordinates
-  - [ ] Bounding box rectangles
-  - [ ] Confidence scores
-  - [ ] Region metadata
-- [ ] Implement detection result serialization
-- [ ] Create result visualization tools
-- [ ] Add result validation utilities
-- [ ] Write detection integration tests
+- [x] Define TextRegion data structures:
+  - [x] Polygon coordinates
+  - [x] Bounding box rectangles
+  - [x] Confidence scores
+  - [x] Region metadata (JSON DTO fields)
+- [x] Implement detection result serialization (JSON marshal/unmarshal)
+- [x] Create result visualization tools (draw boxes/polygons)
+- [x] Add result validation utilities
+- [x] Write detection result unit tests
+
+### 3.5 Detection Enhancements (Nice-to-haves)
+
+- [x] Contour extraction and polygon tracing (Moore-Neighbor)
+- [x] Polygon simplification (Douglas–Peucker) with tolerance tuning
+- [x] Minimum-area rectangle (rotating calipers) for tighter boxes
+- [x] DB “unclip/expand” to grow polygons before rectification
+- [ ] Morphological ops on prob map (smooth, dilate/erode) to merge fragments
+- [ ] Multi-scale inference + result merging (IoU/IoB based)
+- [ ] Optional image pyramid for small text sensitivity
+- [x] NMS improvements: Soft-NMS
+- [ ] NMS improvements: class-agnostic tuning
+- [ ] Adaptive thresholds (auto-tune db_thresh/box_thresh per image)
+- [ ] Provider options (CUDA/DirectML) and graph optimization levels
+- [ ] Warmup runs and session pre-allocation (IO binding) to reduce latency
+- [ ] Memory pooling for tensors/buffers in detection path
+- [ ] Detailed metrics: per-stage timings, IoU histograms, region count stats
+- [ ] Robustness tests: fuzz prob maps, extreme aspect ratios, empty outputs
+- [ ] Benchmarks on varied resolutions; add regression guardrails
 
 ---
 
@@ -200,66 +211,66 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 4.1 Recognition Model Setup
 
-- [ ] Create Recognizer struct with ONNX session
-- [ ] Implement character dictionary loading:
-  - [ ] Dictionary file parsing
-  - [ ] Character mapping creation
-  - [ ] Unicode handling
-  - [ ] Multiple language support preparation
-- [ ] Add recognition model initialization:
-  - [ ] Model loading and validation
-  - [ ] Input dimension requirements
-  - [ ] Output sequence length handling
-- [ ] Create recognition configuration management
-- [ ] Write model setup tests
+- [x] Create Recognizer struct with ONNX session
+- [x] Implement character dictionary loading:
+  - [x] Dictionary file parsing
+  - [x] Character mapping creation
+  - [x] Unicode handling
+  - [x] Multiple language support preparation
+- [x] Add recognition model initialization:
+  - [x] Model loading and validation
+  - [x] Input dimension requirements
+  - [x] Output sequence length handling
+- [x] Create recognition configuration management
+- [x] Write model setup tests
 
 ### 4.2 Text Region Preprocessing
 
-- [ ] Implement text region cropping:
-  - [ ] Polygon-based cropping
-  - [ ] Rotation handling for skewed text
-  - [ ] Image extraction from detected regions
-- [ ] Create recognition-specific resizing:
-  - [ ] Fixed height scaling (32px or 48px)
-  - [ ] Aspect ratio preservation
-  - [ ] Width constraints and padding
-  - [ ] Dynamic width handling
-- [ ] Add recognition normalization pipeline
-- [ ] Implement batch cropping for efficiency
-- [ ] Write cropping and preprocessing tests
+- [x] Implement text region cropping:
+  - [x] Polygon-based cropping (AABB of polygon)
+  - [x] Rotation handling for skewed text
+  - [x] Image extraction from detected regions
+- [x] Create recognition-specific resizing:
+  - [x] Fixed height scaling (32px or 48px)
+  - [x] Aspect ratio preservation
+  - [x] Width constraints and padding
+  - [x] Dynamic width handling
+- [x] Add recognition normalization pipeline
+- [x] Implement batch cropping for efficiency
+- [x] Write cropping and preprocessing tests
 
 ### 4.3 Recognition Inference
 
-- [ ] Implement text recognition inference:
-  - [ ] Single region processing
-  - [ ] Batch processing capabilities
-  - [ ] Output sequence retrieval
-  - [ ] Error handling for edge cases
-- [ ] Create CTC (Connectionist Temporal Classification) decoding:
-  - [ ] Argmax sequence extraction
-  - [ ] Repeating character collapse
-  - [ ] Blank token removal
-  - [ ] Character index to text mapping
-- [ ] Implement confidence calculation:
-  - [ ] Per-character probability averaging
-  - [ ] Sequence-level confidence scoring
+- [x] Implement text recognition inference:
+  - [x] Single region processing
+  - [x] Batch processing capabilities
+  - [x] Output sequence retrieval
+  - [x] Error handling for edge cases
+- [x] Create CTC (Connectionist Temporal Classification) decoding:
+  - [x] Argmax sequence extraction
+  - [x] Repeating character collapse
+  - [x] Blank token removal
+  - [x] Character index to text mapping
+- [x] Implement confidence calculation:
+  - [x] Per-character probability averaging
+  - [x] Sequence-level confidence scoring
   - [ ] Alternative confidence metrics
 - [ ] Add alternative decoding methods (beam search)
-- [ ] Write recognition inference tests
+- [x] Write recognition inference tests
 
 ### 4.4 Text Output Processing
 
-- [ ] Create text result structures:
-  - [ ] Recognized text strings
-  - [ ] Character-level confidence
-  - [ ] Recognition timing data
-- [ ] Implement text post-processing:
-  - [ ] Unicode normalization
-  - [ ] Special character handling
-  - [ ] Text cleaning utilities
-- [ ] Add multi-language text support
-- [ ] Create text validation tools
-- [ ] Write text processing tests
+- [x] Create text result structures:
+  - [x] Recognized text strings
+  - [x] Character-level confidence
+  - [x] Recognition timing data
+- [x] Implement text post-processing:
+  - [x] Unicode normalization
+  - [x] Special character handling
+  - [x] Text cleaning utilities
+- [x] Add multi-language text support
+- [x] Create text validation tools
+- [x] Write text processing tests
 
 ---
 
@@ -267,58 +278,70 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 5.1 OCR Pipeline Architecture
 
-- [ ] Create main OCR pipeline struct:
-  - [ ] Detector and Recognizer integration
-  - [ ] Configuration management
-  - [ ] Resource lifecycle management
-- [ ] Implement pipeline builder pattern:
-  - [ ] Model path configuration
-  - [ ] Feature flag management (orientation, etc.)
-  - [ ] Threshold parameter setting
-- [ ] Add pipeline initialization and cleanup
-- [ ] Create pipeline validation
-- [ ] Write pipeline setup tests
+- [x] Create main OCR pipeline struct:
+  - [x] Detector and Recognizer integration
+  - [x] Configuration management
+  - [x] Resource lifecycle management
+- [x] Implement pipeline builder pattern:
+  - [x] Model path configuration
+  - [x] Feature flag management (orientation, etc.)
+  - [x] Threshold parameter setting
+- [x] Add pipeline initialization and cleanup
+- [x] Create pipeline validation
+- [x] Write pipeline setup tests
 
 ### 5.2 End-to-End Processing
 
-- [ ] Implement single image processing:
-  - [ ] Image → Detection → Recognition → Results
-  - [ ] Error propagation and handling
-  - [ ] Performance monitoring
-  - [ ] Memory usage optimization
-- [ ] Create batch image processing:
-  - [ ] Multiple image handling
-  - [ ] Parallel processing options
-  - [ ] Progress tracking
-  - [ ] Resource management
-- [ ] Add processing pipeline validation
-- [ ] Implement result aggregation
-- [ ] Write end-to-end integration tests
+- [x] Implement single image processing:
+  - [x] Image → Detection → Recognition → Results
+  - [x] Error propagation and handling
+  - [x] Performance monitoring
+  - [x] Memory usage optimization
+- [x] Create batch image processing:
+  - [x] Multiple image handling
+  - [x] Parallel processing options
+  - [x] Progress tracking
+  - [x] Resource management
+- [x] Add processing pipeline validation
+- [x] Implement result aggregation
+- [x] Write end-to-end integration tests (skip if models/ONNX missing)
 
 ### 5.3 Result Management
 
-- [ ] Define comprehensive OCR result structures:
-  - [ ] Per-region results
-  - [ ] Image-level metadata
-  - [ ] Processing statistics
+- [x] Define comprehensive OCR result structures:
+  - [x] Per-region results
+  - [x] Image-level metadata
+  - [x] Processing statistics
   - [ ] Error information
-- [ ] Implement result serialization:
-  - [ ] JSON output format
-  - [ ] Plain text extraction
-  - [ ] Structured data export
-- [ ] Create result visualization tools
-- [ ] Add result validation utilities
-- [ ] Write result processing tests
+- [x] Implement result serialization:
+  - [x] JSON output format
+  - [x] Plain text extraction
+  - [x] Structured data export (CSV)
+- [x] Create result visualization tools
+- [x] Add result validation utilities
+- [x] Write result processing tests
 
 ### 5.4 Performance Optimization
 
-- [ ] Implement memory pooling for tensors
-- [ ] Add GPU acceleration support (CUDA)
-- [ ] Create processing pipeline profiling
-- [ ] Optimize critical path performance
+- [x] Implement memory pooling for tensors
+- [x] Add GPU acceleration support (CUDA)
+- [x] Create processing pipeline profiling
+- [x] Optimize critical path performance
 - [ ] Add memory leak detection
-- [ ] Implement resource monitoring
+- [x] Implement resource monitoring
 - [ ] Write performance benchmarks
+
+### 5.5 Pipeline Enhancements (Nice-to-haves)
+
+- [x] Context-aware processing (timeouts/cancellation via context.Context)
+- [x] Pipeline warmup + ONNX IO binding to reduce first-run latency
+- [x] Region-level worker pool and micro-batching across images
+- [ ] Profiles/presets (performance vs accuracy) for easy tuning
+- [ ] Reading-order heuristics and line/paragraph grouping for images
+- [ ] Structured logging and trace spans per stage (det/rec/post)
+- [ ] Unified provider selection (CPU/GPU) and device options at pipeline level
+- [ ] Buffer reuse and zero-copy paths between stages where feasible
+- [x] Progress hooks/callbacks for long-running multi-image jobs
 
 ---
 
@@ -326,53 +349,90 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 6.1 Document Orientation Detection
 
-- [ ] Integrate document orientation classifier:
-  - [ ] Model loading and initialization
-  - [ ] Whole-image orientation prediction
-  - [ ] Confidence threshold handling
-  - [ ] 0°/90°/180°/270° classification
-- [ ] Implement automatic image rotation:
-  - [ ] Pre-detection rotation
-  - [ ] Coordinate system adjustment
-  - [ ] Quality preservation during rotation
-- [ ] Add orientation detection configuration
-- [ ] Create orientation validation tests
+- [x] Integrate document orientation classifier:
+  - [x] Model loading and initialization
+  - [x] Whole-image orientation prediction
+  - [x] Confidence threshold handling
+  - [x] 0°/90°/180°/270° classification
+- [x] Implement automatic image rotation:
+  - [x] Pre-detection rotation
+  - [x] Coordinate system adjustment
+  - [x] Quality preservation during rotation
+- [x] Add orientation detection configuration
+- [x] Create orientation validation tests
 - [ ] Write orientation integration tests
 
 ### 6.2 Text Line Orientation Correction
 
-- [ ] Implement text line angle classifier:
-  - [ ] Per-region orientation detection
-  - [ ] Vertical text handling
-  - [ ] Region-specific rotation
-- [ ] Add text line rotation pipeline:
-  - [ ] Individual crop rotation
-  - [ ] Recognition input adjustment
-  - [ ] Coordinate transformation
-- [ ] Create text orientation configuration
-- [ ] Write text line orientation tests
+- [x] Implement text line angle classifier:
+  - [x] Per-region orientation detection
+  - [x] Vertical text handling
+  - [x] Region-specific rotation
+- [x] Add text line rotation pipeline:
+  - [x] Individual crop rotation
+  - [x] Recognition input adjustment
+  - [x] Coordinate transformation
+- [x] Create text orientation configuration
+- [x] Write text line orientation tests
 
 ### 6.3 Document Rectification (Optional)
 
-- [ ] Research UVDoc model integration
-- [ ] Implement perspective correction:
-  - [ ] Warped document detection
-  - [ ] Geometric transformation
-  - [ ] Quality assessment
-- [ ] Add rectification configuration
-- [ ] Create rectification tests
+- [x] Research UVDoc model integration
+- [x] Implement perspective correction:
+  - [x] Warped document detection (mask threshold + min-area rectangle)
+  - [x] Geometric transformation (inverse homography + bilinear sampling)
+  - [x] Quality assessment (coverage/aspect/area gating)
+- [x] Add rectification configuration (pipeline + CLI flags)
+- [x] Create rectification tests (basic: disabled no-op, missing model error)
 - [ ] Document rectification limitations
 
 ### 6.4 Multi-Language Support
 
-- [ ] Extend character dictionary management:
-  - [ ] Multiple dictionary loading
-  - [ ] Language-specific models
-  - [ ] Dynamic language switching
-- [ ] Add language detection capabilities
-- [ ] Implement Unicode text handling
-- [ ] Create language-specific tests
+- [x] Extend character dictionary management:
+  - [x] Multiple dictionary loading (merge with de-dup)
+  - [x] Language-specific models (CLI/serve `--rec-model` override)
+  - [ ] Dynamic language switching (per-request override TBD)
+- [x] Add language detection capabilities (heuristic for en/de/fr/es)
+- [x] Implement Unicode text handling (normalization, zero-width removal, quotes)
+- [x] Create language-specific tests (dict merge, detection, replacements)
 - [ ] Write multi-language documentation
+
+### 6.5 Implementation Learnings & Enhancements (New)
+
+- Orientation UX and performance
+  - [ ] Add flags to override orientation model path and threads (CLI/server)
+  - [ ] Batch orientation for multi-image inputs (reduce per-image overhead)
+  - [ ] Early-exit: skip orientation if EXIF orientation present or image is near-square
+  - [ ] Orientation warmup + IO binding for faster first predictions
+  - [ ] Optional heuristic-only mode with tunable thresholds for CPU-constrained envs
+
+- Text-line orientation extensions
+  - [ ] Batch classify per-line orientation across regions to amortize runtime
+  - [ ] Slant/skew regression: support small-angle deskew (<15°) before recognition
+  - [ ] Vertical-script mode (CJK vertical text) with dedicated rotation policy
+  - [ ] Cache per-region orientation between retries/passes to avoid rework
+
+- Multi-language UX and dynamics
+  - [ ] Per-request language override in server (cleaning rules and dictionary set)
+  - [ ] Auto-select recognition model by requested language (configurable mapping)
+  - [ ] Dictionary pack management (download/verify multiple dicts for languages)
+  - [ ] Expose detected language distribution in image summary (counts/percents)
+
+- Pipeline API and outputs
+  - [ ] Return both original and working (post-rotation) coordinates when orientation applied
+  - [ ] Add explicit orientation stage timing in image-level Processing
+  - [ ] Include orientation model info and thresholds in pipeline.Info() consistently
+
+- CLI/server usability
+  - [ ] Add --orientation-model and --textline-model flags
+  - [ ] Confidence guardrails: --min-orientation-conf to suppress low-confidence rotations
+  - [ ] Debug outputs: dump intermediate (rotated) images and per-line crops
+  - [ ] Server: accept dict-langs and language overrides per request (multipart fields)
+
+- Testing and tooling
+  - [ ] Golden tests for orientation/overlay coordinate mapping
+  - [ ] Property tests for language detection over synthetic/real snippets
+  - [ ] Benchmarks for orientation and per-line rotation to track regressions
 
 ---
 
@@ -380,44 +440,44 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 7.1 PDF Image Extraction
 
-- [ ] Implement PDF parsing with pdfcpu:
-  - [ ] PDF file loading and validation
-  - [ ] Page iteration and processing
-  - [ ] Image object extraction
-  - [ ] Multiple images per page handling
-- [ ] Create image decoding from PDF:
-  - [ ] JPEG/PNG embedded image handling
-  - [ ] Image quality assessment
-  - [ ] Resolution and DPI handling
-- [ ] Add PDF metadata extraction
-- [ ] Implement PDF error handling
+- [x] Implement PDF parsing with pdfcpu:
+  - [x] PDF file loading and validation
+  - [x] Page iteration and processing
+  - [x] Image object extraction
+  - [x] Multiple images per page handling
+- [x] Create image decoding from PDF:
+  - [x] JPEG/PNG embedded image handling
+  - [x] Image quality assessment
+  - [x] Resolution and DPI handling
+- [x] Add PDF metadata extraction
+- [x] Implement PDF error handling
 - [ ] Write PDF extraction tests
 
 ### 7.2 PDF Processing Pipeline
 
-- [ ] Integrate PDF processing with OCR pipeline:
-  - [ ] Page-by-page processing
-  - [ ] Batch PDF handling
-  - [ ] Progress tracking for large PDFs
-- [ ] Create PDF result aggregation:
-  - [ ] Per-page results
-  - [ ] Document-level compilation
-  - [ ] Page numbering and metadata
-- [ ] Add PDF processing configuration
-- [ ] Implement PDF processing optimization
+- [x] Integrate PDF processing with OCR pipeline:
+  - [x] Page-by-page processing
+  - [x] Batch PDF handling
+  - [x] Progress tracking for large PDFs
+- [x] Create PDF result aggregation:
+  - [x] Per-page results
+  - [x] Document-level compilation
+  - [x] Page numbering and metadata
+- [x] Add PDF processing configuration
+- [x] Implement PDF processing optimization
 - [ ] Write PDF integration tests
 
 ### 7.3 PDF Output Formatting
 
-- [ ] Create PDF-specific result formats:
-  - [ ] Page-structured JSON output
-  - [ ] Searchable text extraction
-  - [ ] Coordinate mapping to PDF space
-- [ ] Add PDF text reconstruction:
-  - [ ] Reading order detection
-  - [ ] Paragraph and column handling
-  - [ ] Text flow optimization
-- [ ] Implement PDF validation tools
+- [x] Create PDF-specific result formats:
+  - [x] Page-structured JSON output
+  - [x] Searchable text extraction
+  - [x] Coordinate mapping to PDF space
+- [x] Add PDF text reconstruction:
+  - [x] Reading order detection
+  - [x] Paragraph and column handling
+  - [x] Text flow optimization
+- [x] Implement PDF validation tools
 - [ ] Write PDF output tests
 
 ### 7.4 PDF Edge Cases
@@ -435,60 +495,73 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 8.1 Command-Line Interface
 
-- [ ] Implement CLI using Cobra framework:
-  - [ ] Command structure and subcommands
-  - [ ] Flag and argument parsing
-  - [ ] Input validation and error handling
-- [ ] Add CLI commands:
-  - [ ] `ocr image` - single image processing
-  - [ ] `ocr batch` - batch image processing
-  - [ ] `ocr pdf` - PDF processing
-  - [ ] `ocr serve` - HTTP server mode
-- [ ] Implement CLI configuration:
-  - [ ] Model path specification
-  - [ ] Output format selection (JSON/plain text)
-  - [ ] Feature flags (orientation, language)
-  - [ ] Verbosity and logging levels
-- [ ] Add CLI help and documentation
+- [x] Implement CLI using Cobra framework:
+  - [x] Command structure and subcommands
+  - [x] Flag and argument parsing
+  - [x] Input validation and error handling
+- [x] Add CLI commands:
+  - [x] `ocr image` - single image processing
+  - [x] `ocr batch` - batch image processing with parallel processing
+  - [x] `ocr pdf` - PDF processing
+  - [x] `ocr serve` - HTTP server mode
+- [x] Implement CLI configuration:
+  - [x] Model path specification
+  - [x] Output format selection (JSON/plain text/CSV)
+  - [x] Feature flags (orientation, language)
+  - [x] Verbosity and logging levels
+- [x] Add CLI help and documentation
 - [ ] Write CLI integration tests
+- [ ] Implement configuration file support:
+  - [ ] YAML/JSON configuration file loading
+  - [ ] Environment variable override
+  - [ ] Command-line flag priority
+- [ ] Add enhanced CLI features:
+  - [x] Progress indicators for long-running operations
+  - [ ] --dry-run flag for testing configurations
+  - [ ] Proper --version flag with build-time version info
 
 ### 8.2 Output Formatting
 
-- [ ] Implement multiple output formats:
-  - [ ] JSON structured output with coordinates
-  - [ ] Plain text with reading order
-  - [ ] CSV format for data processing
+- [x] Implement multiple output formats:
+  - [x] JSON structured output with coordinates
+  - [x] Plain text with reading order
+  - [x] CSV format for data processing
   - [ ] XML format for compatibility
-- [ ] Create output customization options:
-  - [ ] Coordinate precision control
-  - [ ] Confidence threshold filtering
-  - [ ] Region sorting options
+- [x] Create output customization options:
+  - [x] Coordinate precision control
+  - [x] Confidence threshold filtering
+  - [x] Region sorting options
 - [ ] Add output validation
 - [ ] Write output formatting tests
 
 ### 8.3 HTTP Server Service
 
-- [ ] Implement HTTP server using standard library:
-  - [ ] RESTful API endpoints
-  - [ ] File upload handling
-  - [ ] Multipart form processing
-  - [ ] JSON request/response handling
-- [ ] Add server endpoints:
-  - [ ] `POST /ocr/image` - image OCR
+- [x] Implement HTTP server using standard library:
+  - [x] RESTful API endpoints
+  - [x] File upload handling
+  - [x] Multipart form processing
+  - [x] JSON request/response handling
+- [x] Add server endpoints:
+  - [x] `POST /ocr/image` - image OCR
   - [ ] `POST /ocr/pdf` - PDF OCR
-  - [ ] `GET /health` - health check
-  - [ ] `GET /models` - model information
-- [ ] Implement server configuration:
-  - [ ] Port and binding configuration
-  - [ ] Request size limits
-  - [ ] Timeout settings
-  - [ ] CORS handling
-- [ ] Add server middleware:
-  - [ ] Request logging
-  - [ ] Error handling
+  - [x] `GET /health` - health check
+  - [x] `GET /models` - model information
+- [x] Implement server configuration:
+  - [x] Port and binding configuration
+  - [x] Request size limits
+  - [x] Timeout settings
+  - [x] CORS handling
+- [x] Add server middleware:
+  - [x] Request logging
+  - [x] Error handling
   - [ ] Rate limiting
   - [ ] Authentication (optional)
 - [ ] Write server API tests
+- [ ] Add enhanced server capabilities:
+  - [ ] Graceful shutdown handling
+  - [ ] Metrics/Prometheus endpoint
+  - [ ] WebSocket support for real-time OCR
+  - [ ] Batch processing endpoint
 
 ### 8.4 Configuration Management
 
@@ -512,7 +585,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
   - [ ] Detection post-processing algorithms
   - [ ] Recognition decoding logic
   - [ ] Pipeline orchestration
-- [ ] Create mock ONNX Runtime for testing
+- [x] Create mock ONNX Runtime for testing
 - [ ] Implement property-based testing for algorithms
 - [ ] Add edge case testing
 - [ ] Write performance regression tests
@@ -525,6 +598,44 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
   - [ ] PDF processing workflows
   - [ ] CLI command testing
   - [ ] HTTP API testing
+- [ ] Missing CLI integration test steps (270 total steps identified):
+  - [ ] Server/HTTP API steps (major gap):
+    - [ ] Server startup/shutdown steps
+    - [ ] HTTP request/response steps (POST, GET, OPTIONS)
+    - [ ] API endpoint testing (/health, /models, /ocr/image)
+    - [ ] Process management (SIGTERM, SIGINT handling)
+  - [ ] File output verification steps:
+    - [ ] File existence checks
+    - [ ] File content validation
+    - [ ] Output file writing verification
+  - [ ] Output format validation steps:
+    - [ ] JSON format validation
+    - [ ] CSV format validation
+    - [ ] Coordinate and header validation
+  - [ ] PDF processing verification steps:
+    - [ ] Page range processing
+    - [ ] Multi-page PDF handling
+    - [ ] PDF-specific output validation
+  - [ ] Content verification steps:
+    - [ ] Text region detection validation
+    - [ ] Confidence threshold verification
+    - [ ] Language-specific content checks
+  - [ ] Overlay/image generation steps:
+    - [ ] Overlay directory creation
+    - [ ] Overlay image validation
+    - [ ] Visual annotation verification
+  - [ ] Advanced configuration steps:
+    - [ ] Orientation detection validation
+    - [ ] Recognition parameter verification
+    - [ ] Confidence filtering checks
+  - [ ] Environment/system condition steps:
+    - [ ] System resource simulation
+    - [ ] Network condition testing
+    - [ ] Memory/disk limitation testing
+  - [ ] Help and documentation steps:
+    - [ ] Command help validation
+    - [ ] Flag documentation checks
+    - [ ] Usage information verification
 - [ ] Add reference comparison testing:
   - [ ] Compare with PaddleOCR outputs
   - [ ] Validate against known ground truth

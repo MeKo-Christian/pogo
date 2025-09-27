@@ -1,0 +1,28 @@
+{
+  "name": "simple_hello",
+  "description": "Simple single word 'Hello' detection and recognition",
+  "input_file": "images/simple/simple_1_Hello.png",
+  "expected": {
+    "text_regions": [
+      {
+        "text": "Hello",
+        "confidence": 0.95,
+        "bounding_box": {
+          "x": 280,
+          "y": 230,
+          "width": 80,
+          "height": 20
+        }
+      }
+    ],
+    "full_text": "Hello",
+    "confidence": 0.95
+  },
+  "metadata": {
+    "font": "basic",
+    "image_size": {
+      "height": 480,
+      "width": 640
+    }
+  }
+}

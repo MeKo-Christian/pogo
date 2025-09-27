@@ -1,0 +1,58 @@
+{
+  "name": "multiline_document",
+  "description": "Multiline text document detection and recognition",
+  "input_file": "images/multiline/multiline_document.png",
+  "expected": {
+    "text_regions": [
+      {
+        "text": "This is a",
+        "confidence": 0.92,
+        "bounding_box": {
+          "x": 400,
+          "y": 300,
+          "width": 120,
+          "height": 15
+        }
+      },
+      {
+        "text": "multiline text sample",
+        "confidence": 0.9,
+        "bounding_box": {
+          "x": 350,
+          "y": 330,
+          "width": 220,
+          "height": 15
+        }
+      },
+      {
+        "text": "for OCR testing",
+        "confidence": 0.93,
+        "bounding_box": {
+          "x": 380,
+          "y": 360,
+          "width": 160,
+          "height": 15
+        }
+      },
+      {
+        "text": "purposes",
+        "confidence": 0.94,
+        "bounding_box": {
+          "x": 450,
+          "y": 390,
+          "width": 90,
+          "height": 15
+        }
+      }
+    ],
+    "full_text": "This is a multiline text sample for OCR testing purposes",
+    "confidence": 0.92
+  },
+  "metadata": {
+    "image_size": {
+      "height": 768,
+      "width": 1024
+    },
+    "text_lines": 4
+  }
+}

@@ -1,4 +1,4 @@
-# go-oar-ocr justfile
+# pogo justfile
 
 set shell := ["bash", "-c"]
 
@@ -41,14 +41,94 @@ check-tidy:
         exit 1; \
     fi
 
+# Run go command with ONNX Runtime environment (fallback if direnv not available)
+go-onnx *ARGS:
+    #!/usr/bin/env bash
+    # Check if direnv variables are already set
+    if [[ -n "$CGO_CFLAGS" && "$CGO_CFLAGS" == *"onnxruntime"* ]]; then
+        # direnv is active, use it
+        go {{ ARGS }}
+    else
+        # direnv not active, set environment manually
+        export CGO_CFLAGS="-I{{justfile_directory()}}/onnxruntime/include"
+        export CGO_LDFLAGS="-L{{justfile_directory()}}/onnxruntime/lib -lonnxruntime"
+        export LD_LIBRARY_PATH="{{justfile_directory()}}/onnxruntime/lib:$LD_LIBRARY_PATH"
+        go {{ ARGS }}
+    fi
+
 # Run tests
 test:
-    go test -v ./...
+    just go-onnx test -v ./...
 
 # Run tests with coverage
 test-coverage:
-    go test -v -coverprofile=coverage.out ./...
+    just go-onnx test -v -coverprofile=coverage.out ./...
     go tool cover -html=coverage.out -o coverage.html
+
+# Run unit tests only
+test-unit:
+    just go-onnx test -v -short ./...
+
+# Run integration tests only
+test-integration:
+    just go-onnx test -v -run "Integration" ./...
+
+# Run CLI integration tests using Cucumber/Godog
+test-integration-cli:
+    go test -v ./test/integration/cli
+
+# Run CLI integration tests with specific features
+test-integration-cli-feature feature:
+    cd test/integration/cli && godog run features/{{ feature }}.feature
+
+# Run CLI integration tests in verbose mode
+test-integration-cli-verbose:
+    cd test/integration/cli && godog --format=pretty --no-colors=false features/
+
+# Run benchmark tests
+test-benchmark:
+    just go-onnx test -v -run="^$$" -bench=. ./...
+
+# Run ONNX Runtime smoke tests
+test-onnx:
+    just go-onnx test -v ./internal/onnx
+
+# Test specific package with optional test pattern
+test-package package *pattern:
+    #!/usr/bin/env bash
+    if [ -n "{{ pattern }}" ]; then
+        just go-onnx test -v ./{{ package }} -run "{{ pattern }}"
+    else
+        just go-onnx test -v ./{{ package }}
+    fi
+
+# Test parallel functionality specifically
+test-parallel:
+    just test-package internal/pipeline ".*Parallel.*"
+
+# Generate test data (using Go program)
+test-data-generate:
+    go run ./cmd/generate-test-data
+
+# Download and setup test data (using shell script)
+test-data-setup:
+    ./scripts/download-test-data.sh
+
+# Setup all test data (generate + download)
+test-data: test-data-generate test-data-setup
+
+# Clean test data
+test-data-clean:
+    rm -rf testdata/images/*
+    rm -rf testdata/fixtures/*
+    rm -rf testdata/synthetic/*
+
+# Run tests with race detection
+test-race:
+    just go-onnx test -v -race ./...
+
+# Run all test variants
+test-all: test test-race test-benchmark
 
 # Test that the project can build successfully
 test-can-build:
@@ -62,14 +142,14 @@ build:
     COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
     BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     mkdir -p bin/
-    go build \
-        -ldflags "-X github.com/MeKo-Tech/go-oar-ocr/internal/version.Version=${VERSION} -X github.com/MeKo-Tech/go-oar-ocr/internal/version.GitCommit=${COMMIT} -X github.com/MeKo-Tech/go-oar-ocr/internal/version.BuildDate=${BUILD_DATE}" \
-        -o bin/go-oar-ocr ./cmd/ocr
+    just go-onnx build \
+        -ldflags "-X github.com/MeKo-Tech/pogo/internal/version.Version=${VERSION} -X github.com/MeKo-Tech/pogo/internal/version.GitCommit=${COMMIT} -X github.com/MeKo-Tech/pogo/internal/version.BuildDate=${BUILD_DATE}" \
+        -o bin/pogo ./cmd/ocr
 
 # Build the binary without version info (faster for development)
 build-dev:
     mkdir -p bin/
-    go build -o bin/go-oar-ocr ./cmd/ocr
+    just go-onnx build -o bin/pogo ./cmd/ocr
 
 # Clean build artifacts
 clean:
@@ -102,7 +182,7 @@ deps:
 
 # Run the application with image input
 run *args:
-    go run ./cmd/ocr {{ args }}
+    just go-onnx run ./cmd/ocr {{ args }}
 
 # Run OCR on a test image
 run-test-image image="testdata/sample.jpg":
@@ -111,11 +191,27 @@ run-test-image image="testdata/sample.jpg":
 
 # Build Docker image
 docker-build tag="latest":
-    docker build -t go-oar-ocr:{{ tag }} .
+    docker build -t pogo:{{ tag }} .
 
 # Push Docker image
 docker-push tag="latest":
-    docker push go-oar-ocr:{{ tag }}
+    docker push pogo:{{ tag }}
+
+# Install ONNX Runtime (both CPU and GPU variants)
+install-onnxruntime:
+    ./scripts/install-onnxruntime.sh
+
+# Clean up ONNX Runtime installation
+cleanup-onnxruntime:
+    ./scripts/cleanup-onnxruntime.sh
+
+# Setup local ONNX Runtime (project-specific, no root required)
+setup-onnxruntime:
+    ./scripts/setup-onnxruntime.sh
+
+# Setup environment for ONNX Runtime
+setup-env:
+    @echo "Run: source scripts/setup-env.sh"
 
 # Download sample models for testing
 download-models:

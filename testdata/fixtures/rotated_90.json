@@ -1,0 +1,28 @@
+{
+  "name": "rotated_90",
+  "description": "90-degree rotated text detection and recognition",
+  "input_file": "images/rotated/rotated_90.png",
+  "expected": {
+    "text_regions": [
+      {
+        "text": "Rotated Text",
+        "confidence": 0.88,
+        "bounding_box": {
+          "x": 300,
+          "y": 200,
+          "width": 25,
+          "height": 140
+        }
+      }
+    ],
+    "full_text": "Rotated Text",
+    "confidence": 0.88
+  },
+  "metadata": {
+    "image_size": {
+      "height": 480,
+      "width": 640
+    },
+    "rotation": 90
+  }
+}

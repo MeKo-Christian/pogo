@@ -123,6 +123,25 @@ path = 'cmd/.*\.go'
 linters = ['funlen', 'gocyclo', 'cyclop']
 path = '_test\.go'
 
+[[linters.exclusions.rules]]
+linters = ['testpackage']
+path = '_test\.go'
+
+[[linters.exclusions.rules]]
+linters = ['gosec']
+text = 'G301:|G306:|G104:|G115:|G204:'
+path = '_test\.go'
+
+[[linters.exclusions.rules]]
+linters = ['gosec']
+text = 'G301:|G204:'
+path = 'test/integration/.*\.go'
+
+[[linters.exclusions.rules]]
+linters = ['gosec']
+text = 'G304:'
+path = 'internal/utils/image_utils_test\.go'
+
 [formatters]
 [formatters.exclusions]
 generated = 'lax'

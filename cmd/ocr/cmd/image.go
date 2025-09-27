@@ -1,0 +1,362 @@
+package cmd
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"image/color"
+	"image/png"
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/MeKo-Tech/pogo/internal/models"
+	"github.com/MeKo-Tech/pogo/internal/onnx"
+	"github.com/MeKo-Tech/pogo/internal/pipeline"
+	"github.com/MeKo-Tech/pogo/internal/utils"
+	"github.com/spf13/cobra"
+)
+
+// imageCmd represents the image command.
+var imageCmd = &cobra.Command{
+	Use:   "image",
+	Short: "Process images for OCR text detection and recognition",
+	Long: `Process one or more image files to extract text using OCR.
+
+Supported formats: JPEG, PNG, BMP, TIFF
+
+Examples:
+  pogo image photo.jpg
+  pogo image *.png --format json
+  pogo image document.jpg --output results.json`,
+	Args:         cobra.MinimumNArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Help handling for tests
+		if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
+			return cmd.Help()
+		}
+		if len(args) == 0 {
+			return errors.New("no input files provided")
+		}
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Processing %d image(s)\n", len(args)); err != nil {
+			return fmt.Errorf("failed to write to stdout: %w", err)
+		}
+
+		confFlag, _ := cmd.Flags().GetFloat64("confidence")
+		modelsDir, _ := cmd.InheritedFlags().GetString("models-dir")
+		detModel, _ := cmd.Flags().GetString("det-model")
+		recModel, _ := cmd.Flags().GetString("rec-model")
+		polyMode, _ := cmd.Flags().GetString("det-polygon-mode")
+		lang, _ := cmd.Flags().GetString("language")
+		dictCSV, _ := cmd.Flags().GetString("dict")
+		dictLangs, _ := cmd.Flags().GetString("dict-langs")
+		recH, _ := cmd.Flags().GetInt("rec-height")
+		minRecConf, _ := cmd.Flags().GetFloat64("min-rec-conf")
+		overlayDir, _ := cmd.Flags().GetString("overlay-dir")
+		format, _ := cmd.Flags().GetString("format")
+		outputFile, _ := cmd.Flags().GetString("output")
+		detectOrientation, _ := cmd.Flags().GetBool("detect-orientation")
+		orientThresh, _ := cmd.Flags().GetFloat64("orientation-threshold")
+		detectTextline, _ := cmd.Flags().GetBool("detect-textline")
+		textlineThresh, _ := cmd.Flags().GetFloat64("textline-threshold")
+		rectify, _ := cmd.Flags().GetBool("rectify")
+		rectifyModel, _ := cmd.Flags().GetString("rectify-model")
+		rectifyMask, _ := cmd.Flags().GetFloat64("rectify-mask-threshold")
+		rectifyHeight, _ := cmd.Flags().GetInt("rectify-height")
+		rectifyDebugDir, _ := cmd.Flags().GetString("rectify-debug-dir")
+		useGPU, _ := cmd.Flags().GetBool("gpu")
+		gpuDevice, _ := cmd.Flags().GetInt("gpu-device")
+		gpuMemLimit, _ := cmd.Flags().GetString("gpu-mem-limit")
+
+		// Parse GPU memory limit
+		var gpuMemLimitBytes uint64
+		if gpuMemLimit != "" && useGPU {
+			if gpuMemLimit == "auto" {
+				gpuMemLimitBytes = onnx.GetRecommendedGPUMemLimit()
+			} else {
+				// Parse memory limit (supports suffixes like "2GB", "512MB")
+				memLimitBytes, err := parseMemorySize(gpuMemLimit)
+				if err != nil {
+					return fmt.Errorf("invalid GPU memory limit: %w", err)
+				}
+				gpuMemLimitBytes = memLimitBytes
+			}
+		}
+
+		// Build OCR pipeline
+		b := pipeline.NewBuilder().WithModelsDir(modelsDir).WithLanguage(lang)
+		if useGPU {
+			b = b.WithGPU(true).WithGPUDevice(gpuDevice).WithGPUMemoryLimit(gpuMemLimitBytes)
+		}
+		if detectOrientation {
+			b = b.WithOrientation(true)
+		}
+		if detectTextline {
+			b = b.WithTextLineOrientation(true)
+		}
+		if rectify {
+			b = b.WithRectification(true)
+		}
+		if recH > 0 {
+			b = b.WithImageHeight(recH)
+		}
+		b = b.WithDetectorThresholds(pipeline.DefaultConfig().Detector.DbThresh, float32(confFlag))
+		if detModel != "" {
+			b = b.WithDetectorModelPath(detModel)
+		}
+		if recModel != "" {
+			b = b.WithRecognizerModelPath(recModel)
+		}
+		if dictCSV != "" {
+			parts := strings.Split(dictCSV, ",")
+			b = b.WithDictionaryPaths(parts)
+		}
+		if dictLangs != "" {
+			langs := strings.Split(dictLangs, ",")
+			paths := models.GetDictionaryPathsForLanguages(modelsDir, langs)
+			if len(paths) > 0 {
+				b = b.WithDictionaryPaths(paths)
+			}
+		}
+		if detectOrientation {
+			b = b.WithOrientation(true)
+		}
+		if orientThresh > 0 {
+			b = b.WithOrientationThreshold(orientThresh)
+		}
+		if textlineThresh > 0 {
+			b = b.WithTextLineOrientationThreshold(textlineThresh)
+		}
+		if rectifyModel != "" {
+			b = b.WithRectifyModelPath(rectifyModel)
+		}
+		if rectifyMask > 0 {
+			b = b.WithRectifyMaskThreshold(rectifyMask)
+		}
+		if rectifyHeight > 0 {
+			b = b.WithRectifyOutputHeight(rectifyHeight)
+		}
+		if rectifyDebugDir != "" {
+			b = b.WithRectifyDebugDir(rectifyDebugDir)
+		}
+		// Configure detector polygon mode
+		if polyMode != "" {
+			b = b.WithDetectorPolygonMode(polyMode)
+		}
+		pl, err := b.Build()
+		if err != nil {
+			return fmt.Errorf("failed to build OCR pipeline: %w", err)
+		}
+		defer func() {
+			if err := pl.Close(); err != nil {
+				// Log the error but don't return it since we're in a defer
+				fmt.Fprintf(os.Stderr, "Error closing pipeline: %v", err)
+			}
+		}()
+
+		cons := utils.DefaultImageConstraints()
+		var outputs []string
+		for _, pth := range args {
+			if !utils.IsSupportedImage(pth) {
+				return fmt.Errorf("unsupported image format: %s", pth)
+			}
+			img, meta, err := utils.LoadImage(pth)
+			if err != nil {
+				return fmt.Errorf("failed to load %s: %w", pth, err)
+			}
+			if err := utils.ValidateImageConstraints(img, cons); err != nil {
+				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "warning: %s: %v", pth, err); err != nil {
+					return fmt.Errorf("failed to write warning to stdout: %w", err)
+				}
+			}
+			res, err := pl.ProcessImage(img)
+			if err != nil {
+				return fmt.Errorf("OCR failed for %s: %w", pth, err)
+			}
+			// Optional post-filter by detection confidence
+			if confFlag > 0 {
+				filtered := make([]pipeline.OCRRegionResult, 0, len(res.Regions))
+				var sum float64
+				for _, r := range res.Regions {
+					if r.DetConfidence >= confFlag {
+						filtered = append(filtered, r)
+						sum += r.DetConfidence
+					}
+				}
+				res.Regions = filtered
+				if len(filtered) > 0 {
+					res.AvgDetConf = sum / float64(len(filtered))
+				} else {
+					res.AvgDetConf = 0
+				}
+			}
+			// Optional filter by recognition confidence
+			if minRecConf > 0 {
+				filtered := make([]pipeline.OCRRegionResult, 0, len(res.Regions))
+				for _, r := range res.Regions {
+					if r.RecConfidence >= minRecConf {
+						filtered = append(filtered, r)
+					}
+				}
+				res.Regions = filtered
+			}
+			// Optional overlay rendering
+			if overlayDir != "" {
+				ov := pipeline.RenderOverlay(img, res, color.RGBA{255, 0, 0, 255}, color.RGBA{0, 255, 0, 255})
+				if ov != nil {
+					if err := os.MkdirAll(overlayDir, 0o750); err == nil {
+						base := meta.Path
+						if idx := strings.LastIndex(base, "/"); idx >= 0 {
+							base = base[idx+1:]
+						}
+						outPath := overlayDir + "/" + strings.TrimSuffix(base, ".png") + "_overlay.png"
+						f, err := os.Create(outPath) //nolint:gosec // G304: Creating overlay output file with user-controlled path
+						if err == nil {
+							_ = png.Encode(f, ov)
+							_ = f.Close()
+							if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Saved overlay: %s", outPath); err != nil {
+								return fmt.Errorf("failed to write to stdout: %w", err)
+							}
+						}
+					}
+				}
+			}
+			switch format {
+			case "json":
+				obj := struct {
+					File string                   `json:"file"`
+					OCR  *pipeline.OCRImageResult `json:"ocr"`
+				}{File: meta.Path, OCR: res}
+				bts, _ := json.MarshalIndent(obj, "", "  ")
+				outputs = append(outputs, string(bts))
+			case "csv":
+				s, err := pipeline.ToCSVImage(res)
+				if err != nil {
+					return fmt.Errorf("format csv failed: %w", err)
+				}
+				if len(args) > 1 {
+					s = "# " + meta.Path + s
+				}
+				outputs = append(outputs, s)
+			default:
+				pipeline.SortRegionsTopLeft(res)
+				s, err := pipeline.ToPlainTextImage(res)
+				if err != nil {
+					return fmt.Errorf("format text failed: %w", err)
+				}
+				s = fmt.Sprintf("%s:%s", meta.Path, s)
+				outputs = append(outputs, s)
+			}
+		}
+		final := strings.Join(outputs, "")
+		if outputFile != "" {
+			if err := os.WriteFile(outputFile, []byte(final), 0o600); err != nil {
+				return fmt.Errorf("failed to write output file: %w", err)
+			}
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Results written to %s", outputFile); err != nil {
+				return err
+			}
+		} else {
+			if _, err := fmt.Fprintln(cmd.OutOrStdout(), final); err != nil {
+				return fmt.Errorf("failed to write final output: %w", err)
+			}
+		}
+		return nil
+	},
+}
+
+// parseMemorySize parses memory size strings like "2GB", "512MB", "1024".
+func parseMemorySize(s string) (uint64, error) {
+	if s == "" {
+		return 0, nil
+	}
+
+	// Convert to upper case and handle common suffixes
+	s = strings.ToUpper(strings.TrimSpace(s))
+
+	var multiplier uint64 = 1
+	switch {
+	case strings.HasSuffix(s, "KB"):
+		multiplier = 1024
+		s = s[:len(s)-2]
+	case strings.HasSuffix(s, "MB"):
+		multiplier = 1024 * 1024
+		s = s[:len(s)-2]
+	case strings.HasSuffix(s, "GB"):
+		multiplier = 1024 * 1024 * 1024
+		s = s[:len(s)-2]
+	case strings.HasSuffix(s, "K"):
+		multiplier = 1024
+		s = s[:len(s)-1]
+	case strings.HasSuffix(s, "M"):
+		multiplier = 1024 * 1024
+		s = s[:len(s)-1]
+	case strings.HasSuffix(s, "G"):
+		multiplier = 1024 * 1024 * 1024
+		s = s[:len(s)-1]
+	}
+
+	value, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid memory size: %s", s)
+	}
+
+	return value * multiplier, nil
+}
+
+func init() {
+	rootCmd.AddCommand(imageCmd)
+
+	// Image-specific flags
+	imageCmd.Flags().StringP("format", "f", "text", "output format (text, json, csv)")
+	imageCmd.Flags().StringP("output", "o", "", "output file (default: stdout)")
+	imageCmd.Flags().Float64("confidence", 0.5, "minimum confidence threshold")
+	imageCmd.Flags().Bool("detect-orientation", false, "enable document orientation detection")
+	imageCmd.Flags().Float64("orientation-threshold", 0.7, "orientation confidence threshold (0..1)")
+	imageCmd.Flags().StringP("language", "l", "en", "recognition language")
+	imageCmd.Flags().String("dict", "", "comma-separated dictionary file paths to merge for recognition")
+	imageCmd.Flags().String("dict-langs", "", "comma-separated language codes to auto-select dictionaries (e.g., en,de,fr)")
+	imageCmd.Flags().Int("rec-height", 0, "recognizer input height (0=auto, typical: 32 or 48)")
+	imageCmd.Flags().Float64("min-rec-conf", 0.0, "minimum recognition confidence (filter output)")
+	imageCmd.Flags().String("overlay-dir", "", "directory to write overlay images (drawn boxes)")
+	imageCmd.Flags().Bool("detect", true, "run detection (deprecated; pipeline runs full OCR)")
+	imageCmd.Flags().String("det-model", "", "override detection model path (defaults to organized models path)")
+	imageCmd.Flags().String("rec-model", "", "override recognition model path (defaults to organized models path)")
+	imageCmd.Flags().Bool("detect-textline", false, "enable per-text-line orientation detection")
+	imageCmd.Flags().Float64("textline-threshold", 0.6, "text line orientation confidence threshold (0..1)")
+
+	// Rectification flags (minimal CPU-only)
+	imageCmd.Flags().Bool("rectify", false, "enable document rectification (experimental)")
+	imageCmd.Flags().String("rectify-model", models.GetLayoutModelPath("", models.LayoutUVDoc), "override rectification model path")
+	imageCmd.Flags().Float64("rectify-mask-threshold", 0.5, "rectification mask threshold (0..1)")
+	imageCmd.Flags().Int("rectify-height", 1024, "rectified page output height (advisory)")
+	imageCmd.Flags().String("rectify-debug-dir", "", "directory to write rectification debug images (mask, overlay)")
+
+	// GPU acceleration flags
+	imageCmd.Flags().Bool("gpu", false, "enable GPU acceleration using CUDA")
+	imageCmd.Flags().Int("gpu-device", 0, "CUDA device ID to use (default: 0)")
+	imageCmd.Flags().String("gpu-mem-limit", "auto", "GPU memory limit (e.g., '2GB', '512MB', 'auto' for recommended limit)")
+
+	// Detection polygon mode: minrect (default) or contour
+	imageCmd.Flags().String("det-polygon-mode", "minrect", "detector polygon mode: minrect or contour")
+
+	// Ensure subcommand help prints expected sections when executed directly in tests
+	imageCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		out := cmd.OutOrStdout()
+		if _, err := fmt.Fprintln(out, cmd.Short); err != nil {
+			return
+		}
+		if _, err := fmt.Fprintln(out, "Usage:"); err != nil {
+			return
+		}
+		_, _ = fmt.Fprintln(out, cmd.UseLine())
+		_, _ = fmt.Fprintln(out, "Flags:")
+		_, _ = fmt.Fprintln(out, cmd.Flags().FlagUsages())
+	})
+}
+
+// GetImageCommand returns the image command for testing purposes.
+func GetImageCommand() *cobra.Command {
+	return imageCmd
+}

@@ -1,0 +1,24 @@
+{
+  "name": "pogo test data",
+  "version": "1.0.0",
+  "description": "Test data for pogo OCR pipeline testing",
+  "created": "2025-09-27T12:30:36Z",
+  "directories": {
+    "images": {
+      "simple": "Simple single-word test images",
+      "multiline": "Multi-line text document images",
+      "rotated": "Rotated text samples",
+      "scanned": "Simulated scanned document images",
+      "samples": "Downloaded sample images"
+    },
+    "synthetic": "Generated synthetic test images",
+    "fixtures": "Test fixtures with expected results",
+    "documents": "Test PDF documents"
+  },
+  "generation_method": "Combination of synthetic generation and downloads",
+  "tools_used": [
+    "Go test framework",
+    "golang.org/x/image libraries",
+    "github.com/disintegration/imaging"
+  ]
+}

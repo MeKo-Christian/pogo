@@ -1,6 +1,6 @@
 version: 2
 
-project_name: go-oar-ocr
+project_name: pogo
 
 before:
   hooks:
@@ -9,7 +9,7 @@ before:
 
 builds:
   - main: ./cmd/ocr
-    binary: go-oar-ocr
+    binary: pogo
     goos:
       - linux
       - windows
@@ -24,9 +24,9 @@ builds:
       - CGO_ENABLED=1
     ldflags:
       - -s -w
-      - -X github.com/MeKo-Tech/go-oar-ocr/internal/version.Version={{.Version}}
-      - -X github.com/MeKo-Tech/go-oar-ocr/internal/version.GitCommit={{.Commit}}
-      - -X github.com/MeKo-Tech/go-oar-ocr/internal/version.BuildDate={{.Date}}
+      - -X github.com/MeKo-Tech/pogo/internal/version.Version={{.Version}}
+      - -X github.com/MeKo-Tech/pogo/internal/version.GitCommit={{.Commit}}
+      - -X github.com/MeKo-Tech/pogo/internal/version.BuildDate={{.Date}}
 
 archives:
   - format: tar.gz
@@ -86,7 +86,7 @@ changelog:
 release:
   github:
     owner: MeKo-Tech
-    name: go-oar-ocr
+    name: pogo
   draft: false
   prerelease: auto
   mode: replace
@@ -101,10 +101,10 @@ release:
 
     ### Using Go Install
     ```bash
-    go install github.com/MeKo-Tech/go-oar-ocr/cmd/ocr@{{ .Tag }}
+    go install github.com/MeKo-Tech/pogo/cmd/ocr@{{ .Tag }}
     ```
 
     ## Docker
     ```bash
-    docker pull ghcr.io/meko-tech/go-oar-ocr:{{ .Tag }}
+    docker pull ghcr.io/meko-tech/pogo:{{ .Tag }}
     ```

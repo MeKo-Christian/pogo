@@ -1,0 +1,21 @@
+{
+  "name": "test_fixture",
+  "description": "Test fixture for unit testing",
+  "input_file": "test/input.png",
+  "expected": {
+    "text_regions": [
+      {
+        "text": "Test",
+        "confidence": 0.99,
+        "bounding_box": {
+          "x": 10,
+          "y": 20,
+          "width": 50,
+          "height": 15
+        }
+      }
+    ],
+    "full_text": "Test",
+    "confidence": 0.99
+  }
+}

@@ -78,3 +78,6 @@ onnxruntime/
 
 # Documentation build
 docs/_build/
+
+# Cache
+.gocache*/
