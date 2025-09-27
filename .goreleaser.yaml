@@ -1,0 +1,110 @@
+version: 2
+
+project_name: go-oar-ocr
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - main: ./cmd/ocr
+    binary: go-oar-ocr
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    env:
+      - CGO_ENABLED=1
+    ldflags:
+      - -s -w
+      - -X github.com/MeKo-Tech/go-oar-ocr/internal/version.Version={{.Version}}
+      - -X github.com/MeKo-Tech/go-oar-ocr/internal/version.GitCommit={{.Commit}}
+      - -X github.com/MeKo-Tech/go-oar-ocr/internal/version.BuildDate={{.Date}}
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE*
+      - CHANGELOG.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^style:'
+      - 'merge conflict'
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+  groups:
+    - title: 'New Features'
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: 'Performance Improvements'
+      regexp: '^.*?perf(\(.+\))??!?:.+$'
+      order: 2
+    - title: 'Refactoring'
+      regexp: '^.*?refactor(\(.+\))??!?:.+$'
+      order: 3
+    - title: 'Dependency Updates'
+      regexp: '^.*?(build|deps)(\(.+\))??!?:.+$'
+      order: 4
+    - title: 'Other Changes'
+      order: 999
+
+release:
+  github:
+    owner: MeKo-Tech
+    name: go-oar-ocr
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## OCR Pipeline Release {{ .Tag }}
+
+    This release contains the Go implementation of the OAR-OCR pipeline.
+  footer: |
+    ## Installation
+
+    Download the binary for your platform from the assets below.
+
+    ### Using Go Install
+    ```bash
+    go install github.com/MeKo-Tech/go-oar-ocr/cmd/ocr@{{ .Tag }}
+    ```
+
+    ## Docker
+    ```bash
+    docker pull ghcr.io/meko-tech/go-oar-ocr:{{ .Tag }}
+    ```

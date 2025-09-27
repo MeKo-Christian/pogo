@@ -1,0 +1,52 @@
+name: Test
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Just
+        uses: extractions/setup-just@v2
+        with:
+          just-version: 1.14.0
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v1.60.3
+          skip-cache: true
+
+      - name: Download dependencies
+        run: just deps
+
+      - name: Run linter
+        run: just lint
+
+      - name: Check formatting
+        run: just check-formatted
+
+      - name: Check tidy
+        run: just check-tidy
+
+      - name: Run tests
+        run: just test
+
+      - name: Build
+        run: just build
