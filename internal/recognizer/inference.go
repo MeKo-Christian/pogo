@@ -199,8 +199,8 @@ func (r *Recognizer) RecognizeBatch(img image.Image, regions []detector.Detected
 			padded := image.NewRGBA(image.Rect(0, 0, maxW, p.h))
 			src := toRGBA(p.img)
 			sb := src.Bounds()
-			for y := 0; y < sb.Dy(); y++ {
-				for x := 0; x < sb.Dx(); x++ {
+			for y := range sb.Dy() {
+				for x := range sb.Dx() {
 					padded.Set(x, y, src.At(sb.Min.X+x, sb.Min.Y+y))
 				}
 			}
@@ -263,8 +263,6 @@ func (r *Recognizer) RecognizeBatch(img image.Image, regions []detector.Detected
 	classesFirst := determineClassesFirst(shape, classesGuess)
 	blankIndex := 0
 	decoded := DecodeCTCGreedy(data, shape, blankIndex, classesFirst)
-	if len(decoded) != len(regions) { /* proceed but map min length */
-	}
 
 	out := make([]Result, len(regions))
 	for i := range out {

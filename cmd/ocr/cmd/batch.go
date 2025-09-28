@@ -72,7 +72,8 @@ func init() {
 		"override rectification model path")
 	batchCmd.Flags().Float64("rectify-mask-threshold", 0.5, "rectification mask threshold (0..1)")
 	batchCmd.Flags().Int("rectify-height", 1024, "rectified page output height (advisory)")
-	batchCmd.Flags().String("rectify-debug-dir", "", "directory to write rectification debug images (mask, overlay, compare)")
+	batchCmd.Flags().String("rectify-debug-dir", "",
+		"directory to write rectification debug images (mask, overlay, compare)")
 
 	// Parallel processing flags
 	batchCmd.Flags().IntP("workers", "w", 0, fmt.Sprintf("number of parallel workers (default: %d)", runtime.NumCPU()))
@@ -83,7 +84,8 @@ func init() {
 
 	// File discovery flags
 	batchCmd.Flags().BoolP("recursive", "r", false, "recursively scan directories")
-	batchCmd.Flags().StringSlice("include", []string{"*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"}, "file patterns to include")
+	batchCmd.Flags().StringSlice("include",
+		[]string{"*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"}, "file patterns to include")
 	batchCmd.Flags().StringSlice("exclude", []string{}, "file patterns to exclude")
 
 	// Progress and monitoring flags
@@ -375,7 +377,7 @@ func processImagesParallel(pl *pipeline.Pipeline, imagePaths []string, config pi
 
 		base := filepath.Base(meta.Path)
 		outPath := filepath.Join(overlayDir, strings.TrimSuffix(base, filepath.Ext(base))+"_overlay.png")
-		if f, err := os.Create(outPath); err == nil {
+		if f, err := os.Create(outPath); err == nil { //nolint:gosec // G304: outPath constructed from CLI overlay-dir flag, expected user input
 			_ = png.Encode(f, ov)
 			_ = f.Close()
 		}

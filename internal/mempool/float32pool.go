@@ -48,5 +48,5 @@ func PutFloat32(buf []float32) {
 		return // skip
 	}
 	// Reset length to full cap to avoid keeping len from caller; contents need not be zeroed.
-	p.Put(buf[:cap(buf)])
+	p.Put(buf[:cap(buf)]) //nolint:staticcheck
 }

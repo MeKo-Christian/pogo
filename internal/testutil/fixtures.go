@@ -80,12 +80,11 @@ func SaveFixture(t *testing.T, fixture TestFixture) {
 	require.NoError(t, err, "Failed to write fixture file: %s", fixturePath)
 }
 
-// CreateSampleFixtures creates sample test fixtures.
-func CreateSampleFixtures(t *testing.T) {
+// createSimpleFixture creates a simple word fixture.
+func createSimpleFixture(t *testing.T) TestFixture {
 	t.Helper()
 
-	// Simple word fixture
-	simpleFixture := TestFixture{
+	return TestFixture{
 		Name:        "simple_hello",
 		Description: "Simple single word 'Hello' detection and recognition",
 		InputFile:   "images/simple/simple_1_Hello.png",
@@ -113,10 +112,13 @@ func CreateSampleFixtures(t *testing.T) {
 			"font": "basic",
 		},
 	}
-	SaveFixture(t, simpleFixture)
+}
 
-	// Multiline document fixture
-	multilineFixture := TestFixture{
+// createMultilineFixture creates a multiline document fixture.
+func createMultilineFixture(t *testing.T) TestFixture {
+	t.Helper()
+
+	return TestFixture{
 		Name:        "multiline_document",
 		Description: "Multiline text document detection and recognition",
 		InputFile:   "images/multiline/multiline_document.png",
@@ -174,10 +176,13 @@ func CreateSampleFixtures(t *testing.T) {
 			"text_lines": 4,
 		},
 	}
-	SaveFixture(t, multilineFixture)
+}
 
-	// Rotated text fixture
-	rotatedFixture := TestFixture{
+// createRotatedFixture creates a rotated text fixture.
+func createRotatedFixture(t *testing.T) TestFixture {
+	t.Helper()
+
+	return TestFixture{
 		Name:        "rotated_90",
 		Description: "90-degree rotated text detection and recognition",
 		InputFile:   "images/rotated/rotated_90.png",
@@ -205,6 +210,22 @@ func CreateSampleFixtures(t *testing.T) {
 			},
 		},
 	}
+}
+
+// CreateSampleFixtures creates sample test fixtures.
+func CreateSampleFixtures(t *testing.T) {
+	t.Helper()
+
+	// Simple word fixture
+	simpleFixture := createSimpleFixture(t)
+	SaveFixture(t, simpleFixture)
+
+	// Multiline document fixture
+	multilineFixture := createMultilineFixture(t)
+	SaveFixture(t, multilineFixture)
+
+	// Rotated text fixture
+	rotatedFixture := createRotatedFixture(t)
 	SaveFixture(t, rotatedFixture)
 }
 

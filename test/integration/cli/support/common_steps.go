@@ -1073,153 +1073,171 @@ func (testCtx *TestContext) createSyntheticTestImage(imagePath string) error {
 	return nil
 }
 
-// RegisterCommonSteps registers all common step definitions.
-func (testCtx *TestContext) RegisterCommonSteps(sc *godog.ScenarioContext) {
-	// Background steps
+// registerBackgroundSteps registers background setup steps.
+func (testCtx *TestContext) registerBackgroundSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the OCR models are available$`, testCtx.theOCRModelsAreAvailable)
 	sc.Step(`^the test images are available$`, testCtx.theTestImagesAreAvailable)
 	sc.Step(`^the test PDFs are available$`, testCtx.theTestPDFsAreAvailable)
+}
 
-	// Command execution
+// registerCommandSteps registers command execution and result verification steps.
+func (testCtx *TestContext) registerCommandSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^I run "([^"]*)"$`, testCtx.iRunCommand)
-
-	// Command result verification
 	sc.Step(`^the command should succeed$`, testCtx.theCommandShouldSucceed)
 	sc.Step(`^the command should fail$`, testCtx.theCommandShouldFail)
+	sc.Step(`^the command might fail$`, testCtx.theCommandMightFail)
+}
 
-	// Output verification
+// registerOutputSteps registers output verification steps.
+func (testCtx *TestContext) registerOutputSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the output should contain "([^"]*)"$`, testCtx.theOutputShouldContain)
 	sc.Step(`^the output should be valid JSON$`, testCtx.theOutputShouldBeValidJSON)
+	sc.Step(`^the output should be valid JSON-Code$`, testCtx.theOutputShouldBeValidJSONCode)
+	sc.Step(`^the output should be valid CSV$`, testCtx.theOutputShouldBeValidCSV)
+	sc.Step(`^the output should be in JSON format$`, testCtx.theOutputShouldBeInJSONFormat)
+	sc.Step(`^the output should be in CSV format$`, testCtx.theOutputShouldBeInCSVFormat)
 	sc.Step(`^the JSON should contain "([^"]*)"$`, testCtx.theJSONShouldContain)
+}
 
-	// Error verification
+// registerErrorSteps registers error verification steps.
+func (testCtx *TestContext) registerErrorSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the error should mention "([^"]*)"$`, testCtx.theErrorShouldMention)
+	sc.Step(`^the error should mention invalid configuration values$`,
+		testCtx.theErrorShouldMentionInvalidConfigurationValues)
+}
 
-	// File verification
+// registerFileSteps registers file verification steps.
+func (testCtx *TestContext) registerFileSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the file "([^"]*)" should exist$`, testCtx.theFileShouldExist)
 	sc.Step(`^the file should contain "([^"]*)"$`, func(content string) error {
-		// This assumes the last file referenced in the scenario
 		return testCtx.theFileShouldContain(testCtx.LastOutputFile, content)
 	})
+	sc.Step(`^the file should contain the OCR output$`, testCtx.theFileShouldContainTheOCROutput)
+	sc.Step(`^the file should contain the OCR results$`, testCtx.theFileShouldContainTheOCRResults)
+	sc.Step(`^the file should contain valid JSON-Code$`, testCtx.theFileShouldContainValidJSONCode)
+}
 
-	// Configuration verification
+// registerConfigurationSteps registers configuration verification steps.
+func (testCtx *TestContext) registerConfigurationSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the OCR models are available in "([^"]*)"$`, testCtx.theOCRModelsAreAvailableIn)
 	sc.Step(`^the OCR models are available in a temporary directory$`, testCtx.theOCRModelsAreAvailableInTempDir)
+	sc.Step(`^the models should be loaded from "([^"]*)"$`, testCtx.theModelsShouldBeLoadedFrom)
+	sc.Step(`^the models should be loaded from the temporary directory$`, testCtx.theModelsShouldBeLoadedFromTempDir)
+	sc.Step(`^the environment variable "([^"]*)" is set to "([^"]*)"$`, testCtx.theEnvironmentVariableIsSetTo)
+	sc.Step(`^the environment variable GO_OAR_OCR_MODELS_DIR is set to "([^"]*)"$`, testCtx.theEnvironmentVariableGOOAROCRModelsDirIsSetTo)
+}
+
+// registerModelSteps registers model and language verification steps.
+func (testCtx *TestContext) registerModelSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^a custom detection model exists at "([^"]*)"$`, testCtx.aCustomDetectionModelExistsAt)
 	sc.Step(`^a custom recognition model exists at "([^"]*)"$`, testCtx.aCustomRecognitionModelExistsAt)
 	sc.Step(`^custom dictionary files exist$`, testCtx.customDictionaryFilesExist)
-
-	// Language model verification
 	sc.Step(`^the English language model should be used$`, testCtx.theEnglishLanguageModelShouldBeUsed)
 	sc.Step(`^the German language model should be used$`, testCtx.theGermanLanguageModelShouldBeUsed)
-
-	// Custom model usage verification
+	sc.Step(`^German language should be configured$`, testCtx.germanLanguageShouldBeConfigured)
+	sc.Step(`^German language should be used$`, testCtx.germanLanguageShouldBeUsed)
 	sc.Step(`^the custom detection model should be used$`, testCtx.theCustomDetectionModelShouldBeUsed)
 	sc.Step(`^the custom recognition model should be used$`, testCtx.theCustomRecognitionModelShouldBeUsed)
 	sc.Step(`^the custom dictionaries should be merged and used$`, testCtx.theCustomDictionariesShouldBeMergedAndUsed)
+	sc.Step(`^the pipeline should use German language$`, testCtx.thePipelineShouldUseGermanLanguage)
+}
 
-	// Debug and timing information verification
-	sc.Step(`^the output should include debug information$`, testCtx.theOutputShouldIncludeDebugInformation)
-	sc.Step(`^timing information should be displayed$`, testCtx.timingInformationShouldBeDisplayed)
-
-	// Filtering verification
+// registerProcessingSteps registers processing and filtering steps.
+func (testCtx *TestContext) registerProcessingSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^only regions with confidence (\d+.\d+) should be detected$`,
 		testCtx.onlyRegionsWithConfidenceShouldBeDetected)
 	sc.Step(`^only text with recognition confidence (\d+.\d+) should be included$`,
 		testCtx.onlyTextWithRecognitionConfidenceShouldBeIncluded)
-
-	// Recognition settings verification
+	sc.Step(`^confidence threshold should be ([0-9.]+)$`, testCtx.confidenceThresholdShouldBe)
+	sc.Step(`^detection confidence threshold should be ([0-9.]+)$`, testCtx.detectionConfidenceThresholdShouldBe)
+	sc.Step(`^detection confidence threshold should be (\d+.\d+)$`, testCtx.detectionConfidenceThresholdShouldBe)
 	sc.Step(`^the recognizer should use pixel height input (\d+)$`, testCtx.theRecognizerShouldUsePixelHeightInput)
+	sc.Step(`^the recognizer should use ([0-9]+) pixel height input$`, testCtx.theRecognizerShouldUsePixelHeightInput)
+}
 
-	// Orientation detection verification
+// registerOrientationSteps registers orientation detection steps.
+func (testCtx *TestContext) registerOrientationSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^orientation detection should be enabled with threshold (\d+.\d+)$`,
 		testCtx.orientationDetectionShouldBeEnabledWithThreshold)
+	sc.Step(`^orientation detection should be enabled$`, testCtx.orientationDetectionShouldBeEnabled)
 	sc.Step(`^text line orientation detection should be enabled with threshold (\d+.\d+)$`,
 		testCtx.textLineOrientationDetectionShouldBeEnabledWithThreshold)
+	sc.Step(`^text line orientation detection should be enabled with threshold ([0-9.]+)$`,
+		testCtx.textLineOrientationDetectionShouldBeEnabledWithThreshold)
+	sc.Step(`^individual text lines should be corrected for orientation$`, testCtx.individualTextLinesShouldBeCorrectedForOrientation)
+}
 
-	// Output format verification
-	sc.Step(`^the output should be in JSON format$`, testCtx.theOutputShouldBeInJSONFormat)
-	sc.Step(`^the output should be in CSV format$`, testCtx.theOutputShouldBeInCSVFormat)
-
-	// CSV header verification
+// registerResultSteps registers result and output format steps.
+func (testCtx *TestContext) registerResultSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the CSV should contain proper headers$`, testCtx.theCSVShouldContainProperHeaders)
-
-	// Result writing verification
 	sc.Step(`^the results should be written to "([^"]*)"$`, testCtx.theResultsShouldBeWrittenTo)
+}
 
-	// Overlay image verification
+// registerOverlaySteps registers overlay image steps.
+func (testCtx *TestContext) registerOverlaySteps(sc *godog.ScenarioContext) {
 	sc.Step(`^overlay images should be created in directory "([^"]*)"$`, testCtx.overlayImagesShouldBeCreatedInDirectory)
+	sc.Step(`^overlay images should be created in "([^"]*)" directory$`,
+		testCtx.overlayImagesShouldBeCreatedInDirectory)
 	sc.Step(`^the overlay images should show detected regions$`, testCtx.theOverlayImagesShouldShowDetectedRegions)
+	sc.Step(`^the overlay image should be created in "([^"]*)" directory$`, testCtx.theOverlayImageShouldBeCreatedInDirectory)
+}
 
-	// Server configuration verification
+// registerServerSteps registers server configuration steps.
+func (testCtx *TestContext) registerServerSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the server should bind to all interfaces$`, testCtx.theServerShouldBindToAllInterfaces)
 	sc.Step(`^external connections should be accepted$`, testCtx.externalConnectionsShouldBeAccepted)
 	sc.Step(`^the server should start successfully$`, testCtx.theServerShouldStartSuccessfully)
-
-	// CORS configuration verification
 	sc.Step(`^CORS should be configured for "([^"]*)"$`, testCtx.CORSSShouldBeConfiguredFor)
-
-	// Upload size and timeout verification
 	sc.Step(`^the maximum upload size should be "([^"]*)"$`, testCtx.theMaximumUploadSizeShouldBe)
+	sc.Step(`^the maximum upload size should be (.+)$`, testCtx.theMaximumUploadSizeShouldBe)
 	sc.Step(`^request timeout should be (\d+)$`, testCtx.requestTimeoutShouldBe)
+}
 
-	// Pipeline verification
-	sc.Step(`^the pipeline should use German language$`, testCtx.thePipelineShouldUseGermanLanguage)
+// registerDebugSteps registers debug and timing steps.
+func (testCtx *TestContext) registerDebugSteps(sc *godog.ScenarioContext) {
+	sc.Step(`^the output should include debug information$`, testCtx.theOutputShouldIncludeDebugInformation)
+	sc.Step(`^timing information should be displayed$`, testCtx.timingInformationShouldBeDisplayed)
+	sc.Step(`^the processing should complete within timeout$`, testCtx.theProcessingShouldCompleteWithinTimeout)
+	sc.Step(`^the process should terminate$`, testCtx.theProcessShouldTerminate)
+}
 
-	// Detection confidence threshold verification
-	sc.Step(`^detection confidence threshold should be (\d+.\d+)$`, testCtx.detectionConfidenceThresholdShouldBe)
-
-	// Environment variable verification
-	sc.Step(`^the environment variable "([^"]*)" is set to "([^"]*)"$`, testCtx.theEnvironmentVariableIsSetTo)
-
-	// Model loading verification
-	sc.Step(`^models should be loaded from "([^"]*)"$`, testCtx.modelsShouldBeLoadedFrom)
-
-	// Error message verification
-	sc.Step(`^the error should mention invalid configuration values$`,
-		testCtx.theErrorShouldMentionInvalidConfigurationValues)
-
-	// Help content verification
+// registerHelpSteps registers help and documentation steps.
+func (testCtx *TestContext) registerHelpSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the help should list all available flags$`,
 		testCtx.theHelpShouldListAllAvailableFlags)
 	sc.Step(`^the help should list all available subcommands$`,
 		testCtx.theHelpShouldListAllAvailableSubcommands)
-
-	// Flag and global option documentation verification
 	sc.Step(`^flag descriptions should be clear and helpful$`,
 		testCtx.flagDescriptionsShouldBeClearAndHelpful)
 	sc.Step(`^global flags should be documented$`, testCtx.globalFlagsShouldBeDocumented)
-
-	// Build information verification
 	sc.Step(`^build information should be included$`, testCtx.buildInformationShouldBeIncluded)
-
-	// Additional missing steps
-	sc.Step(`^the models should be loaded from "([^"]*)"$`, testCtx.theModelsShouldBeLoadedFrom)
-	sc.Step(`^the models should be loaded from the temporary directory$`, testCtx.theModelsShouldBeLoadedFromTempDir)
-	sc.Step(`^German language should be configured$`, testCtx.germanLanguageShouldBeConfigured)
-	sc.Step(`^German language should be used$`, testCtx.germanLanguageShouldBeUsed)
-	sc.Step(`^confidence threshold should be ([0-9.]+)$`, testCtx.confidenceThresholdShouldBe)
-	sc.Step(`^detection confidence threshold should be ([0-9.]+)$`, testCtx.detectionConfidenceThresholdShouldBe)
-	sc.Step(`^the environment variable GO_OAR_OCR_MODELS_DIR is set to "([^"]*)"$`, testCtx.theEnvironmentVariableGOOAROCRModelsDirIsSetTo)
-	sc.Step(`^the maximum upload size should be (.+)$`, testCtx.theMaximumUploadSizeShouldBe)
-	sc.Step(`^the recognizer should use ([0-9]+) pixel height input$`, testCtx.theRecognizerShouldUsePixelHeightInput)
-	sc.Step(`^individual text lines should be corrected for orientation$`, testCtx.individualTextLinesShouldBeCorrectedForOrientation)
-	sc.Step(`^orientation detection should be enabled$`, testCtx.orientationDetectionShouldBeEnabled)
-	sc.Step(`^the command might fail$`, testCtx.theCommandMightFail)
-	sc.Step(`^the OCR models are not available$`, testCtx.theOCRModelsAreNotAvailable)
-	sc.Step(`^text line orientation detection should be enabled with threshold ([0-9.]+)$`,
-		testCtx.textLineOrientationDetectionShouldBeEnabledWithThreshold)
-	sc.Step(`^overlay images should be created in "([^"]*)" directory$`,
-		testCtx.overlayImagesShouldBeCreatedInDirectory)
-	sc.Step(`^the file should contain the OCR output$`, testCtx.theFileShouldContainTheOCROutput)
-	sc.Step(`^the file should contain the OCR results$`, testCtx.theFileShouldContainTheOCRResults)
-	sc.Step(`^the file should contain valid JSON-Code$`, testCtx.theFileShouldContainValidJSONCode)
-	sc.Step(`^the output should be valid JSON-Code$`, testCtx.theOutputShouldBeValidJSONCode)
-	sc.Step(`^the output should list server configuration flags$`, testCtx.theOutputShouldListServerConfigurationFlags)
-	sc.Step(`^the overlay image should be created in "([^"]*)" directory$`, testCtx.theOverlayImageShouldBeCreatedInDirectory)
-	sc.Step(`^the processing should complete within timeout$`, testCtx.theProcessingShouldCompleteWithinTimeout)
-	sc.Step(`^the process should terminate$`, testCtx.theProcessShouldTerminate)
+	sc.Step(`^the output should contain usage information$`, testCtx.theOutputShouldContainUsageInformation)
 	sc.Step(`^the output should list available flags$`, testCtx.theOutputShouldListAvailableFlags)
 	sc.Step(`^the output should list available subcommands$`, testCtx.theOutputShouldListAvailableSubcommands)
-	sc.Step(`^the output should be valid CSV$`, testCtx.theOutputShouldBeValidCSV)
+	sc.Step(`^the output should list server configuration flags$`, testCtx.theOutputShouldListServerConfigurationFlags)
+}
+
+// registerModelAvailabilitySteps registers model availability steps.
+func (testCtx *TestContext) registerModelAvailabilitySteps(sc *godog.ScenarioContext) {
+	sc.Step(`^models should be loaded from "([^"]*)"$`, testCtx.modelsShouldBeLoadedFrom)
+	sc.Step(`^the OCR models are not available$`, testCtx.theOCRModelsAreNotAvailable)
+}
+
+// RegisterCommonSteps registers all common step definitions.
+func (testCtx *TestContext) RegisterCommonSteps(sc *godog.ScenarioContext) {
+	testCtx.registerBackgroundSteps(sc)
+	testCtx.registerCommandSteps(sc)
+	testCtx.registerOutputSteps(sc)
+	testCtx.registerErrorSteps(sc)
+	testCtx.registerFileSteps(sc)
+	testCtx.registerConfigurationSteps(sc)
+	testCtx.registerModelSteps(sc)
+	testCtx.registerProcessingSteps(sc)
+	testCtx.registerOrientationSteps(sc)
+	testCtx.registerResultSteps(sc)
+	testCtx.registerOverlaySteps(sc)
+	testCtx.registerServerSteps(sc)
+	testCtx.registerDebugSteps(sc)
+	testCtx.registerHelpSteps(sc)
+	testCtx.registerModelAvailabilitySteps(sc)
 }

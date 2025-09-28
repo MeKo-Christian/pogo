@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -188,7 +189,7 @@ func (l *LogProgressCallback) WithInterval(interval int) *LogProgressCallback {
 func (l *LogProgressCallback) OnStart(total int) {
 	l.startTime = time.Now()
 	l.lastLog = 0
-	l.logger.Log(nil, l.level, l.prefix+"Starting processing", "total", total)
+	l.logger.Log(context.TODO(), l.level, l.prefix+"Starting processing", "total", total)
 }
 
 func (l *LogProgressCallback) OnProgress(current, total int) {
@@ -198,7 +199,7 @@ func (l *LogProgressCallback) OnProgress(current, total int) {
 		elapsed := time.Since(l.startTime)
 		rate := float64(current) / elapsed.Seconds()
 
-		l.logger.Log(nil, l.level, l.prefix+"Progress update",
+		l.logger.Log(context.TODO(), l.level, l.prefix+"Progress update",
 			"current", current,
 			"total", total,
 			"percent", fmt.Sprintf("%.1f", percent),
@@ -210,11 +211,11 @@ func (l *LogProgressCallback) OnProgress(current, total int) {
 
 func (l *LogProgressCallback) OnComplete() {
 	elapsed := time.Since(l.startTime)
-	l.logger.Log(nil, l.level, l.prefix+"Processing completed", "elapsed", elapsed.Round(time.Millisecond))
+	l.logger.Log(context.TODO(), l.level, l.prefix+"Processing completed", "elapsed", elapsed.Round(time.Millisecond))
 }
 
 func (l *LogProgressCallback) OnError(current int, err error) {
-	l.logger.Log(nil, slog.LevelError, l.prefix+"Processing error", "current", current, "error", err)
+	l.logger.Log(context.TODO(), slog.LevelError, l.prefix+"Processing error", "current", current, "error", err)
 }
 
 // MultiProgressCallback combines multiple progress callbacks.

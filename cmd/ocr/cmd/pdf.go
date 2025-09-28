@@ -434,31 +434,49 @@ func validatePageRange(pages string) error {
 	parts := strings.Split(pages, ",")
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
-		if strings.Contains(part, "-") {
-			rangeParts := strings.Split(part, "-")
-			if len(rangeParts) != 2 {
-				return fmt.Errorf("invalid range format: %s", part)
-			}
-			start, err1 := strconv.Atoi(strings.TrimSpace(rangeParts[0]))
-			end, err2 := strconv.Atoi(strings.TrimSpace(rangeParts[1]))
-			if err1 != nil || err2 != nil {
-				return fmt.Errorf("invalid page numbers in range: %s", part)
-			}
-			if start > end {
-				return fmt.Errorf("invalid page range: start (%d) > end (%d)", start, end)
-			}
-			if start < 1 || end < 1 {
-				return fmt.Errorf("page numbers must be positive: %s", part)
-			}
-		} else {
-			pageNum, err := strconv.Atoi(part)
-			if err != nil {
-				return fmt.Errorf("invalid page number: %s", part)
-			}
-			if pageNum < 1 {
-				return fmt.Errorf("page number must be positive: %d", pageNum)
-			}
+		if err := validatePagePart(part); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+// validatePagePart validates a single page part (either a single number or a range).
+func validatePagePart(part string) error {
+	if strings.Contains(part, "-") {
+		return validatePageRangePart(part)
+	}
+	return validateSinglePage(part)
+}
+
+// validatePageRangePart validates a range part like "1-5".
+func validatePageRangePart(part string) error {
+	rangeParts := strings.Split(part, "-")
+	if len(rangeParts) != 2 {
+		return fmt.Errorf("invalid range format: %s", part)
+	}
+	start, err1 := strconv.Atoi(strings.TrimSpace(rangeParts[0]))
+	end, err2 := strconv.Atoi(strings.TrimSpace(rangeParts[1]))
+	if err1 != nil || err2 != nil {
+		return fmt.Errorf("invalid page numbers in range: %s", part)
+	}
+	if start > end {
+		return fmt.Errorf("invalid page range: start (%d) > end (%d)", start, end)
+	}
+	if start < 1 || end < 1 {
+		return fmt.Errorf("page numbers must be positive: %s", part)
+	}
+	return nil
+}
+
+// validateSinglePage validates a single page number.
+func validateSinglePage(part string) error {
+	pageNum, err := strconv.Atoi(part)
+	if err != nil {
+		return fmt.Errorf("invalid page number: %s", part)
+	}
+	if pageNum < 1 {
+		return fmt.Errorf("page number must be positive: %d", pageNum)
 	}
 	return nil
 }

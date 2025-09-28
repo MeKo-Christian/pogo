@@ -266,7 +266,11 @@ func createMultipartFormRequest(
 }
 
 // createMultipartPDFFormRequest creates a multipart form request with a PDF file.
-func createMultipartPDFFormRequest(pdfData []byte, filename string, extraFields map[string]string) (*http.Request, string, error) {
+func createMultipartPDFFormRequest(
+	pdfData []byte,
+	filename string,
+	extraFields map[string]string,
+) (*http.Request, string, error) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 

@@ -24,7 +24,7 @@ func TestLoadCharset_Valid(t *testing.T) {
 	dir := t.TempDir()
 	dictPath := filepath.Join(dir, "dict.txt")
 
-	content := "\xEF\xBB\xBFa\nß\n你\nこんにちは\nspace\n#comment\n\n" // includes BOM and Unicode, plus an ignored empty line
+	content := "\xEF\xBB\xBFa\nß\n你\nこんにちは\nspace\n#comment\n\n" //nolint:gosmopolitan // includes BOM and Unicode, plus an ignored empty line
 	require.NoError(t, os.WriteFile(dictPath, []byte(content), 0o644))
 
 	cs, err := LoadCharset(dictPath)
@@ -35,7 +35,7 @@ func TestLoadCharset_Valid(t *testing.T) {
 	require.Equal(t, 6, cs.Size())
 	require.Equal(t, 0, cs.LookupIndex("a"))
 	require.Equal(t, 1, cs.LookupIndex("ß"))
-	require.Equal(t, 2, cs.LookupIndex("你"))
+	require.Equal(t, 2, cs.LookupIndex("你")) //nolint:gosmopolitan
 	require.Equal(t, 3, cs.LookupIndex("こんにちは"))
 	require.Equal(t, 4, cs.LookupIndex("space"))
 	require.Equal(t, 5, cs.LookupIndex("#comment"))

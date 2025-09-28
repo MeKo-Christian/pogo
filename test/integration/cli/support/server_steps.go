@@ -2,6 +2,7 @@ package support
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -52,7 +53,11 @@ func (testCtx *TestContext) theHealthEndpointShouldRespondWithStatus(expectedSta
 	client := &http.Client{Timeout: 5 * time.Second}
 	url := testCtx.GetServerURL() + "/health"
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -74,7 +79,11 @@ func (testCtx *TestContext) theModelsEndpointShouldBeAccessible() error {
 	client := &http.Client{Timeout: 5 * time.Second}
 	url := testCtx.GetServerURL() + "/models"
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to call models endpoint: %w", err)
 	}
@@ -96,7 +105,11 @@ func (testCtx *TestContext) theHealthEndpointShouldBeAccessibleOnPort(port int) 
 	client := &http.Client{Timeout: 5 * time.Second}
 	url := "http://" + net.JoinHostPort(testCtx.ServerHost, strconv.Itoa(port)) + "/health"
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to call health endpoint on port %d: %w", port, err)
 	}
@@ -204,7 +217,7 @@ func (testCtx *TestContext) uploadImageToEndpointWithOverlay(endpoint, imagePath
 	url := fmt.Sprintf("%s%s", testCtx.GetServerURL(), endpoint)
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	req, err := http.NewRequest(http.MethodPost, url, &buf)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, &buf)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -285,7 +298,7 @@ func (testCtx *TestContext) uploadImageToEndpoint(endpoint, imagePath, format st
 	url := fmt.Sprintf("%s%s", testCtx.GetServerURL(), endpoint)
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	req, err := http.NewRequest(http.MethodPost, url, &buf)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, &buf)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -397,7 +410,13 @@ func (testCtx *TestContext) iGETEndpoint(endpoint string) error {
 	client := &http.Client{Timeout: 5 * time.Second}
 	url := fmt.Sprintf("%s%s", testCtx.GetServerURL(), endpoint)
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		testCtx.LastError = err
+		testCtx.LastExitCode = 1
+		return nil // Don't return error here, let verification steps handle it
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		testCtx.LastError = err
 		testCtx.LastExitCode = 1
@@ -509,7 +528,11 @@ func (testCtx *TestContext) theServerShouldStopListeningForNewRequests() error {
 	client := &http.Client{Timeout: time.Second}
 	url := testCtx.GetServerURL() + "/health"
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		// This is expected during shutdown
 		return nil
@@ -582,7 +605,7 @@ func (testCtx *TestContext) iPOSTAnInvalidFileTo(endpoint string) error {
 	url := fmt.Sprintf("%s%s", testCtx.GetServerURL(), endpoint)
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	req, err := http.NewRequest(http.MethodPost, url, &buf)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, &buf)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -712,7 +735,7 @@ func (testCtx *TestContext) makeHTTPRequest(method, endpoint string, _body inter
 	client := &http.Client{Timeout: 5 * time.Second}
 	url := fmt.Sprintf("%s%s", testCtx.GetServerURL(), endpoint)
 
-	req, err := http.NewRequest(method, url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), method, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -831,7 +854,11 @@ func (testCtx *TestContext) theServerShouldBeAccessibleFromExternalConnections()
 	client := &http.Client{Timeout: 5 * time.Second}
 	url := fmt.Sprintf("http://127.0.0.1:%d/health", testCtx.ServerPort)
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("server not accessible from external connection: %w", err)
 	}
@@ -866,7 +893,11 @@ func (testCtx *TestContext) theServerShouldStartOnHostAndPort(host string, port 
 	client := &http.Client{Timeout: 5 * time.Second}
 	url := "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/health"
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("server not responding on %s:%d: %w", host, port, err)
 	}
@@ -889,8 +920,8 @@ func (testCtx *TestContext) theServerWasRunningAndCrashed() error {
 	return nil
 }
 
-func (testCtx *TestContext) RegisterServerSteps(sc *godog.ScenarioContext) {
-	// Server lifecycle
+// registerServerLifecycleSteps registers server startup and basic lifecycle steps.
+func (testCtx *TestContext) registerServerLifecycleSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the server is not already running$`, testCtx.theServerIsNotAlreadyRunning)
 	sc.Step(`^I start the server with "([^"]*)"$`, testCtx.iStartTheServerWith)
 	sc.Step(`^the server should start on port (\d+)$`, func(portStr string) error {
@@ -900,8 +931,21 @@ func (testCtx *TestContext) RegisterServerSteps(sc *godog.ScenarioContext) {
 		}
 		return testCtx.theServerShouldStartOnPort(port)
 	})
+	sc.Step(`^the server is running on port (\d+)$`, func(portStr string) error {
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return fmt.Errorf("invalid port: %s", portStr)
+		}
+		return testCtx.theServerIsRunningOnPort(port)
+	})
+	sc.Step(`^a service is already running on port ([0-9]+)$`, testCtx.aServiceIsAlreadyRunningOnPortHTTP)
+	sc.Step(`^I restart the server with "([^"]*)"$`, testCtx.iRestartTheServerWith)
+	sc.Step(`^the server should start on host "([^"]*)" and port (\d+)$`, testCtx.theServerShouldStartOnHostAndPort)
+	sc.Step(`^the server was running and crashed$`, testCtx.theServerWasRunningAndCrashed)
+}
 
-	// Server endpoints
+// registerServerEndpointSteps registers endpoint accessibility and health steps.
+func (testCtx *TestContext) registerServerEndpointSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the health endpoint should respond with status (\d+)$`, func(statusStr string) error {
 		status, err := strconv.Atoi(statusStr)
 		if err != nil {
@@ -910,8 +954,6 @@ func (testCtx *TestContext) RegisterServerSteps(sc *godog.ScenarioContext) {
 		return testCtx.theHealthEndpointShouldRespondWithStatus(status)
 	})
 	sc.Step(`^the models endpoint should be accessible$`, testCtx.theModelsEndpointShouldBeAccessible)
-
-	// Server configuration
 	sc.Step(`^the health endpoint should be accessible on port (\d+)$`, func(portStr string) error {
 		port, err := strconv.Atoi(portStr)
 		if err != nil {
@@ -919,23 +961,29 @@ func (testCtx *TestContext) RegisterServerSteps(sc *godog.ScenarioContext) {
 		}
 		return testCtx.theHealthEndpointShouldBeAccessibleOnPort(port)
 	})
+	sc.Step(`^the health endpoint should be accessible on port ([0-9]+)$`, testCtx.theHealthEndpointShouldBeAccessibleOnPortHTTP)
+	sc.Step(`^the health endpoint should respond with status ([0-9]+)$`, testCtx.theHealthEndpointShouldRespondWithStatusHTTP)
+}
 
-	// Server running context
-	sc.Step(`^the server is running on port (\d+)$`, func(portStr string) error {
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			return fmt.Errorf("invalid port: %s", portStr)
-		}
-		return testCtx.theServerIsRunningOnPort(port)
-	})
-
-	// API requests
+// registerAPIRequestSteps registers API request steps.
+func (testCtx *TestContext) registerAPIRequestSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^I POST an image to "([^"]*)"$`, testCtx.iPOSTAnImageTo)
 	sc.Step(`^I POST an image to "([^"]*)" with format "([^"]*)"$`, testCtx.iPOSTAnImageToWithFormat)
 	sc.Step(`^I POST an image to "([^"]*)" with overlay enabled$`, testCtx.iPOSTAnImageToWithOverlayEnabled)
 	sc.Step(`^I GET "([^"]*)"$`, testCtx.iGETEndpoint)
+	sc.Step(`^I GET "([^"]*)"$`, testCtx.iGET)
+	sc.Step(`^I POST an image to "([^"]*)" with format "([^"]*)"$`, testCtx.iPOSTAnImageToWithFormatHTTP)
+	sc.Step(`^I POST an image to "([^"]*)" with overlay enabled$`, testCtx.iPOSTAnImageToWithOverlayEnabledHTTP)
+	sc.Step(`^I POST a large image to "([^"]*)"$`, testCtx.iPOSTALargeImageTo)
+	sc.Step(`^I POST an image larger than 1MB to "([^"]*)"$`, testCtx.iPOSTAnImageLargerThan1MBTo)
+	sc.Step(`^I POST an invalid file to "([^"]*)"$`, testCtx.iPOSTAnInvalidFileTo)
+	sc.Step(`^I make an OPTIONS request to "([^"]*)"$`, testCtx.iMakeAnOPTIONSRequestTo)
+	sc.Step(`^I POST an image that takes longer than ([0-9]+) seconds to process$`, testCtx.iPOSTAnImageThatTakesLongerThanSecondsToProcess)
+	sc.Step(`^I send multiple concurrent requests to "([^"]*)"$`, testCtx.iSendMultipleConcurrentRequestsTo)
+}
 
-	// Response verification
+// registerResponseVerificationSteps registers response verification steps.
+func (testCtx *TestContext) registerResponseVerificationSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the response status should be (\d+)$`, func(statusStr string) error {
 		status, err := strconv.Atoi(statusStr)
 		if err != nil {
@@ -950,46 +998,39 @@ func (testCtx *TestContext) RegisterServerSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the response should include model metadata$`, testCtx.theResponseShouldIncludeModelMetadata)
 	sc.Step(`^the JSON should contain confidence scores$`, testCtx.theJSONShouldContainConfidenceScores)
 	sc.Step(`^the response should indicate server is healthy$`, testCtx.theResponseShouldIndicateServerIsHealthy)
+	sc.Step(`^the response should be valid JSON$`, testCtx.theResponseShouldBeValidJSON)
+	sc.Step(`^the response should be valid JSON-Code$`, testCtx.theResponseShouldBeValidJSONCode)
+	sc.Step(`^response times should be reasonable$`, testCtx.responseTimesShouldBeReasonable)
+}
 
-	// Server shutdown
+// registerServerShutdownSteps registers server shutdown and signal steps.
+func (testCtx *TestContext) registerServerShutdownSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^I send ([A-Z]+) to the server$`, testCtx.iSendSignalToTheServer)
 	sc.Step(`^the server should shutdown gracefully$`, testCtx.theServerShouldShutdownGracefully)
 	sc.Step(`^pending requests should complete$`, testCtx.pendingRequestsShouldComplete)
 	sc.Step(`^the server should stop listening for new requests$`, testCtx.theServerShouldStopListeningForNewRequests)
+	sc.Step(`^the server should shutdown immediately$`, testCtx.theServerShouldShutdownImmediately)
+}
 
-	// HTTP request steps
-	sc.Step(`^I GET "([^"]*)"$`, testCtx.iGET)
-	sc.Step(`^I POST an image to "([^"]*)" with format "([^"]*)"$`, testCtx.iPOSTAnImageToWithFormatHTTP)
-	sc.Step(`^I POST an image to "([^"]*)" with overlay enabled$`, testCtx.iPOSTAnImageToWithOverlayEnabledHTTP)
-	sc.Step(`^I POST a large image to "([^"]*)"$`, testCtx.iPOSTALargeImageTo)
-	sc.Step(`^I POST an image larger than 1MB to "([^"]*)"$`, testCtx.iPOSTAnImageLargerThan1MBTo)
-	sc.Step(`^I POST an invalid file to "([^"]*)"$`, testCtx.iPOSTAnInvalidFileTo)
-	sc.Step(`^I make an OPTIONS request to "([^"]*)"$`, testCtx.iMakeAnOPTIONSRequestTo)
-	sc.Step(`^I POST an image that takes longer than ([0-9]+) seconds to process$`, testCtx.iPOSTAnImageThatTakesLongerThanSecondsToProcess)
-
-	// Response validation
+// registerCORSAndValidationSteps registers CORS and additional validation steps.
+func (testCtx *TestContext) registerCORSAndValidationSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^Access-Control-Allow-Origin should be "([^"]*)"$`, testCtx.accessControlAllowOriginShouldBe)
 	sc.Step(`^CORS should be configured for "([^"]*)"$`, testCtx.CORSSShouldBeConfiguredFor)
 	sc.Step(`^the response should include CORS headers$`, testCtx.theResponseShouldIncludeCORSHeaders)
 	sc.Step(`^all endpoints should be functional$`, testCtx.allEndpointsShouldBeFunctional)
-	sc.Step(`^the health endpoint should be accessible on port ([0-9]+)$`, testCtx.theHealthEndpointShouldBeAccessibleOnPortHTTP)
-	sc.Step(`^the health endpoint should respond with status ([0-9]+)$`, testCtx.theHealthEndpointShouldRespondWithStatusHTTP)
-	sc.Step(`^the response should be valid JSON$`, testCtx.theResponseShouldBeValidJSON)
-
-	// Server lifecycle
-	sc.Step(`^a service is already running on port ([0-9]+)$`, testCtx.aServiceIsAlreadyRunningOnPortHTTP)
-	sc.Step(`^I restart the server with "([^"]*)"$`, testCtx.iRestartTheServerWith)
 	sc.Step(`^all requests should be processed successfully$`, testCtx.allRequestsShouldBeProcessedSuccessfully)
-
-	// Missing server steps
-	sc.Step(`^I send multiple concurrent requests to "([^"]*)"$`, testCtx.iSendMultipleConcurrentRequestsTo)
-	sc.Step(`^response times should be reasonable$`, testCtx.responseTimesShouldBeReasonable)
-	sc.Step(`^the response should be valid JSON-Code$`, testCtx.theResponseShouldBeValidJSONCode)
 	sc.Step(`^the server is running with CORS origin "([^"]*)"$`, testCtx.theServerIsRunningWithCORSOrigin)
 	sc.Step(`^the server is running with max upload size (\d+)MB$`, testCtx.theServerIsRunningWithMaxUploadSizeMB)
 	sc.Step(`^the server is running with timeout (\d+) seconds$`, testCtx.theServerIsRunningWithTimeoutSeconds)
 	sc.Step(`^the server should be accessible from external connections$`, testCtx.theServerShouldBeAccessibleFromExternalConnections)
-	sc.Step(`^the server should shutdown immediately$`, testCtx.theServerShouldShutdownImmediately)
-	sc.Step(`^the server should start on host "([^"]*)" and port (\d+)$`, testCtx.theServerShouldStartOnHostAndPort)
-	sc.Step(`^the server was running and crashed$`, testCtx.theServerWasRunningAndCrashed)
+}
+
+// RegisterServerSteps registers all server-related step definitions.
+func (testCtx *TestContext) RegisterServerSteps(sc *godog.ScenarioContext) {
+	testCtx.registerServerLifecycleSteps(sc)
+	testCtx.registerServerEndpointSteps(sc)
+	testCtx.registerAPIRequestSteps(sc)
+	testCtx.registerResponseVerificationSteps(sc)
+	testCtx.registerServerShutdownSteps(sc)
+	testCtx.registerCORSAndValidationSteps(sc)
 }

@@ -142,6 +142,10 @@ linters = ['gosec']
 text = 'G304:'
 path = 'internal/utils/image_utils_test\.go'
 
+[[linters.exclusions.rules]]
+linters = ['lll']
+path = '.*_steps\.go'
+
 [formatters]
 [formatters.exclusions]
 generated = 'lax'

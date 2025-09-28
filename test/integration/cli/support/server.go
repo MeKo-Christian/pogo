@@ -1,6 +1,7 @@
 package support
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -45,7 +46,7 @@ func (testCtx *TestContext) StartServer(command string) error {
 	}
 
 	// Create command
-	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd := exec.CommandContext(context.Background(), parts[0], parts[1:]...)
 	cmd.Dir = testCtx.WorkingDir
 	cmd.Env = append(os.Environ(), testCtx.EnvVars...)
 
@@ -134,7 +135,8 @@ func (testCtx *TestContext) parseServerCommand(command string) error {
 
 // isPortInUse checks if a port is already in use.
 func (testCtx *TestContext) isPortInUse(port int) bool {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf(":%d", port), time.Second)
+	dialer := &net.Dialer{Timeout: time.Second}
+	conn, err := dialer.Dial("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return false
 	}
@@ -163,7 +165,11 @@ func (testCtx *TestContext) isServerHealthy() bool {
 	client := &http.Client{Timeout: time.Second}
 	url := "http://" + net.JoinHostPort(testCtx.ServerHost, strconv.Itoa(testCtx.ServerPort)) + "/health"
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return false
 	}

@@ -179,6 +179,8 @@ func (p *Pipeline) ProcessImagesParallelBatched(images []image.Image, config Par
 }
 
 // ProcessImagesParallelBatchedContext processes images in parallel batches with context support.
+//
+//nolint:dupl // Duplicate with test mock implementation
 func (p *Pipeline) ProcessImagesParallelBatchedContext(ctx context.Context, images []image.Image, config ParallelConfig) ([]*OCRImageResult, error) {
 	if config.BatchSize <= 1 {
 		// No batching requested, use regular parallel processing

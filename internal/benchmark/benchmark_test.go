@@ -208,6 +208,7 @@ func TestExampleBenchmarkUsage(t *testing.T) {
 		for i := range 1000 {
 			slice = append(slice, i)
 		}
+		_ = slice // result intentionally unused in benchmark
 		return nil
 	})
 

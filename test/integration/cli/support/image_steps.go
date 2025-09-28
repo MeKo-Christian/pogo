@@ -238,7 +238,8 @@ func (testCtx *TestContext) RegisterImageSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the CSV should contain coordinate columns$`, testCtx.theCSVShouldContainCoordinateColumns)
 
 	// Multi-image processing
-	sc.Step(`^the output should contain results for all images$`, testCtx.theOutputShouldContainResultsForAllImages)
+	sc.Step(`^the output should contain results for all images$`,
+		testCtx.theOutputShouldContainResultsForAllImages)
 
 	// Confidence filtering
 	sc.Step(`^all detected regions should have confidence >= ([\d.]+)$`, func(thresholdStr string) error {
@@ -250,15 +251,20 @@ func (testCtx *TestContext) RegisterImageSteps(sc *godog.ScenarioContext) {
 	})
 
 	// Orientation processing
-	sc.Step(`^the output should contain text from corrected orientation$`, testCtx.theOutputShouldContainTextFromCorrectedOrientation)
-	sc.Step(`^individual text lines should be corrected for orientation$`, testCtx.individualTextLinesShouldBeCorrectedForOrientation)
+	sc.Step(`^the output should contain text from corrected orientation$`,
+		testCtx.theOutputShouldContainTextFromCorrectedOrientation)
+	sc.Step(`^individual text lines should be corrected for orientation$`,
+		testCtx.individualTextLinesShouldBeCorrectedForOrientation)
 
 	// Overlay generation
-	sc.Step(`^the overlay image should be created in "([^"]*)" directory$`, testCtx.theOverlayImageShouldBeCreatedInDirectory)
-	sc.Step(`^the overlay should show detected text regions$`, testCtx.theOverlayShouldShowDetectedTextRegions)
+	sc.Step(`^the overlay image should be created in "([^"]*)" directory$`,
+		testCtx.theOverlayImageShouldBeCreatedInDirectory)
+	sc.Step(`^the overlay should show detected text regions$`,
+		testCtx.theOverlayShouldShowDetectedTextRegions)
 
 	// Recognition confidence
-	sc.Step(`^only high-confidence recognized text should be included$`, testCtx.onlyHighConfidenceRecognizedTextShouldBeIncluded)
+	sc.Step(`^only high-confidence recognized text should be included$`,
+		testCtx.onlyHighConfidenceRecognizedTextShouldBeIncluded)
 
 	// Language-specific processing
 	sc.Step(`^the output should contain German text$`, testCtx.theOutputShouldContainGermanText)
@@ -277,7 +283,8 @@ func (testCtx *TestContext) RegisterImageSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the output should list available flags$`, testCtx.theOutputShouldListAvailableFlags)
 
 	// Additional missing steps
-	sc.Step(`^all detected regions should have confidence >= ([0-9.]+)$`, testCtx.allDetectedRegionsShouldHaveConfidenceGTE)
+	sc.Step(`^all detected regions should have confidence >= ([0-9.]+)$`,
+		testCtx.allDetectedRegionsShouldHaveConfidenceGTE)
 	sc.Step(`^the output should show ([0-9]+) pages maximum$`, testCtx.theOutputShouldShowPagesMaximum)
 	sc.Step(`^the JSON should contain confidence scores$`, testCtx.theJSONShouldContainConfidenceScores)
 	sc.Step(`^the JSON should contain "regions" array$`, testCtx.theJSONShouldContainRegionsArray)

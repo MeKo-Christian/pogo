@@ -75,7 +75,7 @@ func fileExists(path string) bool {
 }
 
 func saveResultsToFile(filename string, results []benchmark.GPUVSCPUBenchmarkResult) error {
-	file, err := os.Create(filename)
+	file, err := os.Create(filename) //nolint:gosec // G304: filename comes from CLI argument, expected user input
 	if err != nil {
 		return err
 	}

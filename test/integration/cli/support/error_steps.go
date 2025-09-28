@@ -318,13 +318,18 @@ func (testCtx *TestContext) RegisterErrorSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^a warning should be logged about invalid CORS format$`, testCtx.aWarningShouldBeLoggedAboutInvalidCORSFormat)
 
 	// System resource errors
-	sc.Step(`^the error should mention "memory" or "out of memory"$`, testCtx.theErrorShouldMentionMemory)
-	sc.Step(`^the error should mention "unsupported language" or "invalid language"$`, testCtx.theErrorShouldMentionUnsupportedLanguage)
-	sc.Step(`^the error should mention "threshold out of range"$`, testCtx.theErrorShouldMentionThresholdOutOfRange)
+	sc.Step(`^the error should mention "memory" or "out of memory"$`,
+		testCtx.theErrorShouldMentionMemory)
+	sc.Step(`^the error should mention "unsupported language" or "invalid language"$`,
+		testCtx.theErrorShouldMentionUnsupportedLanguage)
+	sc.Step(`^the error should mention "threshold out of range"$`,
+		testCtx.theErrorShouldMentionThresholdOutOfRange)
 
 	// Model and dictionary errors
-	sc.Step(`^the error should mention "model not found" or "no such file"$`, testCtx.theErrorShouldMentionModelNotFound)
-	sc.Step(`^the error should mention "dictionary not found" or "no such file"$`, testCtx.theErrorShouldMentionDictionaryNotFound)
+	sc.Step(`^the error should mention "model not found" or "no such file"$`,
+		testCtx.theErrorShouldMentionModelNotFound)
+	sc.Step(`^the error should mention "dictionary not found" or "no such file"$`,
+		testCtx.theErrorShouldMentionDictionaryNotFound)
 
 	// File size and processing errors
 	sc.Step(`^the error should mention "image too large" or "memory"$`, testCtx.theErrorShouldMentionImageTooLarge)

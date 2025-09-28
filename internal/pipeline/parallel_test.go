@@ -485,6 +485,7 @@ func (p *TestPipeline) ProcessImagesParallelBatched(images []image.Image, config
 	return p.ProcessImagesParallelBatchedContext(context.Background(), images, config)
 }
 
+//nolint:dupl // Duplicate with real implementation for test mocking
 func (p *TestPipeline) ProcessImagesParallelBatchedContext(ctx context.Context, images []image.Image, config ParallelConfig) ([]*OCRImageResult, error) {
 	if config.BatchSize <= 1 {
 		// No batching requested, use regular parallel processing

@@ -17,8 +17,7 @@ type ResourceManager struct {
 	memoryMonitor    *MemoryMonitor
 	stats            ResourceStats
 	statsMutex       sync.RWMutex
-	ctx              context.Context
-	cancel           context.CancelFunc
+	stopChan         chan struct{}
 	monitoringActive bool
 }
 
@@ -60,15 +59,12 @@ func DefaultResourceConfig() ResourceConfig {
 
 // NewResourceManager creates a new resource manager with the given configuration.
 func NewResourceManager(config ResourceConfig) *ResourceManager {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	rm := &ResourceManager{
 		maxMemoryBytes:   config.MaxMemoryBytes,
 		maxGoroutines:    config.MaxGoroutines,
 		memoryThreshold:  config.MemoryThreshold,
 		memoryMonitor:    NewMemoryMonitor(config.MonitorInterval),
-		ctx:              ctx,
-		cancel:           cancel,
+		stopChan:         make(chan struct{}),
 		monitoringActive: false,
 	}
 
@@ -103,7 +99,7 @@ func (rm *ResourceManager) Start() {
 
 // Stop stops resource monitoring and releases resources.
 func (rm *ResourceManager) Stop() {
-	rm.cancel()
+	close(rm.stopChan)
 
 	rm.statsMutex.Lock()
 	defer rm.statsMutex.Unlock()
@@ -241,7 +237,7 @@ func (rm *ResourceManager) monitorResources() {
 			rm.stats.MonitoringDuration = time.Since(startTime)
 			rm.statsMutex.Unlock()
 
-		case <-rm.ctx.Done():
+		case <-rm.stopChan:
 			return
 		}
 	}
@@ -272,8 +268,7 @@ type MemoryMonitor struct {
 	samples      []uint64
 	maxSamples   int
 	mutex        sync.RWMutex
-	ctx          context.Context
-	cancel       context.CancelFunc
+	stopChan     chan struct{}
 	active       bool
 }
 
@@ -284,13 +279,11 @@ func NewMemoryMonitor(interval time.Duration) *MemoryMonitor {
 		interval = time.Second // Default to 1 second if not specified or invalid
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	return &MemoryMonitor{
 		interval:   interval,
 		maxSamples: 60, // Keep last 60 samples
 		samples:    make([]uint64, 0, 60),
-		ctx:        ctx,
-		cancel:     cancel,
+		stopChan:   make(chan struct{}),
 	}
 }
 
@@ -309,7 +302,7 @@ func (mm *MemoryMonitor) Start() {
 
 // Stop stops memory monitoring.
 func (mm *MemoryMonitor) Stop() {
-	mm.cancel()
+	close(mm.stopChan)
 
 	mm.mutex.Lock()
 	mm.active = false
@@ -355,7 +348,7 @@ func (mm *MemoryMonitor) monitor() {
 		select {
 		case <-ticker.C:
 			mm.updateUsage()
-		case <-mm.ctx.Done():
+		case <-mm.stopChan:
 			return
 		}
 	}
@@ -391,15 +384,12 @@ type AdaptiveWorkerPool struct {
 	maxWorkers      int
 	adjustInterval  time.Duration
 	mutex           sync.RWMutex
-	ctx             context.Context
-	cancel          context.CancelFunc
+	stopChan        chan struct{}
 	active          bool
 }
 
 // NewAdaptiveWorkerPool creates a new adaptive worker pool.
 func NewAdaptiveWorkerPool(rm *ResourceManager, minWorkers, maxWorkers int, adjustInterval time.Duration) *AdaptiveWorkerPool {
-	ctx, cancel := context.WithCancel(context.Background())
-
 	if minWorkers <= 0 {
 		minWorkers = 1
 	}
@@ -416,8 +406,7 @@ func NewAdaptiveWorkerPool(rm *ResourceManager, minWorkers, maxWorkers int, adju
 		minWorkers:      minWorkers,
 		maxWorkers:      maxWorkers,
 		adjustInterval:  adjustInterval,
-		ctx:             ctx,
-		cancel:          cancel,
+		stopChan:        make(chan struct{}),
 	}
 }
 
@@ -436,7 +425,7 @@ func (awp *AdaptiveWorkerPool) Start() {
 
 // Stop stops adaptive scaling.
 func (awp *AdaptiveWorkerPool) Stop() {
-	awp.cancel()
+	close(awp.stopChan)
 
 	awp.mutex.Lock()
 	awp.active = false
@@ -459,7 +448,7 @@ func (awp *AdaptiveWorkerPool) scaleWorkers() {
 		select {
 		case <-ticker.C:
 			awp.adjustWorkerCount()
-		case <-awp.ctx.Done():
+		case <-awp.stopChan:
 			return
 		}
 	}

@@ -157,31 +157,7 @@ func (s *Server) ocrImageHandler(w http.ResponseWriter, r *http.Request) {
 
 	// overlay image output
 	if format == "overlay" || r.FormValue("overlay") == "1" {
-		if !s.overlayEnabled {
-			http.Error(w, "overlay output disabled", http.StatusForbidden)
-			return
-		}
-		boxCol := parseHexColor(r.FormValue("box"))
-		if boxCol == nil {
-			boxCol = parseHexColor(s.overlayBoxColor)
-		}
-		if boxCol == nil {
-			boxCol = color.RGBA{255, 0, 0, 255}
-		}
-		polyCol := parseHexColor(r.FormValue("poly"))
-		if polyCol == nil {
-			polyCol = parseHexColor(s.overlayPolyColor)
-		}
-		if polyCol == nil {
-			polyCol = color.RGBA{0, 255, 0, 255}
-		}
-		ov := pipeline.RenderOverlay(img, res, boxCol, polyCol)
-		if ov == nil {
-			http.Error(w, "overlay failed", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "image/png")
-		_ = png.Encode(w, ov)
+		s.handleOverlayOutput(w, r, img, res)
 		return
 	}
 
@@ -193,6 +169,44 @@ func (s *Server) ocrImageHandler(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(obj); err != nil {
 		fmt.Fprintf(os.Stderr, "Error encoding OCR image response: %v\n", err)
 	}
+}
+
+// handleOverlayOutput handles overlay image output for OCR results.
+func (s *Server) handleOverlayOutput(
+	w http.ResponseWriter,
+	r *http.Request,
+	img image.Image,
+	res *pipeline.OCRImageResult,
+) {
+	if !s.overlayEnabled {
+		http.Error(w, "overlay output disabled", http.StatusForbidden)
+		return
+	}
+
+	boxCol := parseHexColor(r.FormValue("box"))
+	if boxCol == nil {
+		boxCol = parseHexColor(s.overlayBoxColor)
+	}
+	if boxCol == nil {
+		boxCol = color.RGBA{255, 0, 0, 255}
+	}
+
+	polyCol := parseHexColor(r.FormValue("poly"))
+	if polyCol == nil {
+		polyCol = parseHexColor(s.overlayPolyColor)
+	}
+	if polyCol == nil {
+		polyCol = color.RGBA{0, 255, 0, 255}
+	}
+
+	ov := pipeline.RenderOverlay(img, res, boxCol, polyCol)
+	if ov == nil {
+		http.Error(w, "overlay failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	_ = png.Encode(w, ov)
 }
 
 // ocrPdfHandler processes PDF OCR requests.
@@ -209,7 +223,8 @@ func (s *Server) ocrPdfHandler(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseMultipartForm(s.maxUploadMB * 1024 * 1024)
 	if err != nil {
 		// Distinguish body-too-large from generic parse error
-		if strings.Contains(strings.ToLower(err.Error()), "body too large") || strings.Contains(strings.ToLower(err.Error()), "request body too large") {
+		if strings.Contains(strings.ToLower(err.Error()), "body too large") ||
+			strings.Contains(strings.ToLower(err.Error()), "request body too large") {
 			s.writeErrorResponse(w, "File too large", http.StatusRequestEntityTooLarge)
 		} else {
 			s.writeErrorResponse(w, "Failed to parse form data", http.StatusBadRequest)

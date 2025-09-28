@@ -104,7 +104,7 @@ func TestMain(m *testing.M) {
 			os.Exit(1)
 		}
 		// Build the CLI binary
-		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/ocr")
+		cmd := exec.CommandContext(context.Background(), "go", "build", "-o", binPath, "./cmd/ocr")
 		cmd.Dir = root
 		cmd.Env = os.Environ()
 		if out, buildErr := cmd.CombinedOutput(); buildErr != nil {

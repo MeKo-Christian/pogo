@@ -13,7 +13,6 @@ import (
 
 // theOutputShouldContainPageInformation verifies output contains page information.
 func (testCtx *TestContext) theOutputShouldContainPageInformation() error {
-	// Check for page-related information in output
 	pageIndicators := []string{"page", "Page", "PAGE"}
 	for _, indicator := range pageIndicators {
 		if strings.Contains(testCtx.LastOutput, indicator) {
@@ -21,6 +20,57 @@ func (testCtx *TestContext) theOutputShouldContainPageInformation() error {
 		}
 	}
 	return fmt.Errorf("output does not contain page information: %s", testCtx.LastOutput)
+}
+
+// theOutputShouldShowPagesTotal verifies total page count in output.
+func (testCtx *TestContext) theOutputShouldShowPagesTotal(totalPages int) error {
+	// Check for page count indicators in the output
+	output := strings.ToLower(testCtx.LastOutput)
+
+	// Look for patterns like "3 pages", "total: 3", "pages: 3", etc.
+	pagePatterns := []string{
+		fmt.Sprintf("%d pages", totalPages),
+		fmt.Sprintf("%d page", totalPages),
+		fmt.Sprintf("total.*%d", totalPages),
+		fmt.Sprintf("pages.*%d", totalPages),
+	}
+
+	for _, pattern := range pagePatterns {
+		if strings.Contains(output, pattern) {
+			return nil
+		}
+	}
+
+	// For JSON output, check the pages array length
+	if strings.Contains(testCtx.LastCommand, "--format json") {
+		return testCtx.checkJSONPagesCount(totalPages)
+	}
+
+	return fmt.Errorf("output does not show %d pages total: %s", totalPages, testCtx.LastOutput)
+}
+
+// checkJSONPagesCount checks if JSON output contains the expected number of pages.
+func (testCtx *TestContext) checkJSONPagesCount(expectedPages int) error {
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(testCtx.LastOutput), &data); err != nil {
+		return fmt.Errorf("failed to parse JSON output: %w", err)
+	}
+
+	pages, exists := data["pages"]
+	if !exists {
+		return errors.New("JSON output does not contain 'pages' field")
+	}
+
+	pagesArray, ok := pages.([]interface{})
+	if !ok {
+		return errors.New("'pages' field is not an array")
+	}
+
+	if len(pagesArray) == expectedPages {
+		return nil
+	}
+
+	return fmt.Errorf("expected %d pages in JSON, but found %d", expectedPages, len(pagesArray))
 }
 
 // theJSONShouldContainPagesArray verifies JSON contains pages array.
@@ -291,45 +341,6 @@ func (testCtx *TestContext) theOutputShouldContainGermanTextExtraction() error {
 		return errors.New("no text output found for German language processing")
 	}
 	return nil
-}
-
-// theOutputShouldShowPagesTotal verifies total page count in output.
-func (testCtx *TestContext) theOutputShouldShowPagesTotal(totalPages int) error {
-	// Check for page count indicators in the output
-	output := strings.ToLower(testCtx.LastOutput)
-
-	// Look for patterns like "3 pages", "total: 3", "pages: 3", etc.
-	pagePatterns := []string{
-		fmt.Sprintf("%d pages", totalPages),
-		fmt.Sprintf("%d page", totalPages),
-		fmt.Sprintf("total.*%d", totalPages),
-		fmt.Sprintf("pages.*%d", totalPages),
-	}
-
-	for _, pattern := range pagePatterns {
-		if strings.Contains(output, pattern) {
-			return nil
-		}
-	}
-
-	// For JSON output, check the pages array length
-	if strings.Contains(testCtx.LastCommand, "--format json") {
-		var data map[string]interface{}
-		if err := json.Unmarshal([]byte(testCtx.LastOutput), &data); err != nil {
-			return fmt.Errorf("failed to parse JSON output: %w", err)
-		}
-
-		if pages, exists := data["pages"]; exists {
-			if pagesArray, ok := pages.([]interface{}); ok {
-				if len(pagesArray) == totalPages {
-					return nil
-				}
-				return fmt.Errorf("expected %d pages in JSON, but found %d", totalPages, len(pagesArray))
-			}
-		}
-	}
-
-	return fmt.Errorf("output does not show %d pages total: %s", totalPages, testCtx.LastOutput)
 }
 
 // thePDFShouldHavePages verifies PDF page count.

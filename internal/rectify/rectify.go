@@ -502,7 +502,7 @@ func dumpMaskPNG(dir string, mask []float32, w, h int, thr float64) error {
 			}
 		}
 	}
-	f, err := os.Create(path)
+	f, err := os.Create(path) //nolint:gosec // G304: path is constructed from timestamp in debug directory
 	if err != nil {
 		return err
 	}
@@ -526,7 +526,7 @@ func dumpOverlayPNG(dir string, src image.Image, quad []utils.Point) error {
 		}
 	}
 	utils.DrawPolygon(canvas, quad, color.RGBA{255, 0, 0, 255}, 2)
-	f, err := os.Create(path)
+	f, err := os.Create(path) //nolint:gosec // G304: path is constructed from timestamp in debug directory
 	if err != nil {
 		return err
 	}
@@ -560,15 +560,15 @@ func dumpComparePNG(dir string, src image.Image, srcQuad []utils.Point, dst imag
 	}
 	canvas := image.NewRGBA(image.Rect(0, 0, outW, outH))
 	// draw source on left
-	for y := 0; y < sb.Dy(); y++ {
-		for x := 0; x < sb.Dx(); x++ {
+	for y := range sb.Dy() {
+		for x := range sb.Dx() {
 			canvas.Set(x, y, src.At(sb.Min.X+x, sb.Min.Y+y))
 		}
 	}
 	// draw destination on right
 	xoff := sb.Dx() + gap
-	for y := 0; y < db.Dy(); y++ {
-		for x := 0; x < db.Dx(); x++ {
+	for y := range db.Dy() {
+		for x := range db.Dx() {
 			canvas.Set(xoff+x, y, dst.At(db.Min.X+x, db.Min.Y+y))
 		}
 	}
@@ -576,7 +576,7 @@ func dumpComparePNG(dir string, src image.Image, srcQuad []utils.Point, dst imag
 	utils.DrawPolygon(canvas, srcQuad, color.RGBA{255, 0, 0, 255}, 2)
 	// overlay rectangle border on right
 	utils.DrawRect(canvas, image.Rect(xoff, 0, xoff+db.Dx(), db.Dy()), color.RGBA{0, 255, 0, 255}, 2)
-	f, err := os.Create(path)
+	f, err := os.Create(path) //nolint:gosec // G304: path is constructed from timestamp in debug directory
 	if err != nil {
 		return err
 	}
