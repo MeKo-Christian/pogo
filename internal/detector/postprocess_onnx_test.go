@@ -347,3 +347,122 @@ func TestDetector_DetectRegions_HighThresholds(t *testing.T) {
 	// With high thresholds, we expect fewer or no regions
 	assert.LessOrEqual(t, len(regions), 1) // Allow for at most 1 very strong region
 }
+
+func TestDetector_PostProcessDBWithNMS(t *testing.T) {
+	tests := []struct {
+		name         string
+		dbThresh     float32
+		boxMinConf   float32
+		iouThreshold float64
+		expectNMS    bool
+	}{
+		{
+			name:         "Standard thresholds with NMS",
+			dbThresh:     0.3,
+			boxMinConf:   0.5,
+			iouThreshold: 0.3,
+			expectNMS:    true,
+		},
+		{
+			name:         "High IOU threshold (less aggressive NMS)",
+			dbThresh:     0.3,
+			boxMinConf:   0.5,
+			iouThreshold: 0.8,
+			expectNMS:    true,
+		},
+		{
+			name:         "Low IOU threshold (aggressive NMS)",
+			dbThresh:     0.3,
+			boxMinConf:   0.5,
+			iouThreshold: 0.1,
+			expectNMS:    true,
+		},
+		{
+			name:         "High detection thresholds",
+			dbThresh:     0.8,
+			boxMinConf:   0.9,
+			iouThreshold: 0.3,
+			expectNMS:    false, // May not find overlapping regions to suppress
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			probMap := createMockProbabilityMap()
+
+			// Test PostProcessDBWithNMS directly
+			regionsWithNMS := PostProcessDBWithNMS(probMap, 32, 32,
+				tt.dbThresh, tt.boxMinConf, tt.iouThreshold)
+
+			// For comparison, get regions without NMS
+			regionsWithoutNMS := PostProcessDB(probMap, 32, 32,
+				tt.dbThresh, tt.boxMinConf)
+
+			// Basic validations - regions can be nil if no regions found
+			if regionsWithNMS != nil {
+				assert.LessOrEqual(t, len(regionsWithNMS), len(regionsWithoutNMS),
+					"NMS should not increase the number of regions")
+
+				// If we found regions, validate their properties
+				for _, region := range regionsWithNMS {
+					assert.GreaterOrEqual(t, region.Confidence, float64(tt.boxMinConf),
+						"All regions should meet minimum confidence threshold")
+					assert.NotEmpty(t, region.Polygon,
+						"All regions should have valid polygons")
+				}
+			}
+
+			// Log results for debugging
+			regionsWithNMSCount := 0
+			regionsWithoutNMSCount := 0
+			if regionsWithNMS != nil {
+				regionsWithNMSCount = len(regionsWithNMS)
+			}
+			if regionsWithoutNMS != nil {
+				regionsWithoutNMSCount = len(regionsWithoutNMS)
+			}
+			t.Logf("PostProcessDBWithNMS: found %d regions (vs %d without NMS)",
+				regionsWithNMSCount, regionsWithoutNMSCount)
+		})
+	}
+}
+
+func TestDetector_PostProcessDBWithNMS_EmptyInput(t *testing.T) {
+	// Test with empty probability map
+	emptyProbMap := make([]float32, 32*32)
+
+	regions := PostProcessDBWithNMS(emptyProbMap, 32, 32, 0.3, 0.5, 0.3)
+
+	// Function may return nil for no regions
+	if regions != nil {
+		assert.Empty(t, regions, "Empty probability map should produce no regions")
+	}
+	t.Logf("PostProcessDBWithNMS with empty input: returned %v", regions == nil)
+}
+
+func TestDetector_PostProcessDBWithNMS_NoOverlap(t *testing.T) {
+	// Create probability map with separated regions (no overlap)
+	probMap := make([]float32, 64*64)
+
+	// Create two separate high-probability regions
+	// Region 1: top-left quadrant
+	for y := 10; y < 20; y++ {
+		for x := 10; x < 20; x++ {
+			probMap[y*64+x] = 0.8
+		}
+	}
+
+	// Region 2: bottom-right quadrant
+	for y := 40; y < 50; y++ {
+		for x := 40; x < 50; x++ {
+			probMap[y*64+x] = 0.8
+		}
+	}
+
+	regionsWithNMS := PostProcessDBWithNMS(probMap, 64, 64, 0.3, 0.5, 0.3)
+	regionsWithoutNMS := PostProcessDB(probMap, 64, 64, 0.3, 0.5)
+
+	// When regions don't overlap, NMS shouldn't remove any
+	assert.Len(t, regionsWithNMS, len(regionsWithoutNMS),
+		"Non-overlapping regions should not be affected by NMS")
+}

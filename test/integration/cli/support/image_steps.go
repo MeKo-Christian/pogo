@@ -37,9 +37,28 @@ func (testCtx *TestContext) theOutputShouldBeInTextFormat() error {
 
 // theCSVShouldContainCoordinateColumns verifies CSV has coordinate columns.
 func (testCtx *TestContext) theCSVShouldContainCoordinateColumns() error {
+	csvContent, err := testCtx.extractCSVContent()
+	if err != nil {
+		return err
+	}
+
+	records, err := testCtx.parseCSVRecords(csvContent)
+	if err != nil {
+		return err
+	}
+
+	if len(records) == 0 {
+		return errors.New("CSV has no records")
+	}
+
+	return testCtx.validateCSVHeader(records[0])
+}
+
+// extractCSVContent extracts CSV content from the output.
+func (testCtx *TestContext) extractCSVContent() (string, error) {
 	lines := strings.Split(strings.TrimSpace(testCtx.LastOutput), "\n")
 	if len(lines) < 1 {
-		return errors.New("output is empty")
+		return "", errors.New("output is empty")
 	}
 
 	// Find the CSV header line (first line with commas)
@@ -53,40 +72,44 @@ func (testCtx *TestContext) theCSVShouldContainCoordinateColumns() error {
 	}
 
 	if csvStart == -1 {
-		return errors.New("output does not contain comma separators")
+		return "", errors.New("output does not contain comma separators")
 	}
 
 	// Extract CSV content from header onwards
-	csvContent := strings.Join(lines[csvStart:], "\n")
+	return strings.Join(lines[csvStart:], "\n"), nil
+}
 
+// parseCSVRecords parses CSV content into records.
+func (testCtx *TestContext) parseCSVRecords(csvContent string) ([][]string, error) {
 	reader := csv.NewReader(strings.NewReader(csvContent))
 	records, err := reader.ReadAll()
 	if err != nil {
-		return fmt.Errorf("failed to parse CSV: %w", err)
+		return nil, fmt.Errorf("failed to parse CSV: %w", err)
 	}
+	return records, nil
+}
 
-	if len(records) == 0 {
-		return errors.New("CSV has no records")
-	}
-
-	// Check header row for coordinate columns
-	header := records[0]
+// validateCSVHeader checks that the CSV header contains all required columns.
+func (testCtx *TestContext) validateCSVHeader(header []string) error {
 	requiredColumns := []string{"x", "y", "w", "h", "det_conf", "text", "rec_conf"}
 
 	for _, required := range requiredColumns {
-		found := false
-		for _, col := range header {
-			if strings.EqualFold(col, required) {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !testCtx.columnExistsInHeader(header, required) {
 			return fmt.Errorf("CSV header missing required column '%s'. Found columns: %v", required, header)
 		}
 	}
 
 	return nil
+}
+
+// columnExistsInHeader checks if a column exists in the header (case-insensitive).
+func (testCtx *TestContext) columnExistsInHeader(header []string, column string) bool {
+	for _, col := range header {
+		if strings.EqualFold(col, column) {
+			return true
+		}
+	}
+	return false
 }
 
 // countImagesInCommand counts image files referenced in the command.

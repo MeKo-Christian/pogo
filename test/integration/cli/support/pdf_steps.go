@@ -120,53 +120,84 @@ func (testCtx *TestContext) eachPageShouldHaveImagesArray() error {
 		return err
 	}
 
-	// Extract JSON data using the same logic
-	jsonData, err := testCtx.extractJSONFromOutput()
+	data, err := testCtx.parsePDFJSONArray()
 	if err != nil {
 		return err
 	}
 
-	var data []interface{} // PDF JSON output is an array
-	if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
-		return fmt.Errorf("failed to parse JSON: %w", err)
+	for i, pdfItem := range data {
+		if err := testCtx.validatePDFItem(pdfItem, i); err != nil {
+			return err
+		}
 	}
 
-	for _, pdfItem := range data {
-		pdfMap, ok := pdfItem.(map[string]interface{})
+	return nil
+}
+
+// parsePDFJSONArray parses the JSON output as PDF array.
+func (testCtx *TestContext) parsePDFJSONArray() ([]interface{}, error) {
+	jsonData, err := testCtx.extractJSONFromOutput()
+	if err != nil {
+		return nil, err
+	}
+
+	var data []interface{} // PDF JSON output is an array
+	if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	return data, nil
+}
+
+// validatePDFItem validates a single PDF item in the array.
+func (testCtx *TestContext) validatePDFItem(pdfItem interface{}, index int) error {
+	pdfMap, ok := pdfItem.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("PDF item %d is not an object", index)
+	}
+
+	pages, exists := pdfMap["pages"]
+	if !exists {
+		return fmt.Errorf("PDF object %d does not contain pages field", index)
+	}
+
+	// Handle case where pages is null (no pages processed)
+	if pages == nil {
+		return nil // This is valid - no pages means no images array to check
+	}
+
+	pagesArray, ok := pages.([]interface{})
+	if !ok {
+		return fmt.Errorf("PDF %d pages field is not an array", index)
+	}
+
+	return testCtx.validatePagesArray(pagesArray, index)
+}
+
+// validatePagesArray validates that each page in the array has an images array.
+func (testCtx *TestContext) validatePagesArray(pagesArray []interface{}, pdfIndex int) error {
+	for i, page := range pagesArray {
+		pageMap, ok := page.(map[string]interface{})
 		if !ok {
-			return errors.New("PDF item is not an object")
+			return fmt.Errorf("PDF %d page %d is not an object", pdfIndex, i)
 		}
 
-		pages, exists := pdfMap["pages"]
-		if !exists {
-			return errors.New("PDF object does not contain pages field")
+		if err := testCtx.validatePageHasImagesArray(pageMap, pdfIndex, i); err != nil {
+			return err
 		}
+	}
 
-		// Handle case where pages is null (no pages processed)
-		if pages == nil {
-			// This is valid - no pages means no images array to check
-			continue
+	return nil
+}
+
+// validatePageHasImagesArray checks that a page object has an images array.
+func (testCtx *TestContext) validatePageHasImagesArray(pageMap map[string]interface{}, pdfIndex, pageIndex int) error {
+	if images, exists := pageMap["images"]; exists {
+		if _, ok := images.([]interface{}); !ok {
+			return fmt.Errorf("PDF %d page %d images field is not an array", pdfIndex, pageIndex)
 		}
-
-		pagesArray, ok := pages.([]interface{})
-		if !ok {
-			return errors.New("pages field is not an array")
-		}
-
-		for i, page := range pagesArray {
-			pageMap, ok := page.(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("page %d is not an object", i)
-			}
-
-			if images, exists := pageMap["images"]; exists {
-				if _, ok := images.([]interface{}); !ok {
-					return fmt.Errorf("page %d images field is not an array", i)
-				}
-			} else {
-				return fmt.Errorf("page %d does not have images array", i)
-			}
-		}
+	} else {
+		return fmt.Errorf("PDF %d page %d does not have images array", pdfIndex, pageIndex)
 	}
 
 	return nil

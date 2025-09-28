@@ -70,20 +70,11 @@ func dilateFloat32(probMap []float32, width, height, kernelSize int) []float32 {
 	for y := range height {
 		for x := range width {
 			maxVal := float32(0.0)
-
-			// Check all pixels in the kernel
-			for ky := -half; ky <= half; ky++ {
-				for kx := -half; kx <= half; kx++ {
-					nx, ny := x+kx, y+ky
-					if nx >= 0 && nx < width && ny >= 0 && ny < height {
-						idx := ny*width + nx
-						if probMap[idx] > maxVal {
-							maxVal = probMap[idx]
-						}
-					}
+			applyKernel(probMap, width, height, x, y, half, func(idx int) {
+				if probMap[idx] > maxVal {
+					maxVal = probMap[idx]
 				}
-			}
-
+			})
 			result[y*width+x] = maxVal
 		}
 	}
@@ -104,20 +95,11 @@ func erodeFloat32(probMap []float32, width, height, kernelSize int) []float32 {
 	for y := range height {
 		for x := range width {
 			minVal := float32(1.0)
-
-			// Check all pixels in the kernel
-			for ky := -half; ky <= half; ky++ {
-				for kx := -half; kx <= half; kx++ {
-					nx, ny := x+kx, y+ky
-					if nx >= 0 && nx < width && ny >= 0 && ny < height {
-						idx := ny*width + nx
-						if probMap[idx] < minVal {
-							minVal = probMap[idx]
-						}
-					}
+			applyKernel(probMap, width, height, x, y, half, func(idx int) {
+				if probMap[idx] < minVal {
+					minVal = probMap[idx]
 				}
-			}
-
+			})
 			result[y*width+x] = minVal
 		}
 	}
@@ -141,18 +123,10 @@ func smoothFloat32(probMap []float32, width, height, kernelSize int) []float32 {
 		for x := range width {
 			sum := float32(0.0)
 			count := float32(0.0)
-
-			// Check all pixels in the kernel
-			for ky := -half; ky <= half; ky++ {
-				for kx := -half; kx <= half; kx++ {
-					nx, ny := x+kx, y+ky
-					if nx >= 0 && nx < width && ny >= 0 && ny < height {
-						idx := ny*width + nx
-						sum += probMap[idx]
-						count += 1.0
-					}
-				}
-			}
+			applyKernel(probMap, width, height, x, y, half, func(idx int) {
+				sum += probMap[idx]
+				count += 1.0
+			})
 
 			if count > 0 {
 				result[y*width+x] = sum / count
@@ -163,4 +137,17 @@ func smoothFloat32(probMap []float32, width, height, kernelSize int) []float32 {
 	}
 
 	return result
+}
+
+// applyKernel applies a kernel operation to neighboring pixels within bounds.
+func applyKernel(_ []float32, width, height, x, y, half int, operation func(idx int)) {
+	for ky := -half; ky <= half; ky++ {
+		for kx := -half; kx <= half; kx++ {
+			nx, ny := x+kx, y+ky
+			if nx >= 0 && nx < width && ny >= 0 && ny < height {
+				idx := ny*width + nx
+				operation(idx)
+			}
+		}
+	}
 }

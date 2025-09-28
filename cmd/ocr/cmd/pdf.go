@@ -94,98 +94,59 @@ type pdfConfig struct {
 func configToPDFConfig(centralCfg *config.Config, cmd *cobra.Command) (*pdfConfig, error) {
 	cfg := &pdfConfig{}
 
-	// Core OCR settings - use centralized config with CLI flag overrides
-	cfg.detConf = float64(centralCfg.Pipeline.Detector.DbBoxThresh)
-	if cmd.Flags().Changed("confidence") {
-		cfg.detConf, _ = cmd.Flags().GetFloat64("confidence")
+	// Helper functions to reduce cyclomatic complexity
+	setFloat64WithFlag := func(configValue float64, flagName string, target *float64) {
+		*target = configValue
+		if cmd.Flags().Changed(flagName) {
+			*target, _ = cmd.Flags().GetFloat64(flagName)
+		}
 	}
 
-	cfg.modelsDir = centralCfg.ModelsDir
-
-	cfg.format = centralCfg.Output.Format
-	if cmd.Flags().Changed("format") {
-		cfg.format, _ = cmd.Flags().GetString("format")
+	setStringWithFlag := func(configValue, flagName string, target *string) {
+		*target = configValue
+		if cmd.Flags().Changed(flagName) {
+			*target, _ = cmd.Flags().GetString(flagName)
+		}
 	}
 
-	cfg.outputFile = centralCfg.Output.File
-	if cmd.Flags().Changed("output") {
-		cfg.outputFile, _ = cmd.Flags().GetString("output")
+	setIntWithFlag := func(configValue int, flagName string, target *int) {
+		*target = configValue
+		if cmd.Flags().Changed(flagName) {
+			*target, _ = cmd.Flags().GetInt(flagName)
+		}
 	}
 
-	cfg.lang = centralCfg.Pipeline.Recognizer.Language
-	if cmd.Flags().Changed("language") {
-		cfg.lang, _ = cmd.Flags().GetString("language")
+	setBoolWithFlag := func(configValue bool, flagName string, target *bool) {
+		*target = configValue
+		if cmd.Flags().Changed(flagName) {
+			*target, _ = cmd.Flags().GetBool(flagName)
+		}
 	}
 
-	cfg.detModel = centralCfg.Pipeline.Detector.ModelPath
-	if cmd.Flags().Changed("det-model") {
-		cfg.detModel, _ = cmd.Flags().GetString("det-model")
-	}
+	// Core OCR settings
+	setFloat64WithFlag(float64(centralCfg.Pipeline.Detector.DbBoxThresh), "confidence", &cfg.detConf)
+	setStringWithFlag(centralCfg.ModelsDir, "", &cfg.modelsDir)
+	setStringWithFlag(centralCfg.Output.Format, "format", &cfg.format)
+	setStringWithFlag(centralCfg.Output.File, "output", &cfg.outputFile)
+	setStringWithFlag(centralCfg.Pipeline.Recognizer.Language, "language", &cfg.lang)
+	setStringWithFlag(centralCfg.Pipeline.Detector.ModelPath, "det-model", &cfg.detModel)
+	setStringWithFlag(centralCfg.Pipeline.Recognizer.ModelPath, "rec-model", &cfg.recModel)
+	setStringWithFlag(centralCfg.Pipeline.Recognizer.DictPath, "dict", &cfg.dictCSV)
+	setStringWithFlag(centralCfg.Pipeline.Recognizer.DictLangs, "dict-langs", &cfg.dictLangs)
+	setIntWithFlag(centralCfg.Pipeline.Recognizer.ImageHeight, "rec-height", &cfg.recH)
 
-	cfg.recModel = centralCfg.Pipeline.Recognizer.ModelPath
-	if cmd.Flags().Changed("rec-model") {
-		cfg.recModel, _ = cmd.Flags().GetString("rec-model")
-	}
+	// Orientation settings
+	setBoolWithFlag(centralCfg.Features.OrientationEnabled, "detect-orientation", &cfg.detectOrientation)
+	setFloat64WithFlag(centralCfg.Features.OrientationThreshold, "orientation-threshold", &cfg.orientThresh)
+	setBoolWithFlag(centralCfg.Features.TextlineEnabled, "detect-textline", &cfg.detectTextline)
+	setFloat64WithFlag(centralCfg.Features.TextlineThreshold, "textline-threshold", &cfg.textlineThresh)
 
-	cfg.dictCSV = centralCfg.Pipeline.Recognizer.DictPath
-	if cmd.Flags().Changed("dict") {
-		cfg.dictCSV, _ = cmd.Flags().GetString("dict")
-	}
-
-	cfg.dictLangs = centralCfg.Pipeline.Recognizer.DictLangs
-	if cmd.Flags().Changed("dict-langs") {
-		cfg.dictLangs, _ = cmd.Flags().GetString("dict-langs")
-	}
-
-	cfg.recH = centralCfg.Pipeline.Recognizer.ImageHeight
-	if cmd.Flags().Changed("rec-height") {
-		cfg.recH, _ = cmd.Flags().GetInt("rec-height")
-	}
-
-	cfg.detectOrientation = centralCfg.Features.OrientationEnabled
-	if cmd.Flags().Changed("detect-orientation") {
-		cfg.detectOrientation, _ = cmd.Flags().GetBool("detect-orientation")
-	}
-
-	cfg.orientThresh = centralCfg.Features.OrientationThreshold
-	if cmd.Flags().Changed("orientation-threshold") {
-		cfg.orientThresh, _ = cmd.Flags().GetFloat64("orientation-threshold")
-	}
-
-	cfg.detectTextline = centralCfg.Features.TextlineEnabled
-	if cmd.Flags().Changed("detect-textline") {
-		cfg.detectTextline, _ = cmd.Flags().GetBool("detect-textline")
-	}
-
-	cfg.textlineThresh = centralCfg.Features.TextlineThreshold
-	if cmd.Flags().Changed("textline-threshold") {
-		cfg.textlineThresh, _ = cmd.Flags().GetFloat64("textline-threshold")
-	}
-
-	cfg.rectify = centralCfg.Features.RectificationEnabled
-	if cmd.Flags().Changed("rectify") {
-		cfg.rectify, _ = cmd.Flags().GetBool("rectify")
-	}
-
-	cfg.rectifyModel = centralCfg.Features.RectificationModelPath
-	if cmd.Flags().Changed("rectify-model") {
-		cfg.rectifyModel, _ = cmd.Flags().GetString("rectify-model")
-	}
-
-	cfg.rectifyMask = centralCfg.Features.RectificationThreshold
-	if cmd.Flags().Changed("rectify-mask-threshold") {
-		cfg.rectifyMask, _ = cmd.Flags().GetFloat64("rectify-mask-threshold")
-	}
-
-	cfg.rectifyHeight = centralCfg.Features.RectificationHeight
-	if cmd.Flags().Changed("rectify-height") {
-		cfg.rectifyHeight, _ = cmd.Flags().GetInt("rectify-height")
-	}
-
-	cfg.rectifyDebugDir = centralCfg.Features.RectificationDebugDir
-	if cmd.Flags().Changed("rectify-debug-dir") {
-		cfg.rectifyDebugDir, _ = cmd.Flags().GetString("rectify-debug-dir")
-	}
+	// Rectification settings
+	setBoolWithFlag(centralCfg.Features.RectificationEnabled, "rectify", &cfg.rectify)
+	setStringWithFlag(centralCfg.Features.RectificationModelPath, "rectify-model", &cfg.rectifyModel)
+	setFloat64WithFlag(centralCfg.Features.RectificationThreshold, "rectify-mask-threshold", &cfg.rectifyMask)
+	setIntWithFlag(centralCfg.Features.RectificationHeight, "rectify-height", &cfg.rectifyHeight)
+	setStringWithFlag(centralCfg.Features.RectificationDebugDir, "rectify-debug-dir", &cfg.rectifyDebugDir)
 
 	// PDF-specific flags (these don't have config file equivalents)
 	cfg.pages, _ = cmd.Flags().GetString("pages")

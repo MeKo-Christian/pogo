@@ -3,6 +3,7 @@ package benchmark
 import (
 	"context"
 	"fmt"
+	"math"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -295,12 +296,35 @@ func (b *GPUVSCPUBenchmark) benchmarkImage(img TestImage, iterations int) (GPUVS
 	// Calculate performance metrics
 	if result.GPUAvailable {
 		result.SpeedupFactor = float64(cpuResult.Duration.Nanoseconds()) / float64(gpuResult.Duration.Nanoseconds())
-		cpuDiff := cpuResult.MemoryAfter.Alloc - cpuResult.MemoryBefore.Alloc
-		gpuDiff := gpuResult.MemoryAfter.Alloc - gpuResult.MemoryBefore.Alloc
-		result.MemoryDiff = int64(gpuDiff-cpuDiff) / 1024 // Convert to KB
+		result.MemoryDiff = calculateMemoryDifference(cpuResult, gpuResult)
 	}
 
 	return result, nil
+}
+
+// calculateMemoryDifference calculates GPU vs CPU memory difference safely.
+func calculateMemoryDifference(cpuResult, gpuResult BenchmarkResult) int64 {
+	cpuDiff := cpuResult.MemoryAfter.Alloc - cpuResult.MemoryBefore.Alloc
+	gpuDiff := gpuResult.MemoryAfter.Alloc - gpuResult.MemoryBefore.Alloc
+
+	// Calculate memory difference safely to avoid uint64 overflow
+	var memDiffKB int64
+	if gpuDiff >= cpuDiff {
+		diff := gpuDiff - cpuDiff
+		memDiffKB = safeUint64ToInt64KB(diff)
+	} else {
+		diff := cpuDiff - gpuDiff
+		memDiffKB = -safeUint64ToInt64KB(diff)
+	}
+	return memDiffKB
+}
+
+// safeUint64ToInt64KB converts uint64 to int64 KB with overflow protection.
+func safeUint64ToInt64KB(value uint64) int64 {
+	if value > math.MaxInt64 {
+		return math.MaxInt64 / 1024
+	}
+	return int64(value) / 1024
 }
 
 // benchmarkCPU runs CPU-only OCR benchmark.
