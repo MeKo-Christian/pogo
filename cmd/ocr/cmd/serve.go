@@ -33,26 +33,105 @@ Examples:
   pogo serve --port 8080
   pogo serve --host 0.0.0.0 --port 3000`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		port, _ := cmd.Flags().GetInt("port")
-		host, _ := cmd.Flags().GetString("host")
-		corsOrigin, _ := cmd.Flags().GetString("cors-origin")
-		maxUploadSize, _ := cmd.Flags().GetInt("max-upload-size")
-		timeout, _ := cmd.Flags().GetInt("timeout")
-		shutdownTimeout, _ := cmd.Flags().GetInt("shutdown-timeout")
-		language, _ := cmd.Flags().GetString("language")
-		detModel, _ := cmd.Flags().GetString("det-model")
-		recModel, _ := cmd.Flags().GetString("rec-model")
-		minDetConf, _ := cmd.Flags().GetFloat64("min-det-conf")
-		overlayEnable, _ := cmd.Flags().GetBool("overlay-enable")
-		overlayBox, _ := cmd.Flags().GetString("overlay-box-color")
-		overlayPoly, _ := cmd.Flags().GetString("overlay-poly-color")
-		modelsDir, _ := cmd.InheritedFlags().GetString("models-dir")
-		orientEnable, _ := cmd.Flags().GetBool("detect-orientation")
-		orientThresh, _ := cmd.Flags().GetFloat64("orientation-threshold")
-		textlineEnable, _ := cmd.Flags().GetBool("detect-textline")
-		textlineThresh, _ := cmd.Flags().GetFloat64("textline-threshold")
-		dictCSV, _ := cmd.Flags().GetString("dict")
-		dictLangs, _ := cmd.Flags().GetString("dict-langs")
+		// Get configuration from centralized system (includes CLI flags, config file, env vars, and defaults)
+		cfg := GetConfig()
+
+		// Extract server configuration with CLI flag overrides
+		host := cfg.Server.Host
+		if cmd.Flags().Changed("host") {
+			host, _ = cmd.Flags().GetString("host")
+		}
+
+		port := cfg.Server.Port
+		if cmd.Flags().Changed("port") {
+			port, _ = cmd.Flags().GetInt("port")
+		}
+
+		corsOrigin := cfg.Server.CORSOrigin
+		if cmd.Flags().Changed("cors-origin") {
+			corsOrigin, _ = cmd.Flags().GetString("cors-origin")
+		}
+
+		maxUploadSize := cfg.Server.MaxUploadMB
+		if cmd.Flags().Changed("max-upload-size") {
+			maxUploadSize, _ = cmd.Flags().GetInt("max-upload-size")
+		}
+
+		timeout := cfg.Server.TimeoutSec
+		if cmd.Flags().Changed("timeout") {
+			timeout, _ = cmd.Flags().GetInt("timeout")
+		}
+
+		shutdownTimeout := cfg.Server.ShutdownTimeout
+		if cmd.Flags().Changed("shutdown-timeout") {
+			shutdownTimeout, _ = cmd.Flags().GetInt("shutdown-timeout")
+		}
+
+		overlayEnable := cfg.Server.OverlayEnabled
+		if cmd.Flags().Changed("overlay-enable") {
+			overlayEnable, _ = cmd.Flags().GetBool("overlay-enable")
+		}
+
+		overlayBox := cfg.Output.OverlayBoxColor
+		if cmd.Flags().Changed("overlay-box-color") {
+			overlayBox, _ = cmd.Flags().GetString("overlay-box-color")
+		}
+
+		overlayPoly := cfg.Output.OverlayPolyColor
+		if cmd.Flags().Changed("overlay-poly-color") {
+			overlayPoly, _ = cmd.Flags().GetString("overlay-poly-color")
+		}
+
+		// Extract pipeline configuration with CLI flag overrides
+		language := cfg.Pipeline.Recognizer.Language
+		if cmd.Flags().Changed("language") {
+			language, _ = cmd.Flags().GetString("language")
+		}
+
+		detModel := cfg.Pipeline.Detector.ModelPath
+		if cmd.Flags().Changed("det-model") {
+			detModel, _ = cmd.Flags().GetString("det-model")
+		}
+
+		recModel := cfg.Pipeline.Recognizer.ModelPath
+		if cmd.Flags().Changed("rec-model") {
+			recModel, _ = cmd.Flags().GetString("rec-model")
+		}
+
+		minDetConf := float64(cfg.Pipeline.Detector.DbBoxThresh)
+		if cmd.Flags().Changed("min-det-conf") {
+			minDetConf, _ = cmd.Flags().GetFloat64("min-det-conf")
+		}
+
+		orientEnable := cfg.Features.OrientationEnabled
+		if cmd.Flags().Changed("detect-orientation") {
+			orientEnable, _ = cmd.Flags().GetBool("detect-orientation")
+		}
+
+		orientThresh := cfg.Features.OrientationThreshold
+		if cmd.Flags().Changed("orientation-threshold") {
+			orientThresh, _ = cmd.Flags().GetFloat64("orientation-threshold")
+		}
+
+		textlineEnable := cfg.Features.TextlineEnabled
+		if cmd.Flags().Changed("detect-textline") {
+			textlineEnable, _ = cmd.Flags().GetBool("detect-textline")
+		}
+
+		textlineThresh := cfg.Features.TextlineThreshold
+		if cmd.Flags().Changed("textline-threshold") {
+			textlineThresh, _ = cmd.Flags().GetFloat64("textline-threshold")
+		}
+
+		dictCSV := cfg.Pipeline.Recognizer.DictPath
+		if cmd.Flags().Changed("dict") {
+			dictCSV, _ = cmd.Flags().GetString("dict")
+		}
+
+		dictLangs := cfg.Pipeline.Recognizer.DictLangs
+		if cmd.Flags().Changed("dict-langs") {
+			dictLangs, _ = cmd.Flags().GetString("dict-langs")
+		}
 
 		// Validate port number
 		if port < 1 || port > 65535 {
@@ -63,15 +142,20 @@ Examples:
 		defer cancel()
 
 		// Create server configuration
-		// Build pipeline config
+		// Build pipeline config using centralized configuration
 		pCfg := pipeline.DefaultConfig()
-		pCfg.ModelsDir = modelsDir
+		pCfg.ModelsDir = cfg.ModelsDir
 		pCfg.Recognizer.Language = language
+
 		// Allow polygon mode selection
-		polyMode, _ := cmd.Flags().GetString("det-polygon-mode")
+		polyMode := cfg.Pipeline.Detector.PolygonMode
+		if cmd.Flags().Changed("det-polygon-mode") {
+			polyMode, _ = cmd.Flags().GetString("det-polygon-mode")
+		}
 		if polyMode != "" {
 			pCfg.Detector.PolygonMode = polyMode
 		}
+
 		if detModel != "" {
 			pCfg.Detector.ModelPath = detModel
 		}
@@ -82,7 +166,7 @@ Examples:
 			pCfg.Recognizer.DictPaths = strings.Split(dictCSV, ",")
 		}
 		if dictLangs != "" {
-			pCfg.Recognizer.DictPaths = models.GetDictionaryPathsForLanguages(modelsDir, strings.Split(dictLangs, ","))
+			pCfg.Recognizer.DictPaths = models.GetDictionaryPathsForLanguages(cfg.ModelsDir, strings.Split(dictLangs, ","))
 		}
 		if minDetConf > 0 {
 			pCfg.Detector.DbBoxThresh = float32(minDetConf)

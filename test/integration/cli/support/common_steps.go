@@ -232,6 +232,15 @@ func (testCtx *TestContext) iRunCommand(command string) error {
 		return errors.New("empty command")
 	}
 
+	// Parse command to extract output file if specified
+	testCtx.LastOutputFile = ""
+	for i, part := range parts {
+		if part == "--output" && i+1 < len(parts) {
+			testCtx.LastOutputFile = parts[i+1]
+			break
+		}
+	}
+
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -294,16 +303,24 @@ func (testCtx *TestContext) theOutputShouldBeValidJSON() error {
 	// Extract JSON from output (skip any preceding text like "Processing N image(s)")
 	output := strings.TrimSpace(testCtx.LastOutput)
 
-	// Find the start of JSON (first '{' or '[')
-	jsonStart := -1
-	for i, r := range output {
-		if r == '{' || r == '[' {
-			jsonStart = i
+	// Find the start of JSON (first '{' or '[' that starts a line or follows whitespace)
+	lines := strings.Split(output, "\n")
+	var jsonStart int
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" && (line[0] == '{' || line[0] == '[') {
+			// Find the position in the original output
+			for j := jsonStart; j < len(output); j++ {
+				if output[j] == line[0] {
+					jsonStart = j
+					break
+				}
+			}
 			break
 		}
 	}
 
-	if jsonStart == -1 {
+	if jsonStart >= len(output) {
 		return fmt.Errorf("no JSON found in output: %s", testCtx.LastOutput)
 	}
 
@@ -1032,8 +1049,17 @@ func (testCtx *TestContext) theOutputShouldBeValidCSV() error {
 		return errors.New("CSV output is empty")
 	}
 
-	// Check if first line looks like a header
-	if !strings.Contains(lines[0], ",") {
+	// Skip processing header lines and find the first line that looks like CSV
+	var csvLine string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" && strings.Contains(line, ",") {
+			csvLine = line
+			break
+		}
+	}
+
+	if csvLine == "" {
 		return errors.New("CSV output does not contain comma separators")
 	}
 

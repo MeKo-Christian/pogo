@@ -404,6 +404,14 @@ func addImageFlags(cmd *cobra.Command) {
 	cmd.Flags().String("morph-op", "none", "morphological operation: none, dilate, erode, opening, closing, smooth")
 	cmd.Flags().Int("morph-kernel-size", 3, "morphological operation kernel size (e.g., 3 for 3x3)")
 	cmd.Flags().Int("morph-iterations", 1, "number of morphological operation iterations")
+
+	// Adaptive threshold flags
+	cmd.Flags().Bool("adaptive-thresholds", false, "enable adaptive threshold calculation")
+	cmd.Flags().String("adaptive-thresh-method", "histogram", "adaptive threshold method: otsu, histogram, dynamic")
+	cmd.Flags().Float32("adaptive-thresh-min-db", 0.1, "minimum allowed db_thresh value")
+	cmd.Flags().Float32("adaptive-thresh-max-db", 0.8, "maximum allowed db_thresh value")
+	cmd.Flags().Float32("adaptive-thresh-min-box", 0.3, "minimum allowed box_thresh value")
+	cmd.Flags().Float32("adaptive-thresh-max-box", 0.9, "maximum allowed box_thresh value")
 }
 
 // bindImageFlags binds all flags to viper configuration keys.
@@ -439,6 +447,12 @@ func bindImageFlags(cmd *cobra.Command) {
 		{"pipeline.detector.morphology.operation", "morph-op"},
 		{"pipeline.detector.morphology.kernel_size", "morph-kernel-size"},
 		{"pipeline.detector.morphology.iterations", "morph-iterations"},
+		{"pipeline.detector.adaptive_thresholds.enabled", "adaptive-thresholds"},
+		{"pipeline.detector.adaptive_thresholds.method", "adaptive-thresh-method"},
+		{"pipeline.detector.adaptive_thresholds.min_db_thresh", "adaptive-thresh-min-db"},
+		{"pipeline.detector.adaptive_thresholds.max_db_thresh", "adaptive-thresh-max-db"},
+		{"pipeline.detector.adaptive_thresholds.min_box_thresh", "adaptive-thresh-min-box"},
+		{"pipeline.detector.adaptive_thresholds.max_box_thresh", "adaptive-thresh-max-box"},
 	}
 
 	for _, binding := range flagBindings {

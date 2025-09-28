@@ -191,15 +191,15 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 - [x] Contour extraction and polygon tracing (Moore-Neighbor)
 - [x] Polygon simplification (Douglas–Peucker) with tolerance tuning
 - [x] Minimum-area rectangle (rotating calipers) for tighter boxes
-- [x] DB “unclip/expand” to grow polygons before rectification
-- [ ] Morphological ops on prob map (smooth, dilate/erode) to merge fragments
+- [x] DB "unclip/expand" to grow polygons before rectification
+- [x] Morphological ops on prob map (smooth, dilate/erode) to merge fragments
 - [ ] Multi-scale inference + result merging (IoU/IoB based)
 - [ ] Optional image pyramid for small text sensitivity
 - [x] NMS improvements: Soft-NMS
 - [x] NMS improvements: class-agnostic tuning
-- [ ] Adaptive thresholds (auto-tune db_thresh/box_thresh per image)
+- [x] Adaptive thresholds (auto-tune db_thresh/box_thresh per image)
 - [ ] Provider options (CUDA/DirectML) and graph optimization levels
-- [ ] Warmup runs and session pre-allocation (IO binding) to reduce latency
+- [x] Warmup runs and session pre-allocation (IO binding) to reduce latency
 - [ ] Memory pooling for tensors/buffers in detection path
 - [ ] Detailed metrics: per-stage timings, IoU histograms, region count stats
 - [ ] Robustness tests: fuzz prob maps, extreme aspect ratios, empty outputs
@@ -338,7 +338,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 - [x] Region-level worker pool and micro-batching across images
 - [ ] Profiles/presets (performance vs accuracy) for easy tuning
 - [ ] Reading-order heuristics and line/paragraph grouping for images
-- [ ] Structured logging and trace spans per stage (det/rec/post)
+- [-] Structured logging and trace spans per stage (det/rec/post)
 - [ ] Unified provider selection (CPU/GPU) and device options at pipeline level
 - [ ] Buffer reuse and zero-copy paths between stages where feasible
 - [x] Progress hooks/callbacks for long-running multi-image jobs
@@ -511,10 +511,10 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
   - [x] Verbosity and logging levels
 - [x] Add CLI help and documentation
 - [ ] Write CLI integration tests
-- [ ] Implement configuration file support:
-  - [ ] YAML/JSON configuration file loading
-  - [ ] Environment variable override
-  - [ ] Command-line flag priority
+- [x] Implement configuration file support:
+  - [x] YAML/JSON configuration file loading
+  - [x] Environment variable override
+  - [x] Command-line flag priority
 - [ ] Add enhanced CLI features:
   - [x] Progress indicators for long-running operations
   - [ ] --dry-run flag for testing configurations
@@ -573,7 +573,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 - [x] Create default configuration templates
 - [x] Add configuration management commands (init, show, validate, info)
 - [x] Integrate configuration system with image command
-- [ ] Integrate configuration system with pdf, serve, batch commands
+- [x] Integrate configuration system with pdf, serve, batch commands
 - [ ] Implement configuration documentation
 - [ ] Write configuration tests
 

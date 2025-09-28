@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/MeKo-Tech/pogo/internal/config"
 	"github.com/MeKo-Tech/pogo/internal/detector"
 	"github.com/MeKo-Tech/pogo/internal/models"
 	"github.com/MeKo-Tech/pogo/internal/pdf"
@@ -88,31 +89,106 @@ type pdfConfig struct {
 	rectifyDebugDir   string
 }
 
-// parsePDFFlags parses and validates all command line flags for PDF processing.
-func parsePDFFlags(cmd *cobra.Command) (*pdfConfig, error) {
+// configToPDFConfig maps centralized configuration to pdfConfig.
+// CLI flags will override config file values through Viper's precedence system.
+func configToPDFConfig(centralCfg *config.Config, cmd *cobra.Command) (*pdfConfig, error) {
 	cfg := &pdfConfig{}
 
-	// Parse flags
-	cfg.detConf, _ = cmd.Flags().GetFloat64("confidence")
-	cfg.modelsDir, _ = cmd.InheritedFlags().GetString("models-dir")
+	// Core OCR settings - use centralized config with CLI flag overrides
+	cfg.detConf = float64(centralCfg.Pipeline.Detector.DbBoxThresh)
+	if cmd.Flags().Changed("confidence") {
+		cfg.detConf, _ = cmd.Flags().GetFloat64("confidence")
+	}
+
+	cfg.modelsDir = centralCfg.ModelsDir
+
+	cfg.format = centralCfg.Output.Format
+	if cmd.Flags().Changed("format") {
+		cfg.format, _ = cmd.Flags().GetString("format")
+	}
+
+	cfg.outputFile = centralCfg.Output.File
+	if cmd.Flags().Changed("output") {
+		cfg.outputFile, _ = cmd.Flags().GetString("output")
+	}
+
+	cfg.lang = centralCfg.Pipeline.Recognizer.Language
+	if cmd.Flags().Changed("language") {
+		cfg.lang, _ = cmd.Flags().GetString("language")
+	}
+
+	cfg.detModel = centralCfg.Pipeline.Detector.ModelPath
+	if cmd.Flags().Changed("det-model") {
+		cfg.detModel, _ = cmd.Flags().GetString("det-model")
+	}
+
+	cfg.recModel = centralCfg.Pipeline.Recognizer.ModelPath
+	if cmd.Flags().Changed("rec-model") {
+		cfg.recModel, _ = cmd.Flags().GetString("rec-model")
+	}
+
+	cfg.dictCSV = centralCfg.Pipeline.Recognizer.DictPath
+	if cmd.Flags().Changed("dict") {
+		cfg.dictCSV, _ = cmd.Flags().GetString("dict")
+	}
+
+	cfg.dictLangs = centralCfg.Pipeline.Recognizer.DictLangs
+	if cmd.Flags().Changed("dict-langs") {
+		cfg.dictLangs, _ = cmd.Flags().GetString("dict-langs")
+	}
+
+	cfg.recH = centralCfg.Pipeline.Recognizer.ImageHeight
+	if cmd.Flags().Changed("rec-height") {
+		cfg.recH, _ = cmd.Flags().GetInt("rec-height")
+	}
+
+	cfg.detectOrientation = centralCfg.Features.OrientationEnabled
+	if cmd.Flags().Changed("detect-orientation") {
+		cfg.detectOrientation, _ = cmd.Flags().GetBool("detect-orientation")
+	}
+
+	cfg.orientThresh = centralCfg.Features.OrientationThreshold
+	if cmd.Flags().Changed("orientation-threshold") {
+		cfg.orientThresh, _ = cmd.Flags().GetFloat64("orientation-threshold")
+	}
+
+	cfg.detectTextline = centralCfg.Features.TextlineEnabled
+	if cmd.Flags().Changed("detect-textline") {
+		cfg.detectTextline, _ = cmd.Flags().GetBool("detect-textline")
+	}
+
+	cfg.textlineThresh = centralCfg.Features.TextlineThreshold
+	if cmd.Flags().Changed("textline-threshold") {
+		cfg.textlineThresh, _ = cmd.Flags().GetFloat64("textline-threshold")
+	}
+
+	cfg.rectify = centralCfg.Features.RectificationEnabled
+	if cmd.Flags().Changed("rectify") {
+		cfg.rectify, _ = cmd.Flags().GetBool("rectify")
+	}
+
+	cfg.rectifyModel = centralCfg.Features.RectificationModelPath
+	if cmd.Flags().Changed("rectify-model") {
+		cfg.rectifyModel, _ = cmd.Flags().GetString("rectify-model")
+	}
+
+	cfg.rectifyMask = centralCfg.Features.RectificationThreshold
+	if cmd.Flags().Changed("rectify-mask-threshold") {
+		cfg.rectifyMask, _ = cmd.Flags().GetFloat64("rectify-mask-threshold")
+	}
+
+	cfg.rectifyHeight = centralCfg.Features.RectificationHeight
+	if cmd.Flags().Changed("rectify-height") {
+		cfg.rectifyHeight, _ = cmd.Flags().GetInt("rectify-height")
+	}
+
+	cfg.rectifyDebugDir = centralCfg.Features.RectificationDebugDir
+	if cmd.Flags().Changed("rectify-debug-dir") {
+		cfg.rectifyDebugDir, _ = cmd.Flags().GetString("rectify-debug-dir")
+	}
+
+	// PDF-specific flags (these don't have config file equivalents)
 	cfg.pages, _ = cmd.Flags().GetString("pages")
-	cfg.format, _ = cmd.Flags().GetString("format")
-	cfg.outputFile, _ = cmd.Flags().GetString("output")
-	cfg.lang, _ = cmd.Flags().GetString("language")
-	cfg.detModel, _ = cmd.Flags().GetString("det-model")
-	cfg.recModel, _ = cmd.Flags().GetString("rec-model")
-	cfg.dictCSV, _ = cmd.Flags().GetString("dict")
-	cfg.dictLangs, _ = cmd.Flags().GetString("dict-langs")
-	cfg.recH, _ = cmd.Flags().GetInt("rec-height")
-	cfg.detectOrientation, _ = cmd.Flags().GetBool("detect-orientation")
-	cfg.orientThresh, _ = cmd.Flags().GetFloat64("orientation-threshold")
-	cfg.detectTextline, _ = cmd.Flags().GetBool("detect-textline")
-	cfg.textlineThresh, _ = cmd.Flags().GetFloat64("textline-threshold")
-	cfg.rectify, _ = cmd.Flags().GetBool("rectify")
-	cfg.rectifyModel, _ = cmd.Flags().GetString("rectify-model")
-	cfg.rectifyMask, _ = cmd.Flags().GetFloat64("rectify-mask-threshold")
-	cfg.rectifyHeight, _ = cmd.Flags().GetInt("rectify-height")
-	cfg.rectifyDebugDir, _ = cmd.Flags().GetString("rectify-debug-dir")
 
 	// Validate parameters
 	if err := validatePDFConfig(cfg); err != nil {
@@ -403,8 +479,11 @@ func processPDFs(cmd *cobra.Command, args []string) error {
 		return errors.New("no input files provided")
 	}
 
-	// Parse and validate flags
-	cfg, err := parsePDFFlags(cmd)
+	// Get configuration from centralized system (includes CLI flags, config file, env vars, and defaults)
+	centralCfg := GetConfig()
+
+	// Map to PDF configuration
+	cfg, err := configToPDFConfig(centralCfg, cmd)
 	if err != nil {
 		return err
 	}

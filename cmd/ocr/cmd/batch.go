@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MeKo-Tech/pogo/internal/batch"
+	"github.com/MeKo-Tech/pogo/internal/config"
 	"github.com/MeKo-Tech/pogo/internal/models"
 	"github.com/spf13/cobra"
 )
@@ -30,65 +31,161 @@ Examples:
 	RunE:         runBatchCommand,
 }
 
-// parseBatchFlags parses all command flags into a batch.Config struct.
-func parseBatchFlags(cmd *cobra.Command) *batch.Config {
-	config := &batch.Config{}
+// configToBatchConfig maps centralized configuration to batch.Config.
+// CLI flags will override config file values through Viper's precedence system.
+func configToBatchConfig(cfg *config.Config, cmd *cobra.Command) *batch.Config {
+	batchConfig := &batch.Config{}
 
-	// Core OCR settings
-	config.Confidence, _ = cmd.Flags().GetFloat64("confidence")
-	config.ModelsDir, _ = cmd.InheritedFlags().GetString("models-dir")
-	config.DetModel, _ = cmd.Flags().GetString("det-model")
-	config.RecModel, _ = cmd.Flags().GetString("rec-model")
-	config.Language, _ = cmd.Flags().GetString("language")
-	config.DictCSV, _ = cmd.Flags().GetString("dict")
-	config.DictLangs, _ = cmd.Flags().GetString("dict-langs")
-	config.RecHeight, _ = cmd.Flags().GetInt("rec-height")
-	config.MinRecConf, _ = cmd.Flags().GetFloat64("min-rec-conf")
-	config.OverlayDir, _ = cmd.Flags().GetString("overlay-dir")
-	config.Format, _ = cmd.Flags().GetString("format")
-	config.OutputFile, _ = cmd.Flags().GetString("output")
+	// Core OCR settings - use centralized config with CLI flag overrides
+	batchConfig.Confidence = float64(cfg.Pipeline.Detector.DbBoxThresh)
+	if cmd.Flags().Changed("confidence") {
+		batchConfig.Confidence, _ = cmd.Flags().GetFloat64("confidence")
+	}
+
+	batchConfig.ModelsDir = cfg.ModelsDir
+	batchConfig.DetModel = cfg.Pipeline.Detector.ModelPath
+	if cmd.Flags().Changed("det-model") {
+		batchConfig.DetModel, _ = cmd.Flags().GetString("det-model")
+	}
+
+	batchConfig.RecModel = cfg.Pipeline.Recognizer.ModelPath
+	if cmd.Flags().Changed("rec-model") {
+		batchConfig.RecModel, _ = cmd.Flags().GetString("rec-model")
+	}
+
+	batchConfig.Language = cfg.Pipeline.Recognizer.Language
+	if cmd.Flags().Changed("language") {
+		batchConfig.Language, _ = cmd.Flags().GetString("language")
+	}
+
+	batchConfig.DictCSV = cfg.Pipeline.Recognizer.DictPath
+	if cmd.Flags().Changed("dict") {
+		batchConfig.DictCSV, _ = cmd.Flags().GetString("dict")
+	}
+
+	batchConfig.DictLangs = cfg.Pipeline.Recognizer.DictLangs
+	if cmd.Flags().Changed("dict-langs") {
+		batchConfig.DictLangs, _ = cmd.Flags().GetString("dict-langs")
+	}
+
+	batchConfig.RecHeight = cfg.Pipeline.Recognizer.ImageHeight
+	if cmd.Flags().Changed("rec-height") {
+		batchConfig.RecHeight, _ = cmd.Flags().GetInt("rec-height")
+	}
+
+	batchConfig.MinRecConf = cfg.Pipeline.Recognizer.MinConfidence
+	if cmd.Flags().Changed("min-rec-conf") {
+		batchConfig.MinRecConf, _ = cmd.Flags().GetFloat64("min-rec-conf")
+	}
+
+	batchConfig.OverlayDir = cfg.Output.OverlayDir
+	if cmd.Flags().Changed("overlay-dir") {
+		batchConfig.OverlayDir, _ = cmd.Flags().GetString("overlay-dir")
+	}
+
+	batchConfig.Format = cfg.Output.Format
+	if cmd.Flags().Changed("format") {
+		batchConfig.Format, _ = cmd.Flags().GetString("format")
+	}
+
+	batchConfig.OutputFile = cfg.Output.File
+	if cmd.Flags().Changed("output") {
+		batchConfig.OutputFile, _ = cmd.Flags().GetString("output")
+	}
 
 	// Rectification settings
-	config.Rectify, _ = cmd.Flags().GetBool("rectify")
-	config.RectifyModel, _ = cmd.Flags().GetString("rectify-model")
-	config.RectifyMask, _ = cmd.Flags().GetFloat64("rectify-mask-threshold")
-	config.RectifyHeight, _ = cmd.Flags().GetInt("rectify-height")
-	config.RectifyDebugDir, _ = cmd.Flags().GetString("rectify-debug-dir")
+	batchConfig.Rectify = cfg.Features.RectificationEnabled
+	if cmd.Flags().Changed("rectify") {
+		batchConfig.Rectify, _ = cmd.Flags().GetBool("rectify")
+	}
+
+	batchConfig.RectifyModel = cfg.Features.RectificationModelPath
+	if cmd.Flags().Changed("rectify-model") {
+		batchConfig.RectifyModel, _ = cmd.Flags().GetString("rectify-model")
+	}
+
+	batchConfig.RectifyMask = cfg.Features.RectificationThreshold
+	if cmd.Flags().Changed("rectify-mask-threshold") {
+		batchConfig.RectifyMask, _ = cmd.Flags().GetFloat64("rectify-mask-threshold")
+	}
+
+	batchConfig.RectifyHeight = cfg.Features.RectificationHeight
+	if cmd.Flags().Changed("rectify-height") {
+		batchConfig.RectifyHeight, _ = cmd.Flags().GetInt("rectify-height")
+	}
+
+	batchConfig.RectifyDebugDir = cfg.Features.RectificationDebugDir
+	if cmd.Flags().Changed("rectify-debug-dir") {
+		batchConfig.RectifyDebugDir, _ = cmd.Flags().GetString("rectify-debug-dir")
+	}
 
 	// Orientation settings
-	config.DetectOrientation, _ = cmd.Flags().GetBool("detect-orientation")
-	config.OrientThresh, _ = cmd.Flags().GetFloat64("orientation-threshold")
-	config.DetectTextline, _ = cmd.Flags().GetBool("detect-textline")
-	config.TextlineThresh, _ = cmd.Flags().GetFloat64("textline-threshold")
+	batchConfig.DetectOrientation = cfg.Features.OrientationEnabled
+	if cmd.Flags().Changed("detect-orientation") {
+		batchConfig.DetectOrientation, _ = cmd.Flags().GetBool("detect-orientation")
+	}
+
+	batchConfig.OrientThresh = cfg.Features.OrientationThreshold
+	if cmd.Flags().Changed("orientation-threshold") {
+		batchConfig.OrientThresh, _ = cmd.Flags().GetFloat64("orientation-threshold")
+	}
+
+	batchConfig.DetectTextline = cfg.Features.TextlineEnabled
+	if cmd.Flags().Changed("detect-textline") {
+		batchConfig.DetectTextline, _ = cmd.Flags().GetBool("detect-textline")
+	}
+
+	batchConfig.TextlineThresh = cfg.Features.TextlineThreshold
+	if cmd.Flags().Changed("textline-threshold") {
+		batchConfig.TextlineThresh, _ = cmd.Flags().GetFloat64("textline-threshold")
+	}
 
 	// Parallel processing settings
-	config.Workers, _ = cmd.Flags().GetInt("workers")
-	config.BatchSize, _ = cmd.Flags().GetInt("batch-size")
-	config.MemoryLimitStr, _ = cmd.Flags().GetString("memory-limit")
-	config.MaxGoroutines, _ = cmd.Flags().GetInt("max-goroutines")
-	config.MemoryThreshold, _ = cmd.Flags().GetFloat64("memory-threshold")
+	batchConfig.Workers = cfg.Batch.Workers
+	if cmd.Flags().Changed("workers") {
+		batchConfig.Workers, _ = cmd.Flags().GetInt("workers")
+	}
 
-	// File discovery settings
-	config.Recursive, _ = cmd.Flags().GetBool("recursive")
-	config.IncludePatterns, _ = cmd.Flags().GetStringSlice("include")
-	config.ExcludePatterns, _ = cmd.Flags().GetStringSlice("exclude")
+	batchConfig.BatchSize = cfg.Pipeline.Parallel.BatchSize
+	if cmd.Flags().Changed("batch-size") {
+		batchConfig.BatchSize, _ = cmd.Flags().GetInt("batch-size")
+	}
 
-	// Progress settings
-	config.ShowProgress, _ = cmd.Flags().GetBool("progress")
-	config.Quiet, _ = cmd.Flags().GetBool("quiet")
-	config.ShowStats, _ = cmd.Flags().GetBool("stats")
-	config.ProgressInterval, _ = cmd.Flags().GetDuration("progress-interval")
+	// Memory limit string - this doesn't have a direct config equivalent, use flag
+	batchConfig.MemoryLimitStr, _ = cmd.Flags().GetString("memory-limit")
 
-	// Resource management settings
-	config.AdaptiveScaling, _ = cmd.Flags().GetBool("adaptive-scaling")
-	config.Backpressure, _ = cmd.Flags().GetBool("backpressure")
+	batchConfig.MaxGoroutines = cfg.Pipeline.Resource.MaxGoroutines
+	if cmd.Flags().Changed("max-goroutines") {
+		batchConfig.MaxGoroutines, _ = cmd.Flags().GetInt("max-goroutines")
+	}
 
-	return config
+	// Memory threshold - no direct config equivalent, use flag
+	batchConfig.MemoryThreshold, _ = cmd.Flags().GetFloat64("memory-threshold")
+
+	// File discovery settings - these are typically CLI-only
+	batchConfig.Recursive, _ = cmd.Flags().GetBool("recursive")
+	batchConfig.IncludePatterns, _ = cmd.Flags().GetStringSlice("include")
+	batchConfig.ExcludePatterns, _ = cmd.Flags().GetStringSlice("exclude")
+
+	// Progress settings - these are typically CLI-only
+	batchConfig.ShowProgress, _ = cmd.Flags().GetBool("progress")
+	batchConfig.Quiet, _ = cmd.Flags().GetBool("quiet")
+	batchConfig.ShowStats, _ = cmd.Flags().GetBool("stats")
+	batchConfig.ProgressInterval, _ = cmd.Flags().GetDuration("progress-interval")
+
+	// Resource management settings - these are typically CLI-only
+	batchConfig.AdaptiveScaling, _ = cmd.Flags().GetBool("adaptive-scaling")
+	batchConfig.Backpressure, _ = cmd.Flags().GetBool("backpressure")
+
+	return batchConfig
 }
 
 func runBatchCommand(cmd *cobra.Command, args []string) error {
-	// Parse configuration
-	config := parseBatchFlags(cmd)
+	// Get configuration from centralized system (includes CLI flags, config file, env vars, and defaults)
+	cfg := GetConfig()
+
+	// Map to batch configuration
+	config := configToBatchConfig(cfg, cmd)
 
 	if !config.Quiet {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Processing %d files...\n", len(args))

@@ -42,6 +42,9 @@ type Config struct {
 
 	// Morphological operations configuration
 	Morphology MorphConfig // Morphological operations on probability map
+
+	// Adaptive threshold configuration
+	AdaptiveThresholds AdaptiveThresholdConfig // Adaptive threshold calculation
 }
 
 // DefaultConfig returns a default detector configuration.
@@ -71,6 +74,9 @@ func DefaultConfig() Config {
 
 		// Morphological operations defaults
 		Morphology: DefaultMorphConfig(),
+
+		// Adaptive threshold defaults
+		AdaptiveThresholds: DefaultAdaptiveThresholdConfig(),
 	}
 }
 

@@ -89,6 +89,16 @@ func defaultDetectorConfig() DetectorConfig {
 			KernelSize: cfg.Morphology.KernelSize,
 			Iterations: cfg.Morphology.Iterations,
 		},
+
+		// Adaptive thresholds defaults
+		AdaptiveThresholds: AdaptiveThresholdsConfig{
+			Enabled:      cfg.AdaptiveThresholds.Enabled,
+			Method:       "histogram",
+			MinDbThresh:  cfg.AdaptiveThresholds.MinDbThresh,
+			MaxDbThresh:  cfg.AdaptiveThresholds.MaxDbThresh,
+			MinBoxThresh: cfg.AdaptiveThresholds.MinBoxThresh,
+			MaxBoxThresh: cfg.AdaptiveThresholds.MaxBoxThresh,
+		},
 	}
 }
 
@@ -327,6 +337,9 @@ func (c *Config) toDetectorConfig() detector.Config {
 	// Morphological operations
 	cfg.Morphology = parseMorphologyConfig(c.Pipeline.Detector.Morphology)
 
+	// Adaptive thresholds
+	cfg.AdaptiveThresholds = parseAdaptiveThresholdsConfig(c.Pipeline.Detector.AdaptiveThresholds)
+
 	return cfg
 }
 
@@ -427,4 +440,28 @@ func parseMorphologyConfig(config MorphologyConfig) detector.MorphConfig {
 	}
 
 	return morphConfig
+}
+
+// parseAdaptiveThresholdsConfig converts AdaptiveThresholdsConfig to detector.AdaptiveThresholdConfig.
+func parseAdaptiveThresholdsConfig(config AdaptiveThresholdsConfig) detector.AdaptiveThresholdConfig {
+	adaptiveConfig := detector.DefaultAdaptiveThresholdConfig()
+	adaptiveConfig.Enabled = config.Enabled
+	adaptiveConfig.MinDbThresh = config.MinDbThresh
+	adaptiveConfig.MaxDbThresh = config.MaxDbThresh
+	adaptiveConfig.MinBoxThresh = config.MinBoxThresh
+	adaptiveConfig.MaxBoxThresh = config.MaxBoxThresh
+
+	// Parse method string to AdaptiveThresholdMethod
+	switch strings.ToLower(config.Method) {
+	case "otsu":
+		adaptiveConfig.Method = detector.AdaptiveMethodOtsu
+	case "histogram":
+		adaptiveConfig.Method = detector.AdaptiveMethodHistogram
+	case "dynamic":
+		adaptiveConfig.Method = detector.AdaptiveMethodDynamic
+	default:
+		adaptiveConfig.Method = detector.AdaptiveMethodHistogram
+	}
+
+	return adaptiveConfig
 }

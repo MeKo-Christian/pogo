@@ -67,7 +67,7 @@ func AdaptiveNonMaxSuppression(regions []DetectedRegion, baseThreshold, scaleFac
 	suppressed := make([]bool, len(regions))
 	var kept []DetectedRegion
 
-	for a := range len(regions) {
+	for a := range regions {
 		if suppressed[a] {
 			continue
 		}
@@ -102,7 +102,7 @@ func SizeAwareNonMaxSuppression(regions []DetectedRegion, baseThreshold, sizeSca
 	suppressed := make([]bool, len(regions))
 	var kept []DetectedRegion
 
-	for a := range len(regions) {
+	for a := range regions {
 		if suppressed[a] {
 			continue
 		}

@@ -37,11 +37,29 @@ func (testCtx *TestContext) theOutputShouldBeInTextFormat() error {
 
 // theCSVShouldContainCoordinateColumns verifies CSV has coordinate columns.
 func (testCtx *TestContext) theCSVShouldContainCoordinateColumns() error {
-	if err := testCtx.theOutputShouldBeValidCSV(); err != nil {
-		return err
+	lines := strings.Split(strings.TrimSpace(testCtx.LastOutput), "\n")
+	if len(lines) < 1 {
+		return errors.New("output is empty")
 	}
 
-	reader := csv.NewReader(strings.NewReader(testCtx.LastOutput))
+	// Find the CSV header line (first line with commas)
+	var csvStart = -1
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" && strings.Contains(line, ",") {
+			csvStart = i
+			break
+		}
+	}
+
+	if csvStart == -1 {
+		return errors.New("output does not contain comma separators")
+	}
+
+	// Extract CSV content from header onwards
+	csvContent := strings.Join(lines[csvStart:], "\n")
+
+	reader := csv.NewReader(strings.NewReader(csvContent))
 	records, err := reader.ReadAll()
 	if err != nil {
 		return fmt.Errorf("failed to parse CSV: %w", err)
@@ -53,7 +71,7 @@ func (testCtx *TestContext) theCSVShouldContainCoordinateColumns() error {
 
 	// Check header row for coordinate columns
 	header := records[0]
-	requiredColumns := []string{"X1", "Y1", "X2", "Y2", "Width", "Height"}
+	requiredColumns := []string{"x", "y", "w", "h", "det_conf", "text", "rec_conf"}
 
 	for _, required := range requiredColumns {
 		found := false

@@ -68,6 +68,9 @@ type DetectorConfig struct {
 
 	// Morphological operations
 	Morphology MorphologyConfig `mapstructure:"morphology" yaml:"morphology" json:"morphology"`
+
+	// Adaptive thresholds
+	AdaptiveThresholds AdaptiveThresholdsConfig `mapstructure:"adaptive_thresholds" yaml:"adaptive_thresholds" json:"adaptive_thresholds"`
 }
 
 // RecognizerConfig contains text recognition settings.
@@ -154,4 +157,14 @@ type MorphologyConfig struct {
 	Operation  string `mapstructure:"operation" yaml:"operation" json:"operation"`
 	KernelSize int    `mapstructure:"kernel_size" yaml:"kernel_size" json:"kernel_size"`
 	Iterations int    `mapstructure:"iterations" yaml:"iterations" json:"iterations"`
+}
+
+// AdaptiveThresholdsConfig contains adaptive threshold calculation settings.
+type AdaptiveThresholdsConfig struct {
+	Enabled      bool    `mapstructure:"enabled" yaml:"enabled" json:"enabled"`
+	Method       string  `mapstructure:"method" yaml:"method" json:"method"`
+	MinDbThresh  float32 `mapstructure:"min_db_thresh" yaml:"min_db_thresh" json:"min_db_thresh"`
+	MaxDbThresh  float32 `mapstructure:"max_db_thresh" yaml:"max_db_thresh" json:"max_db_thresh"`
+	MinBoxThresh float32 `mapstructure:"min_box_thresh" yaml:"min_box_thresh" json:"min_box_thresh"`
+	MaxBoxThresh float32 `mapstructure:"max_box_thresh" yaml:"max_box_thresh" json:"max_box_thresh"`
 }

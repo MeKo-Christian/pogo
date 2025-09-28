@@ -81,7 +81,7 @@ Feature: Image OCR Processing
   Scenario: Process non-existent image
     When I run "pogo image non_existent.png"
     Then the command should fail
-    And the error should mention file not found
+    And the error should mention "no such file"
 
   Scenario: Display help for image command
     When I run "pogo image --help"
