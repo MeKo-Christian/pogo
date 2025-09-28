@@ -565,12 +565,15 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 8.4 Configuration Management
 
-- [ ] Implement configuration file support:
-  - [ ] YAML/JSON configuration files
-  - [ ] Environment variable override
-  - [ ] Command-line flag priority
-- [ ] Add configuration validation
-- [ ] Create default configuration templates
+- [x] Implement configuration file support:
+  - [x] YAML/JSON configuration files
+  - [x] Environment variable override
+  - [x] Command-line flag priority
+- [x] Add configuration validation
+- [x] Create default configuration templates
+- [x] Add configuration management commands (init, show, validate, info)
+- [x] Integrate configuration system with image command
+- [ ] Integrate configuration system with pdf, serve, batch commands
 - [ ] Implement configuration documentation
 - [ ] Write configuration tests
 

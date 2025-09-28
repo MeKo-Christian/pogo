@@ -233,12 +233,12 @@ func (testCtx *TestContext) theOutputShouldShowPagesMaximum(maxPages int) error 
 
 // theJSONShouldContainConfidenceScores verifies JSON contains confidence scores.
 func (testCtx *TestContext) theJSONShouldContainConfidenceScores() error {
-	return testCtx.theJSONShouldContain("confidence")
+	return testCtx.theJSONShouldContain("ocr.avg_det_confidence")
 }
 
 // theJSONShouldContainRegionsArray verifies JSON contains regions array.
 func (testCtx *TestContext) theJSONShouldContainRegionsArray() error {
-	return testCtx.theJSONShouldContain("regions")
+	return testCtx.theJSONShouldContain("ocr.regions")
 }
 
 // RegisterImageSteps registers all image processing step definitions.
