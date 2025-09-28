@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"os"
 	"strconv"
 	"strings"
@@ -63,235 +64,371 @@ func init() {
 		"directory to write rectification debug images (mask, overlay, compare)")
 }
 
+// pdfConfig holds all the configuration for PDF processing.
+type pdfConfig struct {
+	detConf           float64
+	modelsDir         string
+	pages             string
+	format            string
+	outputFile        string
+	lang              string
+	detModel          string
+	recModel          string
+	dictCSV           string
+	dictLangs         string
+	recH              int
+	detectOrientation bool
+	orientThresh      float64
+	detectTextline    bool
+	textlineThresh    float64
+	rectify           bool
+	rectifyModel      string
+	rectifyMask       float64
+	rectifyHeight     int
+	rectifyDebugDir   string
+}
+
+// parsePDFFlags parses and validates all command line flags for PDF processing.
+func parsePDFFlags(cmd *cobra.Command) (*pdfConfig, error) {
+	cfg := &pdfConfig{}
+
+	// Parse flags
+	cfg.detConf, _ = cmd.Flags().GetFloat64("confidence")
+	cfg.modelsDir, _ = cmd.InheritedFlags().GetString("models-dir")
+	cfg.pages, _ = cmd.Flags().GetString("pages")
+	cfg.format, _ = cmd.Flags().GetString("format")
+	cfg.outputFile, _ = cmd.Flags().GetString("output")
+	cfg.lang, _ = cmd.Flags().GetString("language")
+	cfg.detModel, _ = cmd.Flags().GetString("det-model")
+	cfg.recModel, _ = cmd.Flags().GetString("rec-model")
+	cfg.dictCSV, _ = cmd.Flags().GetString("dict")
+	cfg.dictLangs, _ = cmd.Flags().GetString("dict-langs")
+	cfg.recH, _ = cmd.Flags().GetInt("rec-height")
+	cfg.detectOrientation, _ = cmd.Flags().GetBool("detect-orientation")
+	cfg.orientThresh, _ = cmd.Flags().GetFloat64("orientation-threshold")
+	cfg.detectTextline, _ = cmd.Flags().GetBool("detect-textline")
+	cfg.textlineThresh, _ = cmd.Flags().GetFloat64("textline-threshold")
+	cfg.rectify, _ = cmd.Flags().GetBool("rectify")
+	cfg.rectifyModel, _ = cmd.Flags().GetString("rectify-model")
+	cfg.rectifyMask, _ = cmd.Flags().GetFloat64("rectify-mask-threshold")
+	cfg.rectifyHeight, _ = cmd.Flags().GetInt("rectify-height")
+	cfg.rectifyDebugDir, _ = cmd.Flags().GetString("rectify-debug-dir")
+
+	// Validate parameters
+	if err := validatePDFConfig(cfg); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+// validatePDFConfig validates the PDF configuration parameters.
+func validatePDFConfig(cfg *pdfConfig) error {
+	validators := []func(*pdfConfig) error{
+		validateConfidenceThreshold,
+		validateOutputFormat,
+		validatePageRangeConfig,
+		validateRecognitionHeight,
+		validateOrientationThreshold,
+		validateTextlineThreshold,
+		validateRectifyThresholds,
+	}
+
+	for _, validator := range validators {
+		if err := validator(cfg); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateConfidenceThreshold validates the confidence threshold.
+func validateConfidenceThreshold(cfg *pdfConfig) error {
+	if cfg.detConf < 0 || cfg.detConf > 1 {
+		return fmt.Errorf("invalid confidence threshold: %.2f (must be between 0.0 and 1.0)", cfg.detConf)
+	}
+	return nil
+}
+
+// validateOutputFormat validates the output format.
+func validateOutputFormat(cfg *pdfConfig) error {
+	validFormats := []string{"text", "json", "csv"}
+	for _, f := range validFormats {
+		if cfg.format == f {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid output format: %s (must be one of: %s)", cfg.format, strings.Join(validFormats, ", "))
+}
+
+// validatePageRangeConfig validates the page range configuration.
+func validatePageRangeConfig(cfg *pdfConfig) error {
+	if cfg.pages != "" {
+		if err := validatePageRange(cfg.pages); err != nil {
+			return fmt.Errorf("invalid page range: %w", err)
+		}
+	}
+	return nil
+}
+
+// validateRecognitionHeight validates the recognition height.
+func validateRecognitionHeight(cfg *pdfConfig) error {
+	if cfg.recH < 0 {
+		return fmt.Errorf("invalid recognition height: %d (must be positive)", cfg.recH)
+	}
+	return nil
+}
+
+// validateOrientationThreshold validates the orientation threshold.
+func validateOrientationThreshold(cfg *pdfConfig) error {
+	if cfg.orientThresh < 0 || cfg.orientThresh > 1 {
+		return fmt.Errorf("invalid orientation threshold: %.2f (must be between 0.0 and 1.0)", cfg.orientThresh)
+	}
+	return nil
+}
+
+// validateTextlineThreshold validates the textline threshold.
+func validateTextlineThreshold(cfg *pdfConfig) error {
+	if cfg.textlineThresh < 0 || cfg.textlineThresh > 1 {
+		return fmt.Errorf("invalid textline threshold: %.2f (must be between 0.0 and 1.0)", cfg.textlineThresh)
+	}
+	return nil
+}
+
+// validateRectifyThresholds validates rectify-related thresholds.
+func validateRectifyThresholds(cfg *pdfConfig) error {
+	if cfg.rectifyMask < 0 || cfg.rectifyMask > 1 {
+		return fmt.Errorf("invalid rectify mask threshold: %.2f (must be between 0.0 and 1.0)", cfg.rectifyMask)
+	}
+	if cfg.rectifyHeight <= 0 {
+		return fmt.Errorf("invalid rectify height: %d (must be positive)", cfg.rectifyHeight)
+	}
+	return nil
+}
+
+// buildPDFPipeline creates the OCR pipeline with the given configuration.
+func buildPDFPipeline(cfg *pdfConfig) (*pipeline.Pipeline, error) {
+	b := pipeline.NewBuilder().WithModelsDir(cfg.modelsDir).WithLanguage(cfg.lang)
+
+	configureDetection(b, cfg)
+	configureOrientation(b, cfg)
+	configureRectification(b, cfg)
+	configureModels(b, cfg)
+	configureThresholds(b, cfg)
+
+	return b.Build()
+}
+
+// configureDetection configures detection-related settings.
+func configureDetection(b *pipeline.Builder, cfg *pdfConfig) {
+	b.WithDetectorThresholds(pipeline.DefaultConfig().Detector.DbThresh, float32(cfg.detConf))
+	if cfg.detModel != "" {
+		b.WithDetectorModelPath(cfg.detModel)
+	}
+}
+
+// configureOrientation configures orientation detection settings.
+func configureOrientation(b *pipeline.Builder, cfg *pdfConfig) {
+	if cfg.detectOrientation {
+		b.WithOrientation(true)
+	}
+	if cfg.detectTextline {
+		b.WithTextLineOrientation(true)
+	}
+	if cfg.orientThresh > 0 {
+		b.WithOrientationThreshold(cfg.orientThresh)
+	}
+	if cfg.textlineThresh > 0 {
+		b.WithTextLineOrientationThreshold(cfg.textlineThresh)
+	}
+}
+
+// configureRectification configures rectification settings.
+func configureRectification(b *pipeline.Builder, cfg *pdfConfig) {
+	if cfg.rectify {
+		b.WithRectification(true)
+	}
+	if cfg.rectifyModel != "" {
+		b.WithRectifyModelPath(cfg.rectifyModel)
+	}
+	if cfg.rectifyMask > 0 {
+		b.WithRectifyMaskThreshold(cfg.rectifyMask)
+	}
+	if cfg.rectifyHeight > 0 {
+		b.WithRectifyOutputHeight(cfg.rectifyHeight)
+	}
+	if cfg.rectifyDebugDir != "" {
+		b.WithRectifyDebugDir(cfg.rectifyDebugDir)
+	}
+}
+
+// configureModels configures model paths and dictionaries.
+func configureModels(b *pipeline.Builder, cfg *pdfConfig) {
+	if cfg.recModel != "" {
+		b.WithRecognizerModelPath(cfg.recModel)
+	}
+	if cfg.dictCSV != "" {
+		b.WithDictionaryPaths(strings.Split(cfg.dictCSV, ","))
+	}
+	if cfg.dictLangs != "" {
+		paths := models.GetDictionaryPathsForLanguages(cfg.modelsDir, strings.Split(cfg.dictLangs, ","))
+		if len(paths) > 0 {
+			b.WithDictionaryPaths(paths)
+		}
+	}
+}
+
+// configureThresholds configures image height and other thresholds.
+func configureThresholds(b *pipeline.Builder, cfg *pdfConfig) {
+	if cfg.recH > 0 {
+		b.WithImageHeight(cfg.recH)
+	}
+}
+
+// processPDFFile processes a single PDF file and returns the document result.
+func processPDFFile(file string, pages string, pl *pipeline.Pipeline) (*pdf.DocumentResult, error) {
+	pageImages, err := pdf.ExtractImages(file, pages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract images from %s: %w", file, err)
+	}
+
+	doc := &pdf.DocumentResult{Filename: file}
+
+	// Sort page numbers for consistent ordering
+	pageNums := make([]int, 0, len(pageImages))
+	for pageNum := range pageImages {
+		pageNums = append(pageNums, pageNum)
+	}
+	sortPages(pageNums)
+
+	for _, pageNum := range pageNums {
+		pageRes, err := processPDFPage(pageNum, pageImages[pageNum], pl)
+		if err != nil {
+			return nil, fmt.Errorf("failed to process page %d of %s: %w", pageNum, file, err)
+		}
+		doc.Pages = append(doc.Pages, *pageRes)
+	}
+
+	doc.TotalPages = len(doc.Pages)
+	return doc, nil
+}
+
+// sortPages performs a simple insertion sort on page numbers.
+func sortPages(keys []int) {
+	for i := 1; i < len(keys); i++ {
+		v := keys[i]
+		j := i - 1
+		for j >= 0 && keys[j] > v {
+			keys[j+1] = keys[j]
+			j--
+		}
+		keys[j+1] = v
+	}
+}
+
+// processPDFPage processes all images from a single PDF page.
+func processPDFPage(pageNum int, images []image.Image, pl *pipeline.Pipeline) (*pdf.PageResult, error) {
+	pageRes := pdf.PageResult{PageNumber: pageNum}
+
+	for i, img := range images {
+		if img == nil {
+			continue
+		}
+
+		// Run full pipeline
+		ocr, err := pl.ProcessImage(img)
+		if err != nil {
+			return nil, fmt.Errorf("OCR failed for page %d image %d: %w", pageNum, i, err)
+		}
+
+		// Convert to detection-only ImageResult for compatibility
+		ir := pdf.ImageResult{ImageIndex: i, Width: ocr.Width, Height: ocr.Height}
+
+		// Map regions
+		ir.Regions = make([]detector.DetectedRegion, 0, len(ocr.Regions))
+		var sum float64
+		// Sort for a more readable order before extracting text
+		pipeline.SortRegionsTopLeft(ocr)
+		for _, r := range ocr.Regions {
+			// Box in OCRRegionResult is ints X,Y,W,H
+			minX := float64(r.Box.X)
+			minY := float64(r.Box.Y)
+			maxX := float64(r.Box.X + r.Box.W)
+			maxY := float64(r.Box.Y + r.Box.H)
+			box := utils.NewBox(minX, minY, maxX, maxY)
+			poly := make([]utils.Point, len(r.Polygon))
+			for pi, pt := range r.Polygon {
+				poly[pi] = utils.Point{X: pt.X, Y: pt.Y}
+			}
+			ir.Regions = append(ir.Regions, detector.DetectedRegion{Polygon: poly, Box: box, Confidence: r.DetConfidence})
+			sum += r.DetConfidence
+			// Enriched OCR region
+			or := pdf.OCRRegion{
+				Polygon:       poly,
+				DetConfidence: r.DetConfidence,
+				Text:          r.Text,
+				RecConfidence: r.RecConfidence,
+				Language:      r.Language,
+			}
+			or.Box = struct{ X, Y, W, H int }{X: r.Box.X, Y: r.Box.Y, W: r.Box.W, H: r.Box.H}
+			ir.OCRRegions = append(ir.OCRRegions, or)
+		}
+		if len(ocr.Regions) > 0 {
+			ir.Confidence = sum / float64(len(ocr.Regions))
+		}
+
+		// Aggregate plain text per image
+		if txt, err := pipeline.ToPlainTextImage(ocr); err == nil {
+			ir.Text = txt
+		}
+
+		pageRes.Images = append(pageRes.Images, ir)
+
+		// Track page dims
+		if ocr.Width > pageRes.Width {
+			pageRes.Width = ocr.Width
+		}
+		if ocr.Height > pageRes.Height {
+			pageRes.Height = ocr.Height
+		}
+	}
+
+	return &pageRes, nil
+}
+
 // processPDFs handles the main PDF processing logic.
 func processPDFs(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return errors.New("no input files provided")
 	}
 
-	// Flags
-	detConf, _ := cmd.Flags().GetFloat64("confidence")
-	modelsDir, _ := cmd.InheritedFlags().GetString("models-dir")
-	pages, _ := cmd.Flags().GetString("pages")
-	format, _ := cmd.Flags().GetString("format")
-	outputFile, _ := cmd.Flags().GetString("output")
-	lang, _ := cmd.Flags().GetString("language")
-	detModel, _ := cmd.Flags().GetString("det-model")
-	recModel, _ := cmd.Flags().GetString("rec-model")
-	dictCSV, _ := cmd.Flags().GetString("dict")
-	dictLangs, _ := cmd.Flags().GetString("dict-langs")
-	recH, _ := cmd.Flags().GetInt("rec-height")
-	detectOrientation, _ := cmd.Flags().GetBool("detect-orientation")
-	orientThresh, _ := cmd.Flags().GetFloat64("orientation-threshold")
-	detectTextline, _ := cmd.Flags().GetBool("detect-textline")
-	textlineThresh, _ := cmd.Flags().GetFloat64("textline-threshold")
-	rectify, _ := cmd.Flags().GetBool("rectify")
-	rectifyModel, _ := cmd.Flags().GetString("rectify-model")
-	rectifyMask, _ := cmd.Flags().GetFloat64("rectify-mask-threshold")
-	rectifyHeight, _ := cmd.Flags().GetInt("rectify-height")
-	rectifyDebugDir, _ := cmd.Flags().GetString("rectify-debug-dir")
-
-	// Validate confidence threshold
-	if detConf < 0 || detConf > 1 {
-		return fmt.Errorf("invalid confidence threshold: %.2f (must be between 0.0 and 1.0)", detConf)
-	}
-
-	// Validate output format
-	validFormats := []string{"text", "json", "csv"}
-	isValidFormat := false
-	for _, f := range validFormats {
-		if format == f {
-			isValidFormat = true
-			break
-		}
-	}
-	if !isValidFormat {
-		return fmt.Errorf("invalid output format: %s (must be one of: %s)", format, strings.Join(validFormats, ", "))
-	}
-
-	// Validate page range
-	if pages != "" {
-		if err := validatePageRange(pages); err != nil {
-			return fmt.Errorf("invalid page range: %w", err)
-		}
-	}
-
-	// Validate recognition height
-	if recH < 0 {
-		return fmt.Errorf("invalid recognition height: %d (must be positive)", recH)
-	}
-
-	// Validate orientation threshold
-	if orientThresh < 0 || orientThresh > 1 {
-		return fmt.Errorf("invalid orientation threshold: %.2f (must be between 0.0 and 1.0)", orientThresh)
-	}
-
-	// Validate textline threshold
-	if textlineThresh < 0 || textlineThresh > 1 {
-		return fmt.Errorf("invalid textline threshold: %.2f (must be between 0.0 and 1.0)", textlineThresh)
-	}
-
-	// Validate rectify mask threshold
-	if rectifyMask < 0 || rectifyMask > 1 {
-		return fmt.Errorf("invalid rectify mask threshold: %.2f (must be between 0.0 and 1.0)", rectifyMask)
-	}
-
-	// Validate rectify height
-	if rectifyHeight <= 0 {
-		return fmt.Errorf("invalid rectify height: %d (must be positive)", rectifyHeight)
+	// Parse and validate flags
+	cfg, err := parsePDFFlags(cmd)
+	if err != nil {
+		return err
 	}
 
 	fmt.Printf("Processing %d PDF(s): %v\n", len(args), args)
 
 	// Build pipeline
-	b := pipeline.NewBuilder().WithModelsDir(modelsDir).WithLanguage(lang)
-	if detectOrientation {
-		b = b.WithOrientation(true)
-	}
-	if detectTextline {
-		b = b.WithTextLineOrientation(true)
-	}
-	if rectify {
-		b = b.WithRectification(true)
-	}
-	if recH > 0 {
-		b = b.WithImageHeight(recH)
-	}
-	b = b.WithDetectorThresholds(pipeline.DefaultConfig().Detector.DbThresh, float32(detConf))
-	if detModel != "" {
-		b = b.WithDetectorModelPath(detModel)
-	}
-	if recModel != "" {
-		b = b.WithRecognizerModelPath(recModel)
-	}
-	if dictCSV != "" {
-		b = b.WithDictionaryPaths(strings.Split(dictCSV, ","))
-	}
-	if dictLangs != "" {
-		paths := models.GetDictionaryPathsForLanguages(modelsDir, strings.Split(dictLangs, ","))
-		if len(paths) > 0 {
-			b = b.WithDictionaryPaths(paths)
-		}
-	}
-	if orientThresh > 0 {
-		b = b.WithOrientationThreshold(orientThresh)
-	}
-	if textlineThresh > 0 {
-		b = b.WithTextLineOrientationThreshold(textlineThresh)
-	}
-	if rectifyModel != "" {
-		b = b.WithRectifyModelPath(rectifyModel)
-	}
-	if rectifyMask > 0 {
-		b = b.WithRectifyMaskThreshold(rectifyMask)
-	}
-	if rectifyHeight > 0 {
-		b = b.WithRectifyOutputHeight(rectifyHeight)
-	}
-	if rectifyDebugDir != "" {
-		b = b.WithRectifyDebugDir(rectifyDebugDir)
-	}
-
-	pl, err := b.Build()
+	pl, err := buildPDFPipeline(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to build OCR pipeline: %w", err)
 	}
 	defer func() { _ = pl.Close() }()
 
-	// Extract images per page
-	// For each file, produce a DocumentResult aggregating per-page results
+	// Process each PDF file
 	results := make([]*pdf.DocumentResult, 0, len(args))
 	for _, file := range args {
-		pageImages, err := pdf.ExtractImages(file, pages)
+		doc, err := processPDFFile(file, cfg.pages, pl)
 		if err != nil {
-			return fmt.Errorf("failed to extract images from %s: %w", file, err)
+			return err
 		}
-		doc := &pdf.DocumentResult{Filename: file}
-		// Maintain page order by iterating sorted keys (optional small pass)
-		// Simpler: iterate map; order not guaranteed but acceptable. For stability,
-		// we can gather keys and sort.
-		// Collect keys
-		keys := make([]int, 0, len(pageImages))
-		for k := range pageImages {
-			keys = append(keys, k)
-		}
-		// simple insertion sort
-		for i := 1; i < len(keys); i++ {
-			v := keys[i]
-			j := i - 1
-			for j >= 0 && keys[j] > v {
-				keys[j+1] = keys[j]
-				j--
-			}
-			keys[j+1] = v
-		}
-
-		for _, pageNum := range keys {
-			imgs := pageImages[pageNum]
-			pageRes := pdf.PageResult{PageNumber: pageNum}
-			for i, im := range imgs {
-				if im == nil {
-					continue
-				}
-				// Run full pipeline
-				ocr, err := pl.ProcessImage(im)
-				if err != nil {
-					return fmt.Errorf("OCR failed for %s page %d image %d: %w", file, pageNum, i, err)
-				}
-				// Convert to detection-only ImageResult for compatibility
-				ir := pdf.ImageResult{ImageIndex: i, Width: ocr.Width, Height: ocr.Height}
-				// Map regions
-				ir.Regions = make([]detector.DetectedRegion, 0, len(ocr.Regions))
-				var sum float64
-				// Sort for a more readable order before extracting text
-				pipeline.SortRegionsTopLeft(ocr)
-				for _, r := range ocr.Regions {
-					// Box in OCRRegionResult is ints X,Y,W,H
-					minX := float64(r.Box.X)
-					minY := float64(r.Box.Y)
-					maxX := float64(r.Box.X + r.Box.W)
-					maxY := float64(r.Box.Y + r.Box.H)
-					box := utils.NewBox(minX, minY, maxX, maxY)
-					poly := make([]utils.Point, len(r.Polygon))
-					for pi, pt := range r.Polygon {
-						poly[pi] = utils.Point{X: pt.X, Y: pt.Y}
-					}
-					ir.Regions = append(ir.Regions, detector.DetectedRegion{Polygon: poly, Box: box, Confidence: r.DetConfidence})
-					sum += r.DetConfidence
-					// Enriched OCR region
-					or := pdf.OCRRegion{
-						Polygon:       poly,
-						DetConfidence: r.DetConfidence,
-						Text:          r.Text,
-						RecConfidence: r.RecConfidence,
-						Language:      r.Language,
-					}
-					or.Box = struct{ X, Y, W, H int }{X: r.Box.X, Y: r.Box.Y, W: r.Box.W, H: r.Box.H}
-					ir.OCRRegions = append(ir.OCRRegions, or)
-				}
-				if len(ocr.Regions) > 0 {
-					ir.Confidence = sum / float64(len(ocr.Regions))
-				}
-				// Aggregate plain text per image
-				if txt, err := pipeline.ToPlainTextImage(ocr); err == nil {
-					ir.Text = txt
-				}
-				pageRes.Images = append(pageRes.Images, ir)
-				// Track page dims
-				if ocr.Width > pageRes.Width {
-					pageRes.Width = ocr.Width
-				}
-				if ocr.Height > pageRes.Height {
-					pageRes.Height = ocr.Height
-				}
-			}
-			doc.Pages = append(doc.Pages, pageRes)
-		}
-		doc.TotalPages = len(doc.Pages)
 		results = append(results, doc)
 	}
 
-	return outputResults(cmd, results, format, outputFile)
+	return outputResults(cmd, results, cfg.format, cfg.outputFile)
 }
 
 // outputResults formats and outputs the PDF OCR results.

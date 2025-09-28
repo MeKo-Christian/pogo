@@ -82,6 +82,12 @@ type preprocessedRegion struct {
 	height  int
 }
 
+type preprocessedBatchRegion struct {
+	img     image.Image
+	rotated bool
+	w, h    int
+}
+
 func (r *Recognizer) preprocessRegion(
 	img image.Image,
 	region detector.DetectedRegion,
@@ -208,30 +214,16 @@ func (r *Recognizer) decodeOutput(output *modelOutput, preprocessed *preprocesse
 	}, time.Since(d0).Nanoseconds(), nil
 }
 
-// RecognizeBatch processes multiple regions on the same source image.
-func (r *Recognizer) RecognizeBatch(img image.Image, regions []detector.DetectedRegion) ([]Result, error) {
-	if img == nil {
-		return nil, errors.New("input image is nil")
-	}
-	if len(regions) == 0 {
-		return nil, errors.New("no regions provided")
-	}
-
-	// Preprocess patches
+// preprocessBatchRegions handles cropping and resizing of regions for batch processing.
+func (r *Recognizer) preprocessBatchRegions(img image.Image, regions []detector.DetectedRegion) (
+	[]preprocessedBatchRegion, int, error,
+) {
 	targetH := r.config.ImageHeight
 	if targetH <= 0 {
 		targetH = 32
 	}
 
-	// Convert each to normalized tensor with potential varying widths; since ONNX Runtime
-	// expects same input width across batch, we first compute per-patch resized widths, then
-	// pad each to the maximum width in this batch (respecting PadWidthMultiple).
-	type prep struct {
-		img     image.Image
-		rotated bool
-		w, h    int
-	}
-	prepped := make([]prep, len(regions))
+	prepped := make([]preprocessedBatchRegion, len(regions))
 	maxW := 0
 	for i, reg := range regions {
 		var patch image.Image
@@ -243,23 +235,23 @@ func (r *Recognizer) RecognizeBatch(img image.Image, regions []detector.Detected
 			patch, rotated, err = CropRegionImage(img, reg, true)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("crop region %d: %w", i, err)
+			return nil, 0, fmt.Errorf("crop region %d: %w", i, err)
 		}
 		resized, outW, outH, err := ResizeForRecognition(patch, targetH, r.config.MaxWidth, r.config.PadWidthMultiple)
 		if err != nil {
-			return nil, fmt.Errorf("resize region %d: %w", i, err)
+			return nil, 0, fmt.Errorf("resize region %d: %w", i, err)
 		}
-		prepped[i] = prep{img: resized, rotated: rotated, w: outW, h: outH}
+		prepped[i] = preprocessedBatchRegion{img: resized, rotated: rotated, w: outW, h: outH}
 		if outW > maxW {
 			maxW = outW
 		}
 	}
+	return prepped, maxW, nil
+}
 
-	// Pad to max width where needed
-	batchTensors := make([][]float32, len(prepped))
-	bufs := make([][]float32, len(prepped))
+// padBatchRegions pads all regions to the maximum width for batch processing.
+func (r *Recognizer) padBatchRegions(prepped []preprocessedBatchRegion, maxW int) []preprocessedBatchRegion {
 	for i, p := range prepped {
-		canvas := p.img
 		if p.w < maxW {
 			padded := image.NewRGBA(image.Rect(0, 0, maxW, p.h))
 			src := toRGBA(p.img)
@@ -269,26 +261,44 @@ func (r *Recognizer) RecognizeBatch(img image.Image, regions []detector.Detected
 					padded.Set(x, y, src.At(sb.Min.X+x, sb.Min.Y+y))
 				}
 			}
-			canvas = padded
+			prepped[i].img = padded
+			prepped[i].w = maxW
 		}
-		ten, buf, err := NormalizeForRecognitionWithPool(canvas)
+	}
+	return prepped
+}
+
+// normalizeBatchRegions converts padded images to normalized tensors.
+func (r *Recognizer) normalizeBatchRegions(prepped []preprocessedBatchRegion) ([][]float32, [][]float32, error) {
+	batchTensors := make([][]float32, len(prepped))
+	bufs := make([][]float32, len(prepped))
+	for i, p := range prepped {
+		ten, buf, err := NormalizeForRecognitionWithPool(p.img)
 		if err != nil {
-			return nil, fmt.Errorf("normalize region %d: %w", i, err)
+			return nil, nil, fmt.Errorf("normalize region %d: %w", i, err)
 		}
 		batchTensors[i] = ten.Data
 		bufs[i] = buf
 	}
+	return batchTensors, bufs, nil
+}
 
-	// Build batch tensor [N, C, H, W]
+// buildBatchTensor creates a single batch tensor from individual region tensors.
+func (r *Recognizer) buildBatchTensor(batchTensors [][]float32, prepped []preprocessedBatchRegion) (
+	onnx.Tensor, error,
+) {
 	if len(batchTensors) == 0 {
-		return nil, errors.New("no tensors prepared")
+		return onnx.Tensor{}, errors.New("no tensors prepared")
 	}
-	tensor, err := onnx.NewBatchImageTensor(batchTensors, 3, prepped[0].h, maxW)
+	tensor, err := onnx.NewBatchImageTensor(batchTensors, 3, prepped[0].h, prepped[0].w)
 	if err != nil {
-		return nil, fmt.Errorf("build batch tensor: %w", err)
+		return onnx.Tensor{}, fmt.Errorf("build batch tensor: %w", err)
 	}
+	return tensor, nil
+}
 
-	// Run model
+// runBatchInference executes the model on the batch tensor.
+func (r *Recognizer) runBatchInference(tensor onnx.Tensor) (*modelOutput, error) {
 	r.mu.RLock()
 	session := r.session
 	r.mu.RUnlock()
@@ -311,25 +321,22 @@ func (r *Recognizer) RecognizeBatch(img image.Image, regions []detector.Detected
 			}
 		}
 	}()
-	// Return per-image buffers now that batch tensor has been created and used
-	for _, b := range bufs {
-		mempool.PutFloat32(b)
-	}
 
 	outTensor := outputs[0]
 	floatTensor, ok := outTensor.(*onnxrt.Tensor[float32])
 	if !ok {
 		return nil, fmt.Errorf("expected float32 tensor, got %T", outTensor)
 	}
-	data := floatTensor.GetData()
-	shape := outTensor.GetShape()
+	return &modelOutput{
+		outputs: outputs,
+		data:    floatTensor.GetData(),
+		shape:   outTensor.GetShape(),
+	}, nil
+}
 
-	classesGuess := r.charset.Size() + 1
-	classesFirst := determineClassesFirst(shape, classesGuess)
-	blankIndex := 0
-	decoded := DecodeCTCGreedy(data, shape, blankIndex, classesFirst)
-
-	out := make([]Result, len(regions))
+// buildBatchResults constructs Result structs from decoded sequences.
+func (r *Recognizer) buildBatchResults(decoded []DecodedSequence, prepped []preprocessedBatchRegion) []Result {
+	out := make([]Result, len(prepped))
 	for i := range out {
 		if i >= len(decoded) {
 			break
@@ -353,7 +360,58 @@ func (r *Recognizer) RecognizeBatch(img image.Image, regions []detector.Detected
 			Height:          prepped[i].h,
 		}
 	}
-	return out, nil
+	return out
+}
+
+// RecognizeBatch processes multiple regions on the same source image.
+func (r *Recognizer) RecognizeBatch(img image.Image, regions []detector.DetectedRegion) ([]Result, error) {
+	if img == nil {
+		return nil, errors.New("input image is nil")
+	}
+	if len(regions) == 0 {
+		return nil, errors.New("no regions provided")
+	}
+
+	// Preprocess regions
+	prepped, maxW, err := r.preprocessBatchRegions(img, regions)
+	if err != nil {
+		return nil, err
+	}
+
+	// Pad to max width
+	prepped = r.padBatchRegions(prepped, maxW)
+
+	// Normalize to tensors
+	batchTensors, bufs, err := r.normalizeBatchRegions(prepped)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build batch tensor
+	tensor, err := r.buildBatchTensor(batchTensors, prepped)
+	if err != nil {
+		return nil, err
+	}
+
+	// Run inference
+	output, err := r.runBatchInference(tensor)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return per-image buffers now that batch tensor has been created and used
+	for _, b := range bufs {
+		mempool.PutFloat32(b)
+	}
+
+	// Decode output
+	classesGuess := r.charset.Size() + 1
+	classesFirst := determineClassesFirst(output.shape, classesGuess)
+	blankIndex := 0
+	decoded := DecodeCTCGreedy(output.data, output.shape, blankIndex, classesFirst)
+
+	// Build results
+	return r.buildBatchResults(decoded, prepped), nil
 }
 
 // Helper to convert image.Image to *image.RGBA without external deps.

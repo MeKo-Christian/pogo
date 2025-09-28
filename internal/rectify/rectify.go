@@ -161,44 +161,95 @@ func (r *Rectifier) Apply(img image.Image) (image.Image, error) {
 	if img == nil {
 		return nil, errors.New("nil image")
 	}
-	// Conservative resize for model input; keep within ~1024^2.
+
+	// Prepare input image
 	resized, err := utils.ResizeImage(img, utils.DefaultImageConstraints())
 	if err != nil {
-		return img, nil // be permissive
+		return img, err
 	}
-	data, w, h, err := utils.NormalizeImage(resized)
-	if err != nil || w <= 0 || h <= 0 {
-		return img, nil
-	}
-	input, err := onnxrt.NewTensor(onnxrt.NewShape(1, 3, int64(h), int64(w)), data)
+
+	// Run model inference
+	outData, oh, ow, err := r.runModelInference(resized)
 	if err != nil {
+		return img, err
+	}
+
+	// Process mask and find rectangle
+	rect, valid := r.processMaskAndFindRectangle(outData, oh, ow)
+	if !valid {
 		return img, nil
+	}
+
+	// Transform and warp
+	return r.transformAndWarpImage(img, resized, rect)
+}
+
+// runModelInference runs the ONNX model and returns the output tensor data.
+func (r *Rectifier) runModelInference(resized image.Image) ([]float32, int, int, error) {
+	data, w, h, err := r.normalizeAndValidateImage(resized)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	input, err := r.createInputTensor(data, w, h)
+	if err != nil {
+		return nil, 0, 0, err
 	}
 	defer func() { _ = input.Destroy() }()
+
+	output, err := r.runInference(input)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	defer func() { _ = output.Destroy() }()
+
+	return r.extractOutputData(output)
+}
+
+// normalizeAndValidateImage normalizes the image and validates dimensions.
+func (r *Rectifier) normalizeAndValidateImage(resized image.Image) ([]float32, int, int, error) {
+	data, w, h, err := utils.NormalizeImage(resized)
+	if err != nil || w <= 0 || h <= 0 {
+		return nil, 0, 0, err
+	}
+	return data, w, h, nil
+}
+
+// createInputTensor creates the input tensor for the model.
+func (r *Rectifier) createInputTensor(data []float32, w, h int) (onnxrt.Value, error) {
+	return onnxrt.NewTensor(onnxrt.NewShape(1, 3, int64(h), int64(w)), data)
+}
+
+// runInference runs the model inference.
+func (r *Rectifier) runInference(input onnxrt.Value) (onnxrt.Value, error) {
 	outs := []onnxrt.Value{nil}
 	if err := r.session.Run([]onnxrt.Value{input}, outs); err != nil {
-		// On failure, return original image
-		return img, nil
+		return nil, err
 	}
-	defer func() {
-		for _, o := range outs {
-			if o != nil {
-				_ = o.Destroy()
-			}
-		}
-	}()
+	if len(outs) == 0 || outs[0] == nil {
+		return nil, errors.New("no output from model")
+	}
+	return outs[0], nil
+}
 
-	// Interpret output as [1,3,H,W] where channel 2 is a mask in [0,1].
-	t, ok := outs[0].(*onnxrt.Tensor[float32])
+// extractOutputData extracts and validates the output tensor data.
+func (r *Rectifier) extractOutputData(output onnxrt.Value) ([]float32, int, int, error) {
+	t, ok := output.(*onnxrt.Tensor[float32])
 	if !ok {
-		return img, nil
+		return nil, 0, 0, errors.New("invalid output tensor type")
 	}
+
 	shape := t.GetShape()
 	if len(shape) != 4 || shape[1] < 3 {
-		return img, nil
+		return nil, 0, 0, errors.New("unexpected output shape")
 	}
+
 	oh, ow := int(shape[2]), int(shape[3])
-	outData := t.GetData()
+	return t.GetData(), oh, ow, nil
+}
+
+// processMaskAndFindRectangle extracts mask points and finds the minimum area rectangle.
+func (r *Rectifier) processMaskAndFindRectangle(outData []float32, oh, ow int) ([]utils.Point, bool) {
 	// Collect mask-positive points in resized coordinates.
 	thr := r.cfg.MaskThreshold
 	pts := make([]utils.Point, 0, (oh*ow)/8)
@@ -211,19 +262,33 @@ func (r *Rectifier) Apply(img image.Image) (image.Image, error) {
 			}
 		}
 	}
+
 	coverage := float64(len(pts)) / float64(oh*ow)
 	if coverage < r.cfg.MinMaskCoverage || len(pts) < 100 {
-		return img, nil
+		return nil, false
 	}
-	// Find minimum-area rectangle in resized space and scale to original space.
+
+	// Find minimum-area rectangle in resized space
 	rect := utils.MinimumAreaRectangle(pts)
 	if len(rect) != 4 {
-		return img, nil
+		return nil, false
 	}
+
 	if r.cfg.DebugDir != "" {
 		// Dump mask visualization (resized space)
 		_ = dumpMaskPNG(r.cfg.DebugDir, mask, ow, oh, thr)
 	}
+
+	// Validate rectangle
+	if !r.validateRectangle(rect, oh, ow) {
+		return nil, false
+	}
+
+	return rect, true
+}
+
+// validateRectangle checks if the rectangle meets quality criteria.
+func (r *Rectifier) validateRectangle(rect []utils.Point, oh, ow int) bool {
 	// Gating based on rect area and aspect ratio in resized space
 	rw0 := hypot(rect[1], rect[0])
 	rw1 := hypot(rect[2], rect[3])
@@ -231,18 +296,27 @@ func (r *Rectifier) Apply(img image.Image) (image.Image, error) {
 	rh1 := hypot(rect[2], rect[1])
 	ravgW := (rw0 + rw1) * 0.5
 	ravgH := (rh0 + rh1) * 0.5
+
 	if ravgW <= 1 || ravgH <= 1 {
-		return img, nil
+		return false
 	}
+
 	rArea := ravgW * ravgH
 	imgArea := float64(ow * oh)
 	if rArea/imgArea < r.cfg.MinRectAreaRatio {
-		return img, nil
+		return false
 	}
+
 	ar := ravgW / ravgH
 	if ar < r.cfg.MinRectAspect || ar > r.cfg.MaxRectAspect {
-		return img, nil
+		return false
 	}
+
+	return true
+}
+
+// transformAndWarpImage transforms coordinates and warps the image.
+func (r *Rectifier) transformAndWarpImage(img, resized image.Image, rect []utils.Point) (image.Image, error) {
 	// Scale rect points back to original image coordinates
 	rb := resized.Bounds()
 	ib := img.Bounds()
@@ -252,9 +326,11 @@ func (r *Rectifier) Apply(img image.Image) (image.Image, error) {
 	for i := range 4 {
 		srcQuad[i] = utils.Point{X: rect[i].X * sx, Y: rect[i].Y * sy}
 	}
+
 	if r.cfg.DebugDir != "" {
 		_ = dumpOverlayPNG(r.cfg.DebugDir, img, srcQuad)
 	}
+
 	// Determine output dimensions based on quad edges
 	w0 := hypot(srcQuad[1], srcQuad[0])
 	w1 := hypot(srcQuad[2], srcQuad[3])
@@ -262,17 +338,17 @@ func (r *Rectifier) Apply(img image.Image) (image.Image, error) {
 	h1 := hypot(srcQuad[2], srcQuad[1])
 	avgW := (w0 + w1) * 0.5
 	avgH := (h0 + h1) * 0.5
+
 	if avgW <= 1 || avgH <= 1 {
 		return img, nil
 	}
+
 	targetH := r.cfg.OutputHeight
 	if targetH <= 0 {
 		targetH = 1024
 	}
 	targetW := int((avgW / avgH) * float64(targetH))
-	if targetW < 32 {
-		targetW = 32
-	}
+
 	// Round to multiples of 32 to be detector-friendly
 	targetW = (targetW / 32) * 32
 	targetH = (targetH / 32) * 32
@@ -282,13 +358,16 @@ func (r *Rectifier) Apply(img image.Image) (image.Image, error) {
 	if targetH < 32 {
 		targetH = 32
 	}
+
 	dst := warpPerspective(img, srcQuad, targetW, targetH)
 	if dst == nil {
 		return img, nil
 	}
+
 	if r.cfg.DebugDir != "" {
 		_ = dumpComparePNG(r.cfg.DebugDir, img, srcQuad, dst)
 	}
+
 	return dst, nil
 }
 

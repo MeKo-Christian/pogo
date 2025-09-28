@@ -3,10 +3,12 @@ package support
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -141,190 +143,11 @@ func (testCtx *TestContext) createTestHTTPServer(port int) error {
 	// Create a test server with mock handlers that simulate the real server behavior
 	mux := http.NewServeMux()
 
-	// Health endpoint
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		response := map[string]interface{}{
-			"status": "healthy",
-		}
-		_ = json.NewEncoder(w).Encode(response)
-	})
-
-	// Models endpoint
-	mux.HandleFunc("/models", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		response := map[string]interface{}{
-			"models": []map[string]interface{}{
-				{
-					"name": "detection",
-					"type": "detection",
-					"path": "/models/detection.onnx",
-					"size": 2048000,
-				},
-				{
-					"name": "recognition",
-					"type": "recognition",
-					"path": "/models/recognition.onnx",
-					"size": 4096000,
-				},
-			},
-		}
-		_ = json.NewEncoder(w).Encode(response)
-	})
-
-	// OCR image endpoint
-	mux.HandleFunc("/ocr/image", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		// Parse multipart form
-		err := r.ParseMultipartForm(32 << 20) // 32 MB
-		if err != nil {
-			http.Error(w, "Failed to parse form", http.StatusBadRequest)
-			return
-		}
-
-		// Get file from form
-		file, header, err := r.FormFile("file")
-		if err != nil {
-			// Try "image" field name as well
-			file, header, err = r.FormFile("image")
-			if err != nil {
-				http.Error(w, "No image file provided", http.StatusBadRequest)
-				return
-			}
-		}
-		defer func() { _ = file.Close() }()
-
-		// Check if it's an invalid file (simulate invalid format check)
-		if strings.Contains(header.Filename, "invalid") || header.Size == 0 {
-			http.Error(w, `{"error": "invalid format"}`, http.StatusBadRequest)
-			return
-		}
-
-		// Check if file is too large (simulate 1MB limit)
-		if header.Size > 1024*1024 && strings.Contains(header.Filename, "large") {
-			http.Error(w, `{"error": "file too large"}`, http.StatusRequestEntityTooLarge)
-			return
-		}
-
-		// Read image data
-		imageData, err := io.ReadAll(file)
-		if err != nil {
-			http.Error(w, "Failed to read image", http.StatusBadRequest)
-			return
-		}
-
-		// Decode image to verify it's valid
-		_, _, err = image.Decode(bytes.NewReader(imageData))
-		if err != nil {
-			// Create a simple test image if decode fails
-			img := testCtx.createSimpleTestImage(100, 50)
-			result, _ := mockPipeline.ProcessImage(img)
-
-			w.Header().Set("Content-Type", "application/json")
-
-			response := map[string]interface{}{
-				"results": []map[string]interface{}{
-					{
-						"text":       result.Regions[0].Text,
-						"confidence": result.Regions[0].RecConfidence,
-						"box":        result.Regions[0].Box,
-					},
-				},
-				"regions":    result.Regions,
-				"confidence": result.AvgDetConf,
-			}
-
-			// Check for overlay request
-			if r.FormValue("overlay") == "true" || strings.Contains(r.URL.Path, "overlay") {
-				response["overlay"] = mockBase64ImageData
-				response["image_data"] = mockBase64ImageData
-			}
-
-			_ = json.NewEncoder(w).Encode(response)
-			return
-		}
-
-		// Process with mock pipeline
-		img, _, err := image.Decode(bytes.NewReader(imageData))
-		if err != nil {
-			http.Error(w, "Invalid image format", http.StatusBadRequest)
-			return
-		}
-
-		result, err := mockPipeline.ProcessImage(img)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		// Get format parameter
-		format := r.FormValue("format")
-		if format == "" {
-			format = "json"
-		}
-
-		// Handle different response formats
-		switch format {
-		case "text":
-			w.Header().Set("Content-Type", "text/plain")
-			_, _ = w.Write([]byte(result.Regions[0].Text))
-		case "csv":
-			w.Header().Set("Content-Type", "text/csv")
-			_, _ = w.Write([]byte("text,confidence,x,y,w,h\n"))
-			for _, region := range result.Regions {
-				line := fmt.Sprintf("%s,%.2f,%d,%d,%d,%d\n",
-					region.Text, region.RecConfidence,
-					region.Box.X, region.Box.Y, region.Box.W, region.Box.H)
-				_, _ = w.Write([]byte(line))
-			}
-		default: // json
-			w.Header().Set("Content-Type", "application/json")
-
-			response := map[string]interface{}{
-				"results": []map[string]interface{}{
-					{
-						"text":       result.Regions[0].Text,
-						"confidence": result.Regions[0].RecConfidence,
-						"box":        result.Regions[0].Box,
-					},
-				},
-				"regions":    result.Regions,
-				"confidence": result.AvgDetConf,
-			}
-
-			// Check for overlay request
-			if r.FormValue("overlay") == "true" || strings.Contains(r.URL.Path, "overlay") {
-				response["overlay"] = mockBase64ImageData
-				response["image_data"] = mockBase64ImageData
-			}
-
-			_ = json.NewEncoder(w).Encode(response)
-		}
-	})
-
-	// CORS handling for OPTIONS requests
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		http.NotFound(w, r)
-	})
+	// Register endpoint handlers
+	mux.HandleFunc("/health", testCtx.handleHealth)
+	mux.HandleFunc("/models", testCtx.handleModels)
+	mux.HandleFunc("/ocr/image", testCtx.handleOCRImage(mockPipeline, mockBase64ImageData))
+	mux.HandleFunc("/", testCtx.handleCORS)
 
 	// Create httptest server
 	server := httptest.NewServer(mux)
@@ -350,6 +173,255 @@ func (testCtx *TestContext) createTestHTTPServer(port int) error {
 	}
 
 	return nil
+}
+
+// handleHealth handles the /health endpoint.
+func (testCtx *TestContext) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	response := map[string]interface{}{
+		"status": "healthy",
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleModels handles the /models endpoint.
+func (testCtx *TestContext) handleModels(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	response := map[string]interface{}{
+		"models": []map[string]interface{}{
+			{
+				"name": "detection",
+				"type": "detection",
+				"path": "/models/detection.onnx",
+				"size": 2048000,
+			},
+			{
+				"name": "recognition",
+				"type": "recognition",
+				"path": "/models/recognition.onnx",
+				"size": 4096000,
+			},
+		},
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleOCRImage handles the /ocr/image endpoint.
+func (testCtx *TestContext) handleOCRImage(mockPipeline *MockPipeline, mockBase64ImageData string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := testCtx.validateRequestMethod(r); err != nil {
+			http.Error(w, err.Error(), http.StatusMethodNotAllowed)
+			return
+		}
+
+		file, header, err := testCtx.parseAndGetFile(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer func() { _ = file.Close() }()
+
+		if err := testCtx.validateFile(header); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		imageData, err := testCtx.readImageData(file)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		testCtx.processImageData(w, mockPipeline, mockBase64ImageData, header.Filename, imageData, r)
+	}
+}
+
+// validateRequestMethod validates the HTTP request method.
+func (testCtx *TestContext) validateRequestMethod(r *http.Request) error {
+	if r.Method != http.MethodPost {
+		return errors.New("method not allowed")
+	}
+	return nil
+}
+
+// parseAndGetFile parses the multipart form and retrieves the file.
+func (testCtx *TestContext) parseAndGetFile(r *http.Request) (multipart.File, *multipart.FileHeader, error) {
+	err := r.ParseMultipartForm(32 << 20) // 32 MB
+	if err != nil {
+		return nil, nil, errors.New("failed to parse form")
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		// Try "image" field name as well
+		file, header, err = r.FormFile("image")
+		if err != nil {
+			return nil, nil, errors.New("no image file provided")
+		}
+	}
+	return file, header, nil
+}
+
+// validateFile validates the uploaded file.
+func (testCtx *TestContext) validateFile(header *multipart.FileHeader) error {
+	if strings.Contains(header.Filename, "invalid") || header.Size == 0 {
+		return errors.New(`{"error": "invalid format"}`)
+	}
+	if header.Size > 1024*1024 && strings.Contains(header.Filename, "large") {
+		return errors.New(`{"error": "file too large"}`)
+	}
+	return nil
+}
+
+// readImageData reads the image data from the file.
+func (testCtx *TestContext) readImageData(file multipart.File) ([]byte, error) {
+	imageData, err := io.ReadAll(file)
+	if err != nil {
+		return nil, errors.New("failed to read image")
+	}
+	return imageData, nil
+}
+
+// processImageData processes the image data based on decode success.
+func (testCtx *TestContext) processImageData(w http.ResponseWriter, mockPipeline *MockPipeline,
+	mockBase64ImageData string, filename string, imageData []byte, r *http.Request) {
+	if testCtx.shouldSimulateDecodeFailure(filename) {
+		testCtx.handleDecodeFailure(w, mockPipeline, mockBase64ImageData, r)
+	} else {
+		testCtx.handleSuccessfulDecode(w, mockPipeline, mockBase64ImageData, imageData, r)
+	}
+}
+
+// shouldSimulateDecodeFailure determines if we should simulate a decode failure.
+func (testCtx *TestContext) shouldSimulateDecodeFailure(filename string) bool {
+	_, _, err := image.Decode(bytes.NewReader([]byte("invalid")))
+	return err != nil || strings.Contains(filename, "decode_fail")
+}
+
+// handleDecodeFailure handles the case where image decoding fails.
+func (testCtx *TestContext) handleDecodeFailure(w http.ResponseWriter,
+	mockPipeline *MockPipeline, mockBase64ImageData string, r *http.Request) {
+	img := testCtx.createSimpleTestImage(100, 50)
+	result, _ := mockPipeline.ProcessImage(img)
+
+	w.Header().Set("Content-Type", "application/json")
+	response := map[string]interface{}{
+		"results": []map[string]interface{}{
+			{
+				"text":       result.Regions[0].Text,
+				"confidence": result.Regions[0].RecConfidence,
+				"box":        result.Regions[0].Box,
+			},
+		},
+		"regions":    result.Regions,
+		"confidence": result.AvgDetConf,
+	}
+
+	// Check for overlay request
+	if r.FormValue("overlay") == "true" || strings.Contains(r.URL.Path, "overlay") {
+		response["overlay"] = mockBase64ImageData
+		response["image_data"] = mockBase64ImageData
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleSuccessfulDecode handles the case where image decoding succeeds.
+func (testCtx *TestContext) handleSuccessfulDecode(w http.ResponseWriter,
+	mockPipeline *MockPipeline, mockBase64ImageData string, imageData []byte, r *http.Request) {
+	img, _, err := image.Decode(bytes.NewReader(imageData))
+	if err != nil {
+		http.Error(w, "Invalid image format", http.StatusBadRequest)
+		return
+	}
+
+	result, err := mockPipeline.ProcessImage(img)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	testCtx.sendOCRResponse(w, result, mockBase64ImageData, r)
+}
+
+// sendOCRResponse sends the OCR result response.
+func (testCtx *TestContext) sendOCRResponse(w http.ResponseWriter,
+	result *pipeline.OCRImageResult, mockBase64ImageData string, r *http.Request) {
+	// Get format parameter
+	format := r.FormValue("format")
+	if format == "" {
+		format = "json"
+	}
+
+	// Handle different response formats
+	switch format {
+	case "text":
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte(result.Regions[0].Text))
+	case "csv":
+		w.Header().Set("Content-Type", "text/csv")
+		_, _ = w.Write([]byte("text,confidence,x,y,w,h\n"))
+		for _, region := range result.Regions {
+			line := fmt.Sprintf("%s,%.2f,%d,%d,%d,%d\n",
+				region.Text, region.RecConfidence,
+				region.Box.X, region.Box.Y, region.Box.W, region.Box.H)
+			_, _ = w.Write([]byte(line))
+		}
+	default: // json
+		w.Header().Set("Content-Type", "application/json")
+
+		response := map[string]interface{}{
+			"results": []map[string]interface{}{
+				{
+					"text":       result.Regions[0].Text,
+					"confidence": result.Regions[0].RecConfidence,
+					"box":        result.Regions[0].Box,
+				},
+			},
+			"regions":    result.Regions,
+			"confidence": result.AvgDetConf,
+		}
+
+		// Check for overlay request
+		if r.FormValue("overlay") == "true" || strings.Contains(r.URL.Path, "overlay") {
+			response["overlay"] = mockBase64ImageData
+			response["image_data"] = mockBase64ImageData
+		}
+
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+// handleCORS handles CORS preflight requests and unknown routes.
+func (testCtx *TestContext) handleCORS(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.NotFound(w, r)
 }
 
 // stopTestHTTPServer stops the httptest server.

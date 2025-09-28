@@ -40,62 +40,90 @@ type compStats struct {
 	maxY  int
 }
 
+// performComponentBFS performs BFS traversal for a connected component starting from a seed pixel.
+func performComponentBFS(mask []bool, prob []float32, visited []int, labels []int,
+	w, h, startX, startY, label int) compStats {
+	idx := func(x, y int) int { return y*w + x }
+	startIdx := idx(startX, startY)
+
+	st := compStats{count: 0, sum: 0, minX: startX, minY: startY, maxX: startX, maxY: startY}
+	q := list.New()
+	q.PushBack(startIdx)
+	visited[startIdx] = 1
+	labels[startIdx] = label
+
+	dirs := [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+
+	for q.Len() > 0 {
+		e := q.Front()
+		q.Remove(e)
+		ci, ok := e.Value.(int)
+		if !ok {
+			continue // skip invalid
+		}
+		cx, cy := ci%w, ci/w
+		updateComponentStats(&st, prob[ci], cx, cy)
+		processNeighbors(mask, visited, labels, q, w, h, cx, cy, label, idx, dirs)
+	}
+	return st
+}
+
+// updateComponentStats updates the component statistics with a new pixel.
+func updateComponentStats(st *compStats, prob float32, cx, cy int) {
+	st.count++
+	st.sum += float64(prob)
+	if cx < st.minX {
+		st.minX = cx
+	}
+	if cy < st.minY {
+		st.minY = cy
+	}
+	if cx > st.maxX {
+		st.maxX = cx
+	}
+	if cy > st.maxY {
+		st.maxY = cy
+	}
+}
+
+// processNeighbors processes all 4-connected neighbors of a pixel.
+func processNeighbors(mask []bool, visited []int, labels []int, q *list.List,
+	w, h, cx, cy, label int, idx func(int, int) int, dirs [][2]int) {
+	for _, d := range dirs {
+		nx, ny := cx+d[0], cy+d[1]
+		if isValidNeighbor(mask, visited, w, h, nx, ny) {
+			ni := idx(nx, ny)
+			visited[ni] = 1
+			labels[ni] = label
+			q.PushBack(ni)
+		}
+	}
+}
+
+// isValidNeighbor checks if a neighbor pixel is valid for BFS traversal.
+func isValidNeighbor(mask []bool, visited []int, w, h, nx, ny int) bool {
+	if nx < 0 || ny < 0 || nx >= w || ny >= h {
+		return false
+	}
+	ni := ny*w + nx
+	return mask[ni] && visited[ni] == 0
+}
+
 func connectedComponents(mask []bool, prob []float32, w, h int) ([]compStats, []int) {
-	visited := make([]bool, len(mask))
+	visited := make([]int, len(mask)) // Use int instead of bool for clarity
 	labels := make([]int, len(mask))
 	var comps []compStats
 	lab := 0
 	idx := func(x, y int) int { return y*w + x }
 
-	dirs := [][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 	for y := range h {
 		for x := range w {
 			i := idx(x, y)
-			if !mask[i] || visited[i] {
+			if !mask[i] || visited[i] != 0 {
 				continue
 			}
-			// BFS
-			st := compStats{count: 0, sum: 0, minX: x, minY: y, maxX: x, maxY: y}
-			q := list.New()
-			q.PushBack(i)
-			visited[i] = true
 			lab++
-			labels[i] = lab
-			for q.Len() > 0 {
-				e := q.Front()
-				q.Remove(e)
-				ci, ok := e.Value.(int)
-				if !ok {
-					continue // skip invalid
-				}
-				cx, cy := ci%w, ci/w
-				st.count++
-				st.sum += float64(prob[ci])
-				if cx < st.minX {
-					st.minX = cx
-				}
-				if cy < st.minY {
-					st.minY = cy
-				}
-				if cx > st.maxX {
-					st.maxX = cx
-				}
-				if cy > st.maxY {
-					st.maxY = cy
-				}
-				for _, d := range dirs {
-					nx, ny := cx+d[0], cy+d[1]
-					if nx < 0 || ny < 0 || nx >= w || ny >= h {
-						continue
-					}
-					ni := idx(nx, ny)
-					if mask[ni] && !visited[ni] {
-						visited[ni] = true
-						labels[ni] = lab
-						q.PushBack(ni)
-					}
-				}
-			}
+			st := performComponentBFS(mask, prob, visited, labels, w, h, x, y, lab)
 			comps = append(comps, st)
 		}
 	}
@@ -219,84 +247,119 @@ func NonMaxSuppression(regions []DetectedRegion, iouThreshold float64) []Detecte
 	return kept
 }
 
+// sortRegionsByConfidenceDesc sorts regions by confidence in descending order using selection sort.
+func sortRegionsByConfidenceDesc(regions []DetectedRegion) {
+	n := len(regions)
+	for i := range n - 1 {
+		maxJ := i
+		for j := i + 1; j < n; j++ {
+			if regions[j].Confidence > regions[maxJ].Confidence {
+				maxJ = j
+			}
+		}
+		regions[i], regions[maxJ] = regions[maxJ], regions[i]
+	}
+}
+
+// sortRegionsByConfidenceDescFrom sorts regions starting from a given index by confidence in descending order.
+func sortRegionsByConfidenceDescFrom(regions []DetectedRegion, start int) {
+	n := len(regions)
+	for i := start; i < n-1; i++ {
+		maxJ := i
+		for j := i + 1; j < n; j++ {
+			if regions[j].Confidence > regions[maxJ].Confidence {
+				maxJ = j
+			}
+		}
+		regions[i], regions[maxJ] = regions[maxJ], regions[i]
+	}
+}
+
+// calculateSoftNMSWeight computes the decay weight for Soft-NMS based on IoU and method.
+func calculateSoftNMSWeight(iou, iouThreshold, sigma float64, method string) float64 {
+	switch strings.ToLower(method) {
+	case "linear":
+		if iou > iouThreshold {
+			return 1.0 - iou
+		}
+		return 1.0
+	case "gaussian":
+		if sigma <= 0 {
+			sigma = 0.5
+		}
+		return math.Exp(-(iou * iou) / sigma)
+	default:
+		if iou > iouThreshold {
+			return 0.0
+		}
+		return 1.0
+	}
+}
+
 // SoftNonMaxSuppression applies Soft-NMS to a set of regions. The method can be
 // "linear" or "gaussian" (case-insensitive). Boxes are decayed rather than
 // suppressed. Boxes with final confidence below scoreThresh are discarded.
 // Returns regions sorted by confidence descending.
-func SoftNonMaxSuppression(regions []DetectedRegion, method string, iouThreshold, sigma, scoreThresh float64) []DetectedRegion {
+func SoftNonMaxSuppression(regions []DetectedRegion, method string,
+	iouThreshold, sigma, scoreThresh float64) []DetectedRegion {
 	n := len(regions)
 	if n <= 1 {
-		if n == 1 && regions[0].Confidence < scoreThresh {
-			return nil
-		}
-		return regions
+		return handleEdgeCases(regions, n, scoreThresh)
 	}
+
 	// Work on a copy to avoid mutating input
 	regs := make([]DetectedRegion, n)
 	copy(regs, regions)
 
-	// Helper for sorting by confidence desc
-	sortIdx := func(start int) {
-		// selection sort on the tail; small n expected
-		for i := start; i < n-1; i++ {
-			maxJ := i
-			for j := i + 1; j < n; j++ {
-				if regs[j].Confidence > regs[maxJ].Confidence {
-					maxJ = j
-				}
-			}
-			regs[i], regs[maxJ] = regs[maxJ], regs[i]
-		}
-	}
-
 	// Initial sort
-	sortIdx(0)
+	sortRegionsByConfidenceDesc(regs)
 
 	// Soft-NMS loop
+	applySoftNMS(&regs, iouThreshold, sigma, method, scoreThresh)
+
+	// Filter by score threshold and final sort
+	return filterAndSortResults(regs, scoreThresh)
+}
+
+// handleEdgeCases handles the edge cases for Soft-NMS when there are 0 or 1 regions.
+func handleEdgeCases(regions []DetectedRegion, n int, scoreThresh float64) []DetectedRegion {
+	if n == 1 && regions[0].Confidence < scoreThresh {
+		return nil
+	}
+	return regions
+}
+
+// applySoftNMS applies the Soft-NMS algorithm to the regions.
+func applySoftNMS(regs *[]DetectedRegion, iouThreshold, sigma float64, method string, scoreThresh float64) {
+	n := len(*regs)
 	for i := range n {
 		// Ensure regs[i] has highest score among remaining by resorting tail
 		if i > 0 {
-			// resort tail from i
-			// simple selection sort from i
-			maxJ := i
-			for j := i + 1; j < n; j++ {
-				if regs[j].Confidence > regs[maxJ].Confidence {
-					maxJ = j
-				}
-			}
-			regs[i], regs[maxJ] = regs[maxJ], regs[i]
+			sortRegionsByConfidenceDescFrom(*regs, i)
 		}
-		for j := i + 1; j < n; j++ {
-			if regs[j].Confidence < scoreThresh {
-				continue
-			}
-			iou := ComputeRegionIoU(regs[i].Box, regs[j].Box)
-			if iou <= 0 {
-				continue
-			}
-			// compute decay weight
-			weight := 1.0
-			switch strings.ToLower(method) {
-			case "linear":
-				if iou > iouThreshold {
-					weight = 1.0 - iou
-				}
-			case "gaussian":
-				if sigma <= 0 {
-					sigma = 0.5
-				}
-				weight = math.Exp(-(iou * iou) / sigma)
-			default:
-				if iou > iouThreshold {
-					weight = 0.0
-				}
-			}
-			regs[j].Confidence *= weight
-		}
+		decayOverlappingRegions(*regs, i, iouThreshold, sigma, method, scoreThresh)
 	}
+}
 
-	// Filter by score threshold and sort
-	out := make([]DetectedRegion, 0, n)
+// decayOverlappingRegions decays the confidence of regions that overlap with the current region.
+func decayOverlappingRegions(regs []DetectedRegion, i int,
+	iouThreshold, sigma float64, method string, scoreThresh float64) {
+	for j := i + 1; j < len(regs); j++ {
+		if regs[j].Confidence < scoreThresh {
+			continue
+		}
+		iou := ComputeRegionIoU(regs[i].Box, regs[j].Box)
+		if iou <= 0 {
+			continue
+		}
+		weight := calculateSoftNMSWeight(iou, iouThreshold, sigma, method)
+		regs[j].Confidence *= weight
+	}
+}
+
+// filterAndSortResults filters regions by score threshold and sorts the final results.
+func filterAndSortResults(regs []DetectedRegion, scoreThresh float64) []DetectedRegion {
+	out := make([]DetectedRegion, 0, len(regs))
 	for _, r := range regs {
 		if r.Confidence >= scoreThresh {
 			out = append(out, r)
@@ -306,15 +369,7 @@ func SoftNonMaxSuppression(regions []DetectedRegion, method string, iouThreshold
 		return out
 	}
 	// Final sort by confidence desc
-	for i := range len(out) - 1 {
-		maxJ := i
-		for j := i + 1; j < len(out); j++ {
-			if out[j].Confidence > out[maxJ].Confidence {
-				maxJ = j
-			}
-		}
-		out[i], out[maxJ] = out[maxJ], out[i]
-	}
+	sortRegionsByConfidenceDesc(out)
 	return out
 }
 

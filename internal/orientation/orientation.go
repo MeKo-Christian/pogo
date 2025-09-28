@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"math"
 	"os"
 	"path/filepath"
@@ -239,48 +240,90 @@ func (c *Classifier) Predict(img image.Image) (Result, error) {
 	if img == nil {
 		return Result{}, errors.New("nil image")
 	}
+
 	if c.heuristic || c.session == nil {
-		// Heuristic path
-		ang, conf := heuristicOrientation(img)
-		if conf < c.cfg.ConfidenceThreshold {
-			return Result{Angle: 0, Confidence: conf}, nil
-		}
-		return Result{Angle: ang, Confidence: conf}, nil
+		return c.predictWithHeuristic(img)
 	}
 
-	// Preprocess to expected dims
+	return c.predictWithONNX(img)
+}
+
+func (c *Classifier) predictWithHeuristic(img image.Image) (Result, error) {
+	ang, conf := heuristicOrientation(img)
+	if conf < c.cfg.ConfidenceThreshold {
+		return Result{Angle: 0, Confidence: conf}, nil
+	}
+	return Result{Angle: ang, Confidence: conf}, nil
+}
+
+func (c *Classifier) predictWithONNX(img image.Image) (Result, error) {
+	inputTensor, cleanupInput, err := c.prepareInputTensor(img)
+	if err != nil {
+		return Result{}, err
+	}
+	defer cleanupInput()
+
+	outputs, cleanupOutputs, err := c.runInference(inputTensor)
+	if err != nil {
+		return Result{}, err
+	}
+	defer cleanupOutputs()
+
+	logits, err := c.extractLogits(outputs)
+	if err != nil {
+		return Result{}, err
+	}
+
+	angle, confidence := c.computeOrientationFromLogits(logits)
+	if confidence < c.cfg.ConfidenceThreshold {
+		return Result{Angle: 0, Confidence: confidence}, nil
+	}
+
+	return Result{Angle: angle, Confidence: confidence}, nil
+}
+
+func (c *Classifier) prepareInputTensor(img image.Image) (*onnxrt.Tensor[float32], func(), error) {
 	inH, inW := c.inH, c.inW
 	if inH <= 0 || inW <= 0 {
 		inH, inW = 192, 192
 	}
+
 	resized := imaging.Resize(img, inW, inH, imaging.Lanczos)
 	data, w, h, err := utils.NormalizeImage(resized)
 	if err != nil {
-		return Result{}, err
+		return nil, nil, err
 	}
+
 	tensor, err := onnx.NewImageTensor(data, 3, h, w)
 	if err != nil {
-		return Result{}, err
+		return nil, nil, err
 	}
+
 	if err := onnx.VerifyImageTensor(tensor); err != nil {
-		return Result{}, err
+		return nil, nil, err
 	}
 
 	input, err := onnxrt.NewTensor(onnxrt.NewShape(tensor.Shape...), tensor.Data)
 	if err != nil {
-		return Result{}, fmt.Errorf("tensor: %w", err)
+		return nil, nil, fmt.Errorf("tensor: %w", err)
 	}
-	defer func() {
+
+	cleanup := func() {
 		if err := input.Destroy(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error destroying input tensor: %v\n", err)
 		}
-	}()
+	}
 
+	return input, cleanup, nil
+}
+
+func (c *Classifier) runInference(input *onnxrt.Tensor[float32]) ([]onnxrt.Value, func(), error) {
 	outputs := []onnxrt.Value{nil}
 	if err := c.session.Run([]onnxrt.Value{input}, outputs); err != nil {
-		return Result{}, fmt.Errorf("run: %w", err)
+		return nil, nil, fmt.Errorf("run: %w", err)
 	}
-	defer func() {
+
+	cleanup := func() {
 		for _, o := range outputs {
 			if o != nil {
 				if err := o.Destroy(); err != nil {
@@ -288,136 +331,211 @@ func (c *Classifier) Predict(img image.Image) (Result, error) {
 				}
 			}
 		}
-	}()
+	}
 
-	// Expect logits [1, 4]
+	return outputs, cleanup, nil
+}
+
+func (c *Classifier) extractLogits(outputs []onnxrt.Value) ([]float32, error) {
 	t, ok := outputs[0].(*onnxrt.Tensor[float32])
 	if !ok {
-		return Result{}, fmt.Errorf("unexpected output type %T", outputs[0])
+		return nil, fmt.Errorf("unexpected output type %T", outputs[0])
 	}
+
 	shape := t.GetShape()
 	if len(shape) != 2 || shape[1] < 4 {
-		return Result{}, fmt.Errorf("unexpected output shape %v", shape)
+		return nil, fmt.Errorf("unexpected output shape %v", shape)
 	}
-	logits := t.GetData()
-	// Softmax
-	maxLogit := float32(-1e9)
-	for i := 0; i < 4 && i < len(logits); i++ {
-		if logits[i] > maxLogit {
-			maxLogit = logits[i]
+
+	return t.GetData(), nil
+}
+
+func (c *Classifier) computeOrientationFromLogits(logits []float32) (int, float64) {
+	probs := softmax(logits[:4]) // Only use first 4 logits for 4 orientations
+
+	idx := argmax(probs)
+	angle := []int{0, 90, 180, 270}[idx]
+	confidence := probs[idx]
+
+	return angle, confidence
+}
+
+func softmax(logits []float32) []float64 {
+	if len(logits) == 0 {
+		return nil
+	}
+
+	// Find max for numerical stability
+	maxLogit := logits[0]
+	for _, v := range logits[1:] {
+		if v > maxLogit {
+			maxLogit = v
 		}
 	}
+
+	// Compute exp and sum
 	var sum float64
-	probs := make([]float64, 4)
-	for i := 0; i < 4 && i < len(logits); i++ {
-		v := math.Exp(float64(logits[i] - maxLogit))
-		probs[i] = v
-		sum += v
+	probs := make([]float64, len(logits))
+	for i, v := range logits {
+		exp := math.Exp(float64(v - maxLogit))
+		probs[i] = exp
+		sum += exp
 	}
+
+	// Normalize
 	for i := range probs {
 		probs[i] /= sum
 	}
-	idx := 0
-	best := probs[0]
-	for i := 1; i < 4; i++ {
-		if probs[i] > best {
-			best = probs[i]
-			idx = i
+
+	return probs
+}
+
+func argmax(values []float64) int {
+	if len(values) == 0 {
+		return -1
+	}
+
+	maxIdx := 0
+	maxVal := values[0]
+	for i, v := range values[1:] {
+		if v > maxVal {
+			maxVal = v
+			maxIdx = i + 1
 		}
 	}
-	angle := []int{0, 90, 180, 270}[idx]
-	conf := best
-	if conf < c.cfg.ConfidenceThreshold {
-		return Result{Angle: 0, Confidence: conf}, nil
-	}
-	return Result{Angle: angle, Confidence: conf}, nil
+	return maxIdx
 }
 
 // heuristicOrientation uses a simple gradient-projection heuristic to
 // distinguish between 0/180 vs 90/270. It cannot tell 0 vs 180 or 90 vs 270 reliably,
 // so it returns either 0 or 90 with a confidence score.
-func heuristicOrientation(img image.Image) (angle int, confidence float64) {
+func heuristicOrientation(img image.Image) (int, float64) {
 	if img == nil {
 		return 0, 0
 	}
-	// Downscale to reduce noise and cost
-	thumb := imaging.Resize(img, 128, 128, imaging.Lanczos)
-	b := thumb.Bounds()
-	w, h := b.Dx(), b.Dy()
-	if w <= 1 || h <= 1 {
+
+	thumb := prepareThumbnail(img)
+	if !isValidThumbnail(thumb) {
 		return 0, 0
 	}
-	// Compute mean luminance
+
+	meanLuminance := calculateMeanLuminance(thumb)
+	rowTransitions := countTransitionsInRows(thumb, meanLuminance)
+	colTransitions := countTransitionsInColumns(thumb, meanLuminance)
+
+	return determineOrientation(rowTransitions, colTransitions, thumb.Bounds())
+}
+
+func prepareThumbnail(img image.Image) image.Image {
+	return imaging.Resize(img, 128, 128, imaging.Lanczos)
+}
+
+func isValidThumbnail(img image.Image) bool {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	return w > 1 && h > 1
+}
+
+func calculateMeanLuminance(img image.Image) float64 {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+
 	var sum float64
 	for y := b.Min.Y; y < b.Min.Y+h; y++ {
 		for x := b.Min.X; x < b.Min.X+w; x++ {
-			r, g, bb, _ := thumb.At(x, y).RGBA()
+			r, g, bb, _ := img.At(x, y).RGBA()
 			sum += 0.299*float64(r>>8) + 0.587*float64(g>>8) + 0.114*float64(bb>>8)
 		}
 	}
-	mean := sum / float64(w*h)
-	// Count transitions per row and per column relative to mean threshold
-	var rowTransitions, colTransitions float64
-	// Rows
-	for y := b.Min.Y; y < b.Min.Y+h; y++ {
+	return sum / float64(w*h)
+}
+
+func countTransitionsInRows(img image.Image, meanLuminance float64) float64 {
+	b := img.Bounds()
+	var transitions float64
+
+	for y := b.Min.Y; y < b.Min.Y+b.Dy(); y++ {
 		var prev int
-		for x := b.Min.X; x < b.Min.X+w; x++ {
-			r, g, bb, _ := thumb.At(x, y).RGBA()
-			lum := 0.299*float64(r>>8) + 0.587*float64(g>>8) + 0.114*float64(bb>>8)
-			cur := 0
-			if lum < mean {
-				cur = 1
-			}
+		for x := b.Min.X; x < b.Min.X+b.Dx(); x++ {
+			lum := calculateLuminance(img.At(x, y))
+			cur := luminanceToBinary(lum, meanLuminance)
+
 			if x == b.Min.X {
 				prev = cur
 				continue
 			}
+
 			if cur != prev {
-				rowTransitions++
+				transitions++
 			}
 			prev = cur
 		}
 	}
-	// Columns
-	for x := b.Min.X; x < b.Min.X+w; x++ {
+	return transitions
+}
+
+func countTransitionsInColumns(img image.Image, meanLuminance float64) float64 {
+	b := img.Bounds()
+	var transitions float64
+
+	for x := b.Min.X; x < b.Min.X+b.Dx(); x++ {
 		var prev int
-		for y := b.Min.Y; y < b.Min.Y+h; y++ {
-			r, g, bb, _ := thumb.At(x, y).RGBA()
-			lum := 0.299*float64(r>>8) + 0.587*float64(g>>8) + 0.114*float64(bb>>8)
-			cur := 0
-			if lum < mean {
-				cur = 1
-			}
+		for y := b.Min.Y; y < b.Min.Y+b.Dy(); y++ {
+			lum := calculateLuminance(img.At(x, y))
+			cur := luminanceToBinary(lum, meanLuminance)
+
 			if y == b.Min.Y {
 				prev = cur
 				continue
 			}
+
 			if cur != prev {
-				colTransitions++
+				transitions++
 			}
 			prev = cur
 		}
 	}
+	return transitions
+}
+
+func calculateLuminance(c color.Color) float64 {
+	r, g, bb, _ := c.RGBA()
+	return 0.299*float64(r>>8) + 0.587*float64(g>>8) + 0.114*float64(bb>>8)
+}
+
+func luminanceToBinary(luminance, threshold float64) int {
+	if luminance < threshold {
+		return 1
+	}
+	return 0
+}
+
+func determineOrientation(rowTransitions, colTransitions float64, bounds image.Rectangle) (int, float64) {
 	total := rowTransitions + colTransitions
 	if total == 0 {
 		return 0, 0
 	}
-	// Aspect-ratio assisted decision: portrait pages tend to need 90° more often
-	ar := float64(h) / float64(w)
-	// More column transitions => likely vertical text lines (rotated 90/270)
+
+	ar := calculateAspectRatio(bounds)
+
 	if colTransitions >= rowTransitions {
-		// Boost confidence if portrait
 		base := (colTransitions - rowTransitions) / total
 		if ar > 1.2 {
 			base = math.Min(1.0, base+0.15)
 		}
 		return 90, base
 	}
+
 	base := (rowTransitions - colTransitions) / total
 	if ar < 0.8 {
 		base = math.Min(1.0, base+0.1)
 	}
 	return 0, base
+}
+
+func calculateAspectRatio(bounds image.Rectangle) float64 {
+	w, h := float64(bounds.Dx()), float64(bounds.Dy())
+	return h / w
 }
 
 // findProjectRoot finds the project root directory by looking for go.mod.

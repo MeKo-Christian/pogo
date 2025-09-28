@@ -69,105 +69,37 @@ type Recognizer struct {
 
 // NewRecognizer creates a new text recognizer with the given configuration.
 func NewRecognizer(config Config) (*Recognizer, error) {
-	if config.ModelPath == "" {
-		return nil, errors.New("model path cannot be empty")
-	}
-	if config.DictPath == "" && len(config.DictPaths) == 0 {
-		return nil, errors.New("dictionary path cannot be empty")
+	if err := validateRecognizerConfig(config); err != nil {
+		return nil, err
 	}
 
-	if _, err := os.Stat(config.ModelPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("model file not found: %s", config.ModelPath)
-	}
-	if len(config.DictPaths) > 0 {
-		for _, p := range config.DictPaths {
-			if _, err := os.Stat(p); os.IsNotExist(err) {
-				return nil, fmt.Errorf("dictionary file not found: %s", p)
-			}
-		}
-	} else {
-		if _, err := os.Stat(config.DictPath); os.IsNotExist(err) {
-			return nil, fmt.Errorf("dictionary file not found: %s", config.DictPath)
-		}
+	if err := initializeONNXRuntimeForRecognizer(); err != nil {
+		return nil, err
 	}
 
-	if err := setONNXLibraryPath(); err != nil {
-		return nil, fmt.Errorf("failed to set ONNX Runtime library path: %w", err)
-	}
-
-	if !onnxrt.IsInitialized() {
-		if err := onnxrt.InitializeEnvironment(); err != nil {
-			return nil, fmt.Errorf("failed to initialize ONNX Runtime: %w", err)
-		}
-	}
-
-	inputs, outputs, err := onnxrt.GetInputOutputInfo(config.ModelPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get model input/output info: %w", err)
-	}
-	if len(inputs) != 1 {
-		return nil, fmt.Errorf("expected 1 input, got %d", len(inputs))
-	}
-	if len(outputs) != 1 {
-		return nil, fmt.Errorf("expected 1 output, got %d", len(outputs))
-	}
-
-	inputInfo := inputs[0]
-	outputInfo := outputs[0]
-	if len(inputInfo.Dimensions) != 4 {
-		return nil, fmt.Errorf("expected 4D input tensor, got %dD", len(inputInfo.Dimensions))
-	}
-	// Auto-adjust recognition height if model specifies a fixed height and config left it zero.
-	// Input is [N, C, H, W]. If H>0 and ImageHeight<=0, adopt model's H.
-	if h := inputInfo.Dimensions[2]; h > 0 && (config.ImageHeight <= 0) {
-		config.ImageHeight = int(h)
-	}
-
-	// Load charset/dictionary
-	var charset *Charset
-	if len(config.DictPaths) > 0 {
-		slog.Debug("Loading merged dictionaries", "count", len(config.DictPaths), "paths", config.DictPaths)
-		charset, err = LoadCharsets(config.DictPaths)
-	} else {
-		slog.Debug("Loading single dictionary", "path", config.DictPath)
-		charset, err = LoadCharset(config.DictPath)
-	}
+	inputInfo, outputInfo, err := getModelInfoForRecognizer(config.ModelPath)
 	if err != nil {
 		return nil, err
 	}
-	slog.Debug("Dictionary loaded successfully", "charset_size", charset.Size())
 
-	// Create session options
-	sessionOptions, err := onnxrt.NewSessionOptions()
+	if len(inputInfo.Dimensions) != 4 {
+		return nil, fmt.Errorf("expected 4D input tensor, got %dD", len(inputInfo.Dimensions))
+	}
+
+	// Auto-adjust recognition height if model specifies a fixed height and config left it zero.
+	// Input is [N, C, H, W]. If H>0 and ImageHeight<=0, adopt model's H.
+	if h := inputInfo.Dimensions[2]; h > 0 && config.ImageHeight <= 0 {
+		config.ImageHeight = int(h)
+	}
+
+	charset, err := loadCharsetForRecognizer(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create session options: %w", err)
-	}
-	defer func() {
-		if err := sessionOptions.Destroy(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error destroying session options: %v\n", err)
-		}
-	}()
-
-	// Configure GPU acceleration if requested
-	if err := onnx.ConfigureSessionForGPU(sessionOptions, config.GPU); err != nil {
-		return nil, fmt.Errorf("failed to configure GPU: %w", err)
+		return nil, err
 	}
 
-	if config.NumThreads > 0 {
-		if err := sessionOptions.SetIntraOpNumThreads(config.NumThreads); err != nil {
-			return nil, fmt.Errorf("failed to set thread count: %w", err)
-		}
-	}
-
-	// Create ONNX session
-	session, err := onnxrt.NewDynamicAdvancedSession(
-		config.ModelPath,
-		[]string{inputInfo.Name},
-		[]string{outputInfo.Name},
-		sessionOptions,
-	)
+	session, err := createONNXSessionForRecognizer(config, inputInfo, outputInfo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create ONNX session: %w", err)
+		return nil, err
 	}
 
 	r := &Recognizer{
@@ -178,6 +110,125 @@ func NewRecognizer(config Config) (*Recognizer, error) {
 		charset:    charset,
 	}
 	return r, nil
+}
+
+func validateRecognizerConfig(config Config) error {
+	if config.ModelPath == "" {
+		return errors.New("model path cannot be empty")
+	}
+	if config.DictPath == "" && len(config.DictPaths) == 0 {
+		return errors.New("dictionary path cannot be empty")
+	}
+
+	if _, err := os.Stat(config.ModelPath); os.IsNotExist(err) {
+		return fmt.Errorf("model file not found: %s", config.ModelPath)
+	}
+
+	if len(config.DictPaths) > 0 {
+		for _, p := range config.DictPaths {
+			if _, err := os.Stat(p); os.IsNotExist(err) {
+				return fmt.Errorf("dictionary file not found: %s", p)
+			}
+		}
+	} else {
+		if _, err := os.Stat(config.DictPath); os.IsNotExist(err) {
+			return fmt.Errorf("dictionary file not found: %s", config.DictPath)
+		}
+	}
+	return nil
+}
+
+func initializeONNXRuntimeForRecognizer() error {
+	if err := setONNXLibraryPath(); err != nil {
+		return fmt.Errorf("failed to set ONNX Runtime library path: %w", err)
+	}
+
+	if !onnxrt.IsInitialized() {
+		if err := onnxrt.InitializeEnvironment(); err != nil {
+			return fmt.Errorf("failed to initialize ONNX Runtime: %w", err)
+		}
+	}
+	return nil
+}
+
+func getModelInfoForRecognizer(modelPath string) (onnxrt.InputOutputInfo, onnxrt.InputOutputInfo, error) {
+	inputs, outputs, err := onnxrt.GetInputOutputInfo(modelPath)
+	if err != nil {
+		return onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{},
+			fmt.Errorf("failed to get model input/output info: %w", err)
+	}
+	if len(inputs) != 1 {
+		return onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{}, fmt.Errorf("expected 1 input, got %d", len(inputs))
+	}
+	if len(outputs) != 1 {
+		return onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{}, fmt.Errorf("expected 1 output, got %d", len(outputs))
+	}
+	return inputs[0], outputs[0], nil
+}
+
+func loadCharsetForRecognizer(config Config) (*Charset, error) {
+	var charset *Charset
+	var err error
+
+	if len(config.DictPaths) > 0 {
+		slog.Debug("Loading merged dictionaries", "count", len(config.DictPaths), "paths", config.DictPaths)
+		charset, err = LoadCharsets(config.DictPaths)
+	} else {
+		slog.Debug("Loading single dictionary", "path", config.DictPath)
+		charset, err = LoadCharset(config.DictPath)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Debug("Dictionary loaded successfully", "charset_size", charset.Size())
+	return charset, nil
+}
+
+func createONNXSessionForRecognizer(
+	config Config,
+	inputInfo, outputInfo onnxrt.InputOutputInfo,
+) (*onnxrt.DynamicAdvancedSession, error) {
+	sessionOptions, err := onnxrt.NewSessionOptions()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create session options: %w", err)
+	}
+	defer func() {
+		if err := sessionOptions.Destroy(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error destroying session options: %v\n", err)
+		}
+	}()
+
+	if err := configureSessionOptionsForRecognizer(sessionOptions, config); err != nil {
+		return nil, err
+	}
+
+	session, err := onnxrt.NewDynamicAdvancedSession(
+		config.ModelPath,
+		[]string{inputInfo.Name},
+		[]string{outputInfo.Name},
+		sessionOptions,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ONNX session: %w", err)
+	}
+
+	return session, nil
+}
+
+func configureSessionOptionsForRecognizer(sessionOptions *onnxrt.SessionOptions, config Config) error {
+	if err := onnx.ConfigureSessionForGPU(sessionOptions, config.GPU); err != nil {
+		return fmt.Errorf("failed to configure GPU: %w", err)
+	}
+
+	if config.NumThreads > 0 {
+		if err := sessionOptions.SetIntraOpNumThreads(config.NumThreads); err != nil {
+			return fmt.Errorf("failed to set thread count: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Close releases resources used by the recognizer.

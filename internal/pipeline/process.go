@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/MeKo-Tech/pogo/internal/detector"
 	"github.com/MeKo-Tech/pogo/internal/pdf"
 	"github.com/MeKo-Tech/pogo/internal/recognizer"
 	"github.com/MeKo-Tech/pogo/internal/utils"
@@ -90,27 +91,15 @@ func (p *Pipeline) ProcessImage(img image.Image) (*OCRImageResult, error) {
 	return p.ProcessImageContext(context.Background(), img)
 }
 
-// ProcessImageContext is like ProcessImage but allows cancellation via context.
-func (p *Pipeline) ProcessImageContext(ctx context.Context, img image.Image) (*OCRImageResult, error) {
-	if p == nil || p.Detector == nil || p.Recognizer == nil {
-		return nil, errors.New("pipeline not initialized")
-	}
-	if img == nil {
-		return nil, errors.New("input image is nil")
-	}
-
-	bounds := img.Bounds()
-	slog.Debug("Starting image processing", "width", bounds.Dx(), "height", bounds.Dy())
-
-	totalStart := time.Now()
-
-	// Optional document orientation detection + rotation
+// applyOrientationDetection applies orientation detection and rotation if enabled.
+func (p *Pipeline) applyOrientationDetection(ctx context.Context, img image.Image) (image.Image, int, float64, error) {
 	working := img
 	var appliedAngle int
 	var appliedConf float64
+
 	if p.Orienter != nil && (p.cfg.Orientation.Enabled || p.cfg.EnableOrientation) {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, 0, 0, err
 		}
 		slog.Debug("Running orientation detection")
 		if res, err := p.Orienter.Predict(img); err == nil {
@@ -137,52 +126,75 @@ func (p *Pipeline) ProcessImageContext(ctx context.Context, img image.Image) (*O
 		}
 	}
 
-	// Optional rectification (minimal CPU-only). Currently returns original image
-	// while exercising model path, so it is safe to enable.
+	return working, appliedAngle, appliedConf, nil
+}
+
+// applyRectification applies document rectification if enabled.
+func (p *Pipeline) applyRectification(ctx context.Context, img image.Image) (image.Image, error) {
 	if p.Rectifier != nil && p.cfg.Rectification.Enabled {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		slog.Debug("Running document rectification")
-		if rxImg, err := p.Rectifier.Apply(working); err == nil && rxImg != nil {
-			working = rxImg
+		if rxImg, err := p.Rectifier.Apply(img); err == nil && rxImg != nil {
 			slog.Debug("Document rectification applied")
+			return rxImg, nil
 		} else if err != nil {
 			slog.Debug("Document rectification failed", "error", err)
 		}
 	}
-	// Detection
+	return img, nil
+}
+
+// performDetection runs text detection on the image.
+func (p *Pipeline) performDetection(ctx context.Context, img image.Image) ([]detector.DetectedRegion, int64, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	slog.Debug("Starting text detection")
 	detStart := time.Now()
-	regions, err := p.Detector.DetectRegions(working)
+	regions, err := p.Detector.DetectRegions(img)
 	if err != nil {
-		return nil, fmt.Errorf("detection failed: %w", err)
+		return nil, 0, fmt.Errorf("detection failed: %w", err)
 	}
 	detNs := time.Since(detStart).Nanoseconds()
 	slog.Debug("Text detection completed", "regions_found", len(regions), "duration_ms", detNs/1000000)
+	return regions, detNs, nil
+}
 
-	// Recognition (batch)
+// performRecognition runs text recognition on detected regions.
+func (p *Pipeline) performRecognition(ctx context.Context, img image.Image,
+	regions []detector.DetectedRegion,
+) ([]recognizer.Result, int64, error) {
 	recStart := time.Now()
 	var recResults []recognizer.Result
 	if len(regions) > 0 {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		slog.Debug("Starting text recognition", "regions_count", len(regions))
-		recResults, err = p.Recognizer.RecognizeBatch(working, regions)
+		var err error
+		recResults, err = p.Recognizer.RecognizeBatch(img, regions)
 		if err != nil {
-			return nil, fmt.Errorf("recognition failed: %w", err)
+			return nil, 0, fmt.Errorf("recognition failed: %w", err)
 		}
 		slog.Debug("Text recognition completed", "duration_ms", time.Since(recStart).Nanoseconds()/1000000)
 	} else {
 		slog.Debug("No text regions detected, skipping recognition")
 	}
 	recNs := time.Since(recStart).Nanoseconds()
+	return recResults, recNs, nil
+}
 
-	// Aggregate results
+// buildImageResult builds the final OCRImageResult from detection and recognition results.
+func (p *Pipeline) buildImageResult(
+	img image.Image,
+	regions []detector.DetectedRegion,
+	recResults []recognizer.Result,
+	appliedAngle int,
+	appliedConf float64,
+	detNs, recNs, totalNs int64,
+) *OCRImageResult {
 	out := &OCRImageResult{}
 	// Report original image dimensions; if rotated, transform regions back
 	ob := img.Bounds()
@@ -198,78 +210,143 @@ func (p *Pipeline) ProcessImageContext(ctx context.Context, img image.Image) (*O
 	if p.cfg.Recognizer.Language != "" {
 		cleanOpts.Language = p.cfg.Recognizer.Language
 	}
+
 	for i, r := range regions {
-		var reg OCRRegionResult
-		// geometry (transform back to original orientation if applied)
-		toOriginal := func(x, y float64) (float64, float64) {
-			switch appliedAngle {
-			case 90:
-				return float64(ob.Dx()-1) - y, x
-			case 180:
-				return float64(ob.Dx()-1) - x, float64(ob.Dy()-1) - y
-			case 270:
-				return y, float64(ob.Dy()-1) - x
-			default:
-				return x, y
-			}
-		}
-		// Transform AABB by mapping its corners
-		bx := float64(r.Box.MinX)
-		by := float64(r.Box.MinY)
-		bw := float64(r.Box.Width())
-		bh := float64(r.Box.Height())
-		x1, y1 := toOriginal(bx, by)
-		x2, y2 := toOriginal(bx+bw, by)
-		x3, y3 := toOriginal(bx+bw, by+bh)
-		x4, y4 := toOriginal(bx, by+bh)
-		minX := minf4(x1, x2, x3, x4)
-		maxX := maxf4(x1, x2, x3, x4)
-		minY := minf4(y1, y2, y3, y4)
-		maxY := maxf4(y1, y2, y3, y4)
-		reg.Box = struct{ X, Y, W, H int }{
-			X: int(minX + 0.5),
-			Y: int(minY + 0.5),
-			W: int(maxX - minX + 0.5),
-			H: int(maxY - minY + 0.5),
-		}
-		reg.Polygon = make([]struct{ X, Y float64 }, len(r.Polygon))
-		for j, pt := range r.Polygon {
-			ox, oy := toOriginal(pt.X, pt.Y)
-			reg.Polygon[j] = struct{ X, Y float64 }{ox, oy}
-		}
-		reg.DetConfidence = r.Confidence
+		reg := p.buildRegionResult(r, recResults, i, appliedAngle, ob, cleanOpts)
 		detSum += r.Confidence
-		// recognition mapping
-		if i < len(recResults) {
-			rr := recResults[i]
-			text := recognizer.PostProcessText(rr.Text, cleanOpts)
-			reg.Text = text
-			reg.RecConfidence = rr.Confidence
-			reg.CharConfidences = rr.CharConfidences
-			reg.Rotated = rr.Rotated
-			// language detection (heuristic, post-clean)
-			reg.Language = recognizer.DetectLanguage(text)
-			reg.Timing.RecognizePreprocessNs = rr.TimingNs.Preprocess
-			reg.Timing.RecognizeModelNs = rr.TimingNs.Model
-			reg.Timing.RecognizeDecodeNs = rr.TimingNs.Decode
-			reg.Timing.RecognizeTotalNs = rr.TimingNs.Total
-		}
 		out.Regions = append(out.Regions, reg)
 	}
+
 	if len(regions) > 0 {
 		out.AvgDetConf = detSum / float64(len(regions))
 	}
 	out.Processing.DetectionNs = detNs
 	out.Processing.RecognitionNs = recNs
-	out.Processing.TotalNs = time.Since(totalStart).Nanoseconds()
+	out.Processing.TotalNs = totalNs
+
+	return out
+}
+
+// buildRegionResult creates a single OCRRegionResult from detection and recognition data.
+func (p *Pipeline) buildRegionResult(
+	r detector.DetectedRegion,
+	recResults []recognizer.Result,
+	index int,
+	appliedAngle int,
+	originalBounds image.Rectangle,
+	cleanOpts recognizer.CleanOptions,
+) OCRRegionResult {
+	var reg OCRRegionResult
+
+	// Transform coordinates back to original orientation if applied
+	toOriginal := func(x, y float64) (float64, float64) {
+		switch appliedAngle {
+		case 90:
+			return float64(originalBounds.Dx()-1) - y, x
+		case 180:
+			return float64(originalBounds.Dx()-1) - x, float64(originalBounds.Dy()-1) - y
+		case 270:
+			return y, float64(originalBounds.Dy()-1) - x
+		default:
+			return x, y
+		}
+	}
+
+	// Transform AABB by mapping its corners
+	bx := float64(r.Box.MinX)
+	by := float64(r.Box.MinY)
+	bw := float64(r.Box.Width())
+	bh := float64(r.Box.Height())
+	x1, y1 := toOriginal(bx, by)
+	x2, y2 := toOriginal(bx+bw, by)
+	x3, y3 := toOriginal(bx+bw, by+bh)
+	x4, y4 := toOriginal(bx, by+bh)
+	minX := minf4(x1, x2, x3, x4)
+	maxX := maxf4(x1, x2, x3, x4)
+	minY := minf4(y1, y2, y3, y4)
+	maxY := maxf4(y1, y2, y3, y4)
+	reg.Box = struct{ X, Y, W, H int }{
+		X: int(minX + 0.5),
+		Y: int(minY + 0.5),
+		W: int(maxX - minX + 0.5),
+		H: int(maxY - minY + 0.5),
+	}
+
+	reg.Polygon = make([]struct{ X, Y float64 }, len(r.Polygon))
+	for j, pt := range r.Polygon {
+		ox, oy := toOriginal(pt.X, pt.Y)
+		reg.Polygon[j] = struct{ X, Y float64 }{ox, oy}
+	}
+
+	reg.DetConfidence = r.Confidence
+
+	// Add recognition results if available
+	if index < len(recResults) {
+		rr := recResults[index]
+		text := recognizer.PostProcessText(rr.Text, cleanOpts)
+		reg.Text = text
+		reg.RecConfidence = rr.Confidence
+		reg.CharConfidences = rr.CharConfidences
+		reg.Rotated = rr.Rotated
+		reg.Language = recognizer.DetectLanguage(text)
+		reg.Timing.RecognizePreprocessNs = rr.TimingNs.Preprocess
+		reg.Timing.RecognizeModelNs = rr.TimingNs.Model
+		reg.Timing.RecognizeDecodeNs = rr.TimingNs.Decode
+		reg.Timing.RecognizeTotalNs = rr.TimingNs.Total
+	}
+
+	return reg
+}
+
+// ProcessImageContext is like ProcessImage but allows cancellation via context.
+func (p *Pipeline) ProcessImageContext(ctx context.Context, img image.Image) (*OCRImageResult, error) {
+	if p == nil || p.Detector == nil || p.Recognizer == nil {
+		return nil, errors.New("pipeline not initialized")
+	}
+	if img == nil {
+		return nil, errors.New("input image is nil")
+	}
+
+	bounds := img.Bounds()
+	slog.Debug("Starting image processing", "width", bounds.Dx(), "height", bounds.Dy())
+
+	totalStart := time.Now()
+
+	// Apply orientation detection and rotation
+	working, appliedAngle, appliedConf, err := p.applyOrientationDetection(ctx, img)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply rectification
+	working, err = p.applyRectification(ctx, working)
+	if err != nil {
+		return nil, err
+	}
+
+	// Perform detection
+	regions, detNs, err := p.performDetection(ctx, working)
+	if err != nil {
+		return nil, err
+	}
+
+	// Perform recognition
+	recResults, recNs, err := p.performRecognition(ctx, working, regions)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build final result
+	totalNs := time.Since(totalStart).Nanoseconds()
+	result := p.buildImageResult(img, regions, recResults, appliedAngle, appliedConf, detNs, recNs, totalNs)
 
 	slog.Debug("Image processing completed",
-		"total_duration_ms", out.Processing.TotalNs/1000000,
+		"total_duration_ms", result.Processing.TotalNs/1000000,
 		"detection_duration_ms", detNs/1000000,
 		"recognition_duration_ms", recNs/1000000,
-		"regions_processed", len(out.Regions))
+		"regions_processed", len(result.Regions))
 
-	return out, nil
+	return result, nil
 }
 
 // ProcessImages processes multiple images sequentially and returns results.
