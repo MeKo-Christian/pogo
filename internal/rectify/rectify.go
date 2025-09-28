@@ -506,7 +506,7 @@ func dumpMaskPNG(dir string, mask []float32, w, h int, thr float64) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return png.Encode(f, img)
 }
 
@@ -530,7 +530,7 @@ func dumpOverlayPNG(dir string, src image.Image, quad []utils.Point) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return png.Encode(f, canvas)
 }
 
@@ -580,6 +580,6 @@ func dumpComparePNG(dir string, src image.Image, srcQuad []utils.Point, dst imag
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return png.Encode(f, canvas)
 }

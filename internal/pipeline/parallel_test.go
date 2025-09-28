@@ -32,7 +32,7 @@ func TestProcessImagesParallel_EmptyInput(t *testing.T) {
 	config := DefaultParallelConfig()
 
 	results, err := p.ProcessImagesParallel(nil, config)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, results)
 	assert.Contains(t, err.Error(), "no images provided")
 }
@@ -43,7 +43,7 @@ func TestProcessImagesParallel_NilPipeline(t *testing.T) {
 	images := []image.Image{testutil.CreateTestImage(100, 100, color.White)}
 
 	results, err := p.ProcessImagesParallel(images, config)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, results)
 	assert.Contains(t, err.Error(), "pipeline not initialized")
 }
@@ -155,7 +155,7 @@ func TestProcessImagesParallel_WithProgressCallback(t *testing.T) {
 func TestProcessImagesParallel_WithContextCancellation(t *testing.T) {
 	// Create mock pipeline with delay
 	p := createMockPipelineWithDelay(t, 100*time.Millisecond)
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	config := DefaultParallelConfig()
 	config.MaxWorkers = 2
@@ -170,7 +170,7 @@ func TestProcessImagesParallel_WithContextCancellation(t *testing.T) {
 	defer cancel()
 
 	results, err := p.ProcessImagesParallelContext(ctx, images, config)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, results)
 	assert.Contains(t, err.Error(), "context deadline exceeded")
 }
@@ -182,7 +182,7 @@ func TestProcessImagesParallel_WithErrorHandler(t *testing.T) {
 		detector:   &mockDetector{},
 		recognizer: &mockRecognizerWithImageError{},
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	errorCalls := make([]struct {
 		index int
@@ -210,7 +210,7 @@ func TestProcessImagesParallel_WithErrorHandler(t *testing.T) {
 	}
 
 	results, err := p.ProcessImagesParallel(images, config)
-	assert.Error(t, err) // Should return first error
+	require.Error(t, err) // Should return first error
 	assert.NotNil(t, results)
 
 	mu.Lock()
@@ -224,7 +224,7 @@ func TestProcessImagesParallel_WithErrorHandler(t *testing.T) {
 func TestProcessImagesParallelBatched(t *testing.T) {
 	// Create mock pipeline
 	p := createMockPipeline(t)
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	config := DefaultParallelConfig()
 	config.MaxWorkers = 2
@@ -629,14 +629,6 @@ func createMockPipelineWithDelay(t *testing.T, delay time.Duration) *TestPipelin
 	}
 }
 
-func createMockPipelineWithErrors(t *testing.T, errors map[int]error) *TestPipeline {
-	return &TestPipeline{
-		cfg:        Config{},
-		detector:   &mockDetector{},
-		recognizer: &mockRecognizerWithErrors{errors: errors, callCount: 0},
-	}
-}
-
 // Mock detector.
 type mockDetector struct{}
 
@@ -677,32 +669,6 @@ func (m *mockRecognizer) Close() error                             { return nil 
 func (m *mockRecognizer) GetModelInfo() map[string]interface{}     { return map[string]interface{}{} }
 func (m *mockRecognizer) Warmup(iterations int) error              { return nil }
 func (m *mockRecognizer) SetTextLineOrienter(orienter interface{}) {}
-
-// Mock recognizer with errors.
-type mockRecognizerWithErrors struct {
-	errors    map[int]error
-	callCount int
-	mu        sync.Mutex
-}
-
-func (m *mockRecognizerWithErrors) RecognizeBatch(img image.Image, regions []detector.DetectedRegion) ([]recognizer.Result, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if err, exists := m.errors[m.callCount]; exists {
-		m.callCount++
-		return nil, err
-	}
-	m.callCount++
-	return []recognizer.Result{}, nil
-}
-
-func (m *mockRecognizerWithErrors) Close() error { return nil }
-func (m *mockRecognizerWithErrors) GetModelInfo() map[string]any {
-	return map[string]interface{}{}
-}
-func (m *mockRecognizerWithErrors) Warmup(iterations int) error      { return nil }
-func (m *mockRecognizerWithErrors) SetTextLineOrienter(orienter any) {}
 
 // Mock recognizer that fails based on image properties.
 type mockRecognizerWithImageError struct{}

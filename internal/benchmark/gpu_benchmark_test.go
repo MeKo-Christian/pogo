@@ -56,7 +56,7 @@ func benchmarkOCRMode(b *testing.B, imagePath string, useGPU bool) {
 	if err != nil {
 		b.Fatalf("Failed to create pipeline: %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	// Warmup
 	_, _ = p.ProcessImage(img)

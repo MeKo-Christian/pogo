@@ -362,7 +362,9 @@ func BenchmarkHealthResponse_Marshal(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		_, _ = json.Marshal(response)
+		if _, err := json.Marshal(response); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -380,6 +382,8 @@ func BenchmarkOCRResponse_Marshal(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		_, _ = json.Marshal(response)
+		if _, err := json.Marshal(response); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

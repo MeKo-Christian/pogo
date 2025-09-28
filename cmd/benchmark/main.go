@@ -88,7 +88,7 @@ func saveResultsToFile(filename string, results []benchmark.GPUVSCPUBenchmarkRes
 
 	// Write individual results
 	for _, result := range results {
-		fmt.Fprintf(file, "%s\n", result.String())
+		_, _ = fmt.Fprintf(file, "%s\n", result.String())
 	}
 
 	_, _ = fmt.Fprintln(file)
@@ -102,7 +102,7 @@ func saveResultsToFile(filename string, results []benchmark.GPUVSCPUBenchmarkRes
 			gpuMs = float64(result.GPUResult.Duration.Nanoseconds()) / 1e6
 		}
 
-		fmt.Fprintf(file, "%s,%s,%.2f,%.2f,%.2f,%d,%t\n",
+		_, _ = fmt.Fprintf(file, "%s,%s,%.2f,%.2f,%.2f,%d,%t\n",
 			filepath.Base(result.ImagePath),
 			result.ImageSize,
 			cpuMs,

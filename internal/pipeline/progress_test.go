@@ -216,8 +216,8 @@ func TestProgressTracker(t *testing.T) {
 	assert.Equal(t, 0, stats.Current)
 	assert.Equal(t, 0, stats.Completed)
 	assert.Equal(t, 0, stats.Failed)
-	assert.Equal(t, 0.0, stats.Rate)
-	assert.Equal(t, 0.0, tracker.PercentComplete())
+	assert.InDelta(t, 0.0, stats.Rate, 0.001)
+	assert.InDelta(t, 0.0, tracker.PercentComplete(), 0.001)
 
 	// Update progress
 	time.Sleep(10 * time.Millisecond) // Ensure some time passes
@@ -270,7 +270,7 @@ func TestProgressTracker_ZeroTotal(t *testing.T) {
 	tracker := NewProgressTracker(0)
 
 	tracker.Update(0, 0, 0)
-	assert.Equal(t, 0.0, tracker.PercentComplete())
+	assert.InDelta(t, 0.0, tracker.PercentComplete(), 0.001)
 
 	stats := tracker.GetStats()
 	assert.Equal(t, 0, stats.Total)
@@ -293,14 +293,4 @@ func TestProgressTracker_RateCalculation(t *testing.T) {
 	if stats.Rate > 0 && stats.Current < stats.Total {
 		assert.Greater(t, stats.EstimatedTotal, time.Duration(0))
 	}
-}
-
-// Helper function to capture console output for testing.
-func captureConsoleOutput(callback *ConsoleProgressCallback, fn func()) string {
-	// This is a simplified version - in real tests you might want to
-	// use a more sophisticated output capture mechanism
-	var buf bytes.Buffer
-	callback.writer = &buf
-	fn()
-	return buf.String()
 }

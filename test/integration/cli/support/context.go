@@ -180,13 +180,13 @@ func (testCtx *TestContext) GetTempDir(prefix string) string {
 }
 
 // getTestImagePath returns the absolute path to a test image file.
-func (testCtx *TestContext) getTestImagePath(filename string) (string, error) {
+func (testCtx *TestContext) getTestImagePath() (string, error) {
 	projectRoot, err := testutil.GetProjectRoot()
 	if err != nil {
 		return "", fmt.Errorf("failed to find project root: %w", err)
 	}
 
-	imagePath := filepath.Join(projectRoot, "testdata", "images", filename)
+	imagePath := filepath.Join(projectRoot, "testdata", "images", "simple_text.png")
 
 	// Check if the image exists
 	if _, err := os.Stat(imagePath); os.IsNotExist(err) {

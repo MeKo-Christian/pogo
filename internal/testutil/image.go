@@ -140,7 +140,7 @@ func LoadImage(t *testing.T, path string) image.Image {
 
 	file, err := os.Open(path) //nolint:gosec // G304: Test file reading with controlled path
 	require.NoError(t, err, "Failed to open image file %s", path)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	img, _, err := image.Decode(file)
 	require.NoError(t, err, "Failed to decode image")
@@ -305,7 +305,7 @@ func LoadImageFile(path string) (image.Image, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open image file %s: %w", path, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	img, _, err := image.Decode(file)
 	if err != nil {

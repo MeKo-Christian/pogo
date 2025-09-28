@@ -100,7 +100,7 @@ func (testCtx *TestContext) theHealthEndpointShouldBeAccessibleOnPort(port int) 
 	if err != nil {
 		return fmt.Errorf("failed to call health endpoint on port %d: %w", port, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("health endpoint on port %d returned status %d", port, resp.StatusCode)
@@ -125,7 +125,7 @@ func (testCtx *TestContext) theServerIsRunningOnPort(port int) error {
 
 // iPOSTAnImageTo uploads an image to the specified endpoint.
 func (testCtx *TestContext) iPOSTAnImageTo(endpoint string) error {
-	imagePath, err := testCtx.getTestImagePath("simple_text.png")
+	imagePath, err := testCtx.getTestImagePath()
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (testCtx *TestContext) iPOSTAnImageTo(endpoint string) error {
 
 // iPOSTAnImageToWithFormat uploads an image with specific format.
 func (testCtx *TestContext) iPOSTAnImageToWithFormat(endpoint, format string) error {
-	imagePath, err := testCtx.getTestImagePath("simple_text.png")
+	imagePath, err := testCtx.getTestImagePath()
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func (testCtx *TestContext) iPOSTAnImageToWithFormat(endpoint, format string) er
 
 // iPOSTAnImageToWithOverlayEnabled uploads an image with overlay enabled.
 func (testCtx *TestContext) iPOSTAnImageToWithOverlayEnabled(endpoint string) error {
-	imagePath, err := testCtx.getTestImagePath("simple_text.png")
+	imagePath, err := testCtx.getTestImagePath()
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (testCtx *TestContext) uploadImageToEndpointWithOverlay(endpoint, imagePath
 	if err != nil {
 		return fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
@@ -296,7 +296,7 @@ func (testCtx *TestContext) uploadImageToEndpoint(endpoint, imagePath, format st
 	if err != nil {
 		return fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
@@ -403,7 +403,7 @@ func (testCtx *TestContext) iGETEndpoint(endpoint string) error {
 		testCtx.LastExitCode = 1
 		return nil // Don't return error here, let verification steps handle it
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -514,7 +514,7 @@ func (testCtx *TestContext) theServerShouldStopListeningForNewRequests() error {
 		// This is expected during shutdown
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return errors.New("server is still accepting new requests")
 }
@@ -593,7 +593,7 @@ func (testCtx *TestContext) iPOSTAnInvalidFileTo(endpoint string) error {
 	if err != nil {
 		return fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
@@ -693,7 +693,7 @@ func (testCtx *TestContext) aServiceIsAlreadyRunningOnPortHTTP(port int) error {
 func (testCtx *TestContext) iRestartTheServerWith(command string) error {
 	// Stop existing server if running
 	if testCtx.ServerProcess != nil {
-		testCtx.StopServer() //nolint:gosec // G104: Test cleanup, error typically ignored
+		_ = testCtx.StopServer()
 	}
 	// Start with new command
 	return testCtx.iStartTheServerWith(command)
@@ -723,7 +723,7 @@ func (testCtx *TestContext) makeHTTPRequest(method, endpoint string, _body inter
 		testCtx.LastExitCode = 1
 		return nil // Don't return error here, let verification steps handle it
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -762,7 +762,7 @@ func (testCtx *TestContext) iSendMultipleConcurrentRequestsTo(endpoint string) e
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			imagePath, err := testCtx.getTestImagePath("simple_text.png")
+			imagePath, err := testCtx.getTestImagePath()
 			if err != nil {
 				errChan <- err
 				return
@@ -835,7 +835,7 @@ func (testCtx *TestContext) theServerShouldBeAccessibleFromExternalConnections()
 	if err != nil {
 		return fmt.Errorf("server not accessible from external connection: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("external connection returned status %d", resp.StatusCode)
@@ -870,7 +870,7 @@ func (testCtx *TestContext) theServerShouldStartOnHostAndPort(host string, port 
 	if err != nil {
 		return fmt.Errorf("server not responding on %s:%d: %w", host, port, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("server on %s:%d returned status %d", host, port, resp.StatusCode)
@@ -883,7 +883,7 @@ func (testCtx *TestContext) theServerShouldStartOnHostAndPort(host string, port 
 func (testCtx *TestContext) theServerWasRunningAndCrashed() error {
 	// Simulate server crash by stopping it abruptly
 	if testCtx.ServerProcess != nil {
-		testCtx.ServerProcess.Kill() //nolint:gosec // G104: Test cleanup, error typically ignored
+		_ = testCtx.ServerProcess.Kill()
 		testCtx.ServerProcess = nil
 	}
 	return nil

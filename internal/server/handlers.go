@@ -36,7 +36,9 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		fmt.Fprintf(os.Stderr, "Error encoding health response: %v\n", err)
+	}
 }
 
 // modelsHandler returns information about available models.
@@ -64,7 +66,9 @@ func (s *Server) modelsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		fmt.Fprintf(os.Stderr, "Error encoding models response: %v\n", err)
+	}
 }
 
 // ocrImageHandler processes image OCR requests.
@@ -186,18 +190,9 @@ func (s *Server) ocrImageHandler(w http.ResponseWriter, r *http.Request) {
 	obj := struct {
 		OCR *pipeline.OCRImageResult `json:"ocr"`
 	}{OCR: res}
-	_ = json.NewEncoder(w).Encode(obj)
-}
-
-// resolveColor chooses a color by trying a primary value, then a secondary, then a default.
-func (s *Server) resolveColor(primary, secondary string, def color.RGBA) color.Color {
-	if c := parseHexColor(primary); c != nil {
-		return c
+	if err := json.NewEncoder(w).Encode(obj); err != nil {
+		fmt.Fprintf(os.Stderr, "Error encoding OCR image response: %v\n", err)
 	}
-	if c := parseHexColor(secondary); c != nil {
-		return c
-	}
-	return def
 }
 
 // ocrPdfHandler processes PDF OCR requests.
@@ -270,7 +265,9 @@ func (s *Server) ocrPdfHandler(w http.ResponseWriter, r *http.Request) {
 	obj := struct {
 		OCR *pipeline.OCRPDFResult `json:"ocr"`
 	}{OCR: res}
-	_ = json.NewEncoder(w).Encode(obj)
+	if err := json.NewEncoder(w).Encode(obj); err != nil {
+		fmt.Fprintf(os.Stderr, "Error encoding OCR PDF response: %v\n", err)
+	}
 }
 
 // writePDFTextResponse writes a plain text representation of PDF OCR results.

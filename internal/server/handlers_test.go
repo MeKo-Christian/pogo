@@ -114,7 +114,9 @@ func (ts *testServer) ocrImageHandlerMock(w http.ResponseWriter, r *http.Request
 	obj := struct {
 		OCR *pipeline.OCRImageResult `json:"ocr"`
 	}{OCR: res}
-	_ = json.NewEncoder(w).Encode(obj)
+	if err := json.NewEncoder(w).Encode(obj); err != nil {
+		http.Error(w, fmt.Sprintf("encoding failed: %v", err), http.StatusInternalServerError)
+	}
 }
 
 // mockPipeline is a simple mock implementation of the pipeline for testing.
@@ -230,37 +232,37 @@ func createMultipartFormRequest(
 	imageData []byte,
 	filename string,
 	extraFields map[string]string,
-) (*http.Request, string, error) {
+) (*http.Request, error) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
 	// Add image file
 	part, err := writer.CreateFormFile("image", filename)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	_, err = part.Write(imageData)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	// Add extra fields
 	for key, value := range extraFields {
 		err = writer.WriteField(key, value)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 	}
 
 	err = writer.Close()
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/ocr/image", &buf)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	return req, writer.FormDataContentType(), nil
+	return req, nil
 }
 
 // createMultipartPDFFormRequest creates a multipart form request with a PDF file.
@@ -474,7 +476,7 @@ func TestServer_OCRImageHandler_FormParsing(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create multipart form with large image
-		req, _, err := createMultipartFormRequest(imageData, "large.png", nil)
+		req, err := createMultipartFormRequest(imageData, "large.png", nil)
 		require.NoError(t, err)
 
 		w := httptest.NewRecorder()
@@ -489,7 +491,7 @@ func TestServer_OCRImageHandler_FormParsing(t *testing.T) {
 	t.Run("invalid image format", func(t *testing.T) {
 		// Create request with non-image data
 		invalidData := []byte("This is not an image")
-		req, _, err := createMultipartFormRequest(invalidData, "invalid.txt", nil)
+		req, err := createMultipartFormRequest(invalidData, "invalid.txt", nil)
 		require.NoError(t, err)
 
 		w := httptest.NewRecorder()
@@ -579,7 +581,7 @@ func TestServer_OCRImageHandler_OutputFormats(t *testing.T) {
 				extraFields["format"] = tt.format
 			}
 
-			req, _, err := createMultipartFormRequest(imageData, "test.png", extraFields)
+			req, err := createMultipartFormRequest(imageData, "test.png", extraFields)
 			require.NoError(t, err)
 
 			w := httptest.NewRecorder()
@@ -606,7 +608,7 @@ func TestServer_OCRImageHandler_OverlayDisabled(t *testing.T) {
 	imageData, err := encodeImageToPNG(testImage)
 	require.NoError(t, err)
 
-	req, _, err := createMultipartFormRequest(imageData, "test.png", map[string]string{"format": "overlay"})
+	req, err := createMultipartFormRequest(imageData, "test.png", map[string]string{"format": "overlay"})
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
@@ -794,7 +796,7 @@ func TestServer_Integration(t *testing.T) {
 		imageData, err := encodeImageToPNG(testImage)
 		require.NoError(t, err)
 
-		req, _, err := createMultipartFormRequest(imageData, "test.png", nil)
+		req, err := createMultipartFormRequest(imageData, "test.png", nil)
 		require.NoError(t, err)
 
 		// Update URL to match route

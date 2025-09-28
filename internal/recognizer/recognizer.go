@@ -301,11 +301,11 @@ func (r *Recognizer) Warmup(iterations int) error {
 		}
 		outputs := []onnxrt.Value{nil}
 		runErr := sess.Run([]onnxrt.Value{inputTensor}, outputs)
-		inputTensor.Destroy() //nolint:gosec // G104: Resource cleanup, error typically ignored
+		_ = inputTensor.Destroy()
 		if runErr == nil {
 			for _, o := range outputs {
 				if o != nil {
-					o.Destroy() //nolint:gosec // G104: Resource cleanup, error typically ignored
+					_ = o.Destroy()
 				}
 			}
 		} else {

@@ -59,8 +59,7 @@ func TestProcessor_ProcessPage_Logic(t *testing.T) {
 			},
 		}
 
-		result, duration, err := mockProcessor.processPage(1, images)
-		require.NoError(t, err)
+		result, duration := mockProcessor.processPage(1, images)
 		assert.Equal(t, 1, result.PageNumber)
 		assert.Equal(t, 200, result.Width)
 		assert.Equal(t, 300, result.Height)
@@ -91,8 +90,7 @@ func TestProcessor_ProcessPage_Logic(t *testing.T) {
 			},
 		}
 
-		result, _, err := mockProcessor.processPage(1, images)
-		require.NoError(t, err)
+		result, _ := mockProcessor.processPage(1, images)
 		assert.Equal(t, 400, result.Width)  // max width
 		assert.Equal(t, 300, result.Height) // max height
 		assert.Len(t, result.Images, 3)
@@ -104,7 +102,7 @@ type testProcessor struct {
 	mockRegions []detector.DetectedRegion
 }
 
-func (tp *testProcessor) processPage(_pageNum int, images []image.Image) (*PageResult, time.Duration, error) {
+func (tp *testProcessor) processPage(_pageNum int, images []image.Image) (*PageResult, time.Duration) {
 	startTime := time.Now()
 
 	imageResults := make([]ImageResult, 0, len(images))
@@ -161,7 +159,7 @@ func (tp *testProcessor) processPage(_pageNum int, images []image.Image) (*PageR
 		},
 	}
 
-	return pageResult, duration, nil
+	return pageResult, duration
 }
 
 func TestProcessor_ConfidenceCalculation(t *testing.T) {
@@ -206,8 +204,7 @@ func TestProcessor_ConfidenceCalculation(t *testing.T) {
 			mockProcessor := &testProcessor{mockRegions: tt.regions}
 			images := []image.Image{createTestImage(100, 100)}
 
-			result, _, err := mockProcessor.processPage(1, images)
-			require.NoError(t, err)
+			result, _ := mockProcessor.processPage(1, images)
 			require.Len(t, result.Images, 1)
 
 			assert.InDelta(t, tt.expectedConfidence, result.Images[0].Confidence, 0.001)
@@ -266,8 +263,7 @@ func TestProcessor_TimingMetrics(t *testing.T) {
 	}
 
 	images := []image.Image{createTestImage(100, 100)}
-	result, duration, err := mockProcessor.processPage(1, images)
-	require.NoError(t, err)
+	result, duration := mockProcessor.processPage(1, images)
 	assert.Greater(t, duration, time.Duration(0))
 	assert.Equal(t, result.Processing.DetectionTimeMs, duration.Milliseconds())
 	assert.Equal(t, result.Processing.TotalTimeMs, duration.Milliseconds())
@@ -289,7 +285,7 @@ func BenchmarkProcessor_ProcessPage(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		_, _, _ = mockProcessor.processPage(1, images)
+		_, _ = mockProcessor.processPage(1, images)
 	}
 }
 
@@ -304,7 +300,7 @@ func BenchmarkProcessor_ConfidenceCalculation(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		_, _, _ = mockProcessor.processPage(1, images)
+		_, _ = mockProcessor.processPage(1, images)
 	}
 }
 

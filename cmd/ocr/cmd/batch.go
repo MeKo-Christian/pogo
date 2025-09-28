@@ -67,7 +67,9 @@ func init() {
 
 	// Rectification flags (experimental)
 	batchCmd.Flags().Bool("rectify", false, "enable document rectification (experimental)")
-	batchCmd.Flags().String("rectify-model", models.GetLayoutModelPath("", models.LayoutUVDoc), "override rectification model path")
+	batchCmd.Flags().String("rectify-model",
+		models.GetLayoutModelPath("", models.LayoutUVDoc),
+		"override rectification model path")
 	batchCmd.Flags().Float64("rectify-mask-threshold", 0.5, "rectification mask threshold (0..1)")
 	batchCmd.Flags().Int("rectify-height", 1024, "rectified page output height (advisory)")
 	batchCmd.Flags().String("rectify-debug-dir", "", "directory to write rectification debug images (mask, overlay, compare)")

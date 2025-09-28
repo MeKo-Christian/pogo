@@ -55,10 +55,12 @@ func init() {
 	pdfCmd.Flags().Bool("detect-textline", false, "enable per-text-line orientation detection")
 	pdfCmd.Flags().Float64("textline-threshold", 0.6, "text line orientation confidence threshold (0..1)")
 	pdfCmd.Flags().Bool("rectify", false, "enable document rectification (experimental)")
-	pdfCmd.Flags().String("rectify-model", models.GetLayoutModelPath("", models.LayoutUVDoc), "override rectification model path")
+	pdfCmd.Flags().String("rectify-model",
+		models.GetLayoutModelPath("", models.LayoutUVDoc), "override rectification model path")
 	pdfCmd.Flags().Float64("rectify-mask-threshold", 0.5, "rectification mask threshold (0..1)")
 	pdfCmd.Flags().Int("rectify-height", 1024, "rectified page output height (advisory)")
-	pdfCmd.Flags().String("rectify-debug-dir", "", "directory to write rectification debug images (mask, overlay, compare)")
+	pdfCmd.Flags().String("rectify-debug-dir", "",
+		"directory to write rectification debug images (mask, overlay, compare)")
 }
 
 // processPDFs handles the main PDF processing logic.

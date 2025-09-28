@@ -395,7 +395,9 @@ func BenchmarkPageResult_Marshal(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		_, _ = json.Marshal(pageResult)
+		if _, err := json.Marshal(pageResult); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -432,6 +434,8 @@ func BenchmarkDocumentResult_Marshal(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		_, _ = json.Marshal(documentResult)
+		if _, err := json.Marshal(documentResult); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

@@ -17,7 +17,7 @@ func TestDefaultResourceConfig(t *testing.T) {
 
 	assert.Equal(t, uint64(0), config.MaxMemoryBytes)
 	assert.Equal(t, 0, config.MaxGoroutines)
-	assert.Equal(t, 0.8, config.MemoryThreshold)
+	assert.InDelta(t, 0.8, config.MemoryThreshold, 0.001)
 	assert.Equal(t, time.Second, config.MonitorInterval)
 	assert.True(t, config.EnableBackpressure)
 	assert.False(t, config.EnableAdaptiveScale)
@@ -36,7 +36,7 @@ func TestNewResourceManager(t *testing.T) {
 
 	assert.Equal(t, uint64(1024*1024), rm.maxMemoryBytes)
 	assert.Equal(t, 10, rm.maxGoroutines)
-	assert.Equal(t, 0.9, rm.memoryThreshold)
+	assert.InDelta(t, 0.9, rm.memoryThreshold, 0.001)
 	assert.NotNil(t, rm.goroutineSem)
 	assert.NotNil(t, rm.memoryMonitor)
 }
@@ -47,7 +47,7 @@ func TestNewResourceManager_InvalidThreshold(t *testing.T) {
 	}
 
 	rm := NewResourceManager(config)
-	assert.Equal(t, 0.8, rm.memoryThreshold) // Should default to 0.8
+	assert.InDelta(t, 0.8, rm.memoryThreshold, 0.001) // Should default to 0.8
 	rm.Stop()
 }
 
@@ -75,7 +75,7 @@ func TestResourceManager_AcquireReleaseGoroutine_NoLimit(t *testing.T) {
 
 	// Should acquire without blocking
 	err := rm.AcquireGoroutine(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Should release without error
 	rm.ReleaseGoroutine()
@@ -92,24 +92,24 @@ func TestResourceManager_AcquireReleaseGoroutine_WithLimit(t *testing.T) {
 
 	// Should acquire up to limit
 	err1 := rm.AcquireGoroutine(ctx)
-	assert.NoError(t, err1)
+	require.NoError(t, err1)
 
 	err2 := rm.AcquireGoroutine(ctx)
-	assert.NoError(t, err2)
+	require.NoError(t, err2)
 
 	// Third acquire should block, test with timeout
 	ctx3, cancel3 := context.WithTimeout(ctx, 10*time.Millisecond)
 	defer cancel3()
 
 	err3 := rm.AcquireGoroutine(ctx3)
-	assert.Error(t, err3)
+	require.Error(t, err3)
 	assert.Contains(t, err3.Error(), "context deadline exceeded")
 
 	// Release one and try again
 	rm.ReleaseGoroutine()
 
 	err4 := rm.AcquireGoroutine(ctx)
-	assert.NoError(t, err4)
+	require.NoError(t, err4)
 
 	// Clean up
 	rm.ReleaseGoroutine()
@@ -183,8 +183,6 @@ func TestResourceManager_GetStats(t *testing.T) {
 
 	stats := rm.GetStats()
 
-	assert.GreaterOrEqual(t, stats.CurrentMemoryBytes, uint64(0))
-	assert.GreaterOrEqual(t, stats.PeakMemoryBytes, uint64(0))
 	assert.GreaterOrEqual(t, stats.ActiveGoroutines, 0)
 	assert.GreaterOrEqual(t, stats.MonitoringDuration, time.Duration(0))
 }

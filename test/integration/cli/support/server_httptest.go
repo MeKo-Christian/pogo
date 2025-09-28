@@ -149,7 +149,7 @@ func (testCtx *TestContext) createTestHTTPServer(port int) error {
 		response := map[string]interface{}{
 			"status": "healthy",
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 
 	// Models endpoint
@@ -175,7 +175,7 @@ func (testCtx *TestContext) createTestHTTPServer(port int) error {
 				},
 			},
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 
 	// OCR image endpoint
@@ -202,7 +202,7 @@ func (testCtx *TestContext) createTestHTTPServer(port int) error {
 				return
 			}
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 
 		// Check if it's an invalid file (simulate invalid format check)
 		if strings.Contains(header.Filename, "invalid") || header.Size == 0 {
@@ -250,7 +250,7 @@ func (testCtx *TestContext) createTestHTTPServer(port int) error {
 				response["image_data"] = mockBase64ImageData
 			}
 
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 			return
 		}
 
@@ -277,15 +277,15 @@ func (testCtx *TestContext) createTestHTTPServer(port int) error {
 		switch format {
 		case "text":
 			w.Header().Set("Content-Type", "text/plain")
-			w.Write([]byte(result.Regions[0].Text))
+			_, _ = w.Write([]byte(result.Regions[0].Text))
 		case "csv":
 			w.Header().Set("Content-Type", "text/csv")
-			w.Write([]byte("text,confidence,x,y,w,h\n"))
+			_, _ = w.Write([]byte("text,confidence,x,y,w,h\n"))
 			for _, region := range result.Regions {
 				line := fmt.Sprintf("%s,%.2f,%d,%d,%d,%d\n",
 					region.Text, region.RecConfidence,
 					region.Box.X, region.Box.Y, region.Box.W, region.Box.H)
-				w.Write([]byte(line))
+				_, _ = w.Write([]byte(line))
 			}
 		default: // json
 			w.Header().Set("Content-Type", "application/json")
@@ -308,7 +308,7 @@ func (testCtx *TestContext) createTestHTTPServer(port int) error {
 				response["image_data"] = mockBase64ImageData
 			}
 
-			json.NewEncoder(w).Encode(response)
+			_ = json.NewEncoder(w).Encode(response)
 		}
 	})
 

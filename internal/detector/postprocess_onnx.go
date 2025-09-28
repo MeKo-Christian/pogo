@@ -17,15 +17,19 @@ func (d *Detector) DetectRegions(img image.Image) ([]DetectedRegion, error) {
 		// Choose NMS method based on configuration
 		switch d.config.NMSMethod {
 		case "linear", "gaussian":
-			regs = PostProcessDBWithOptions(res.ProbabilityMap, res.Width, res.Height, d.config.DbThresh, d.config.DbBoxThresh, opts)
+			regs = PostProcessDBWithOptions(res.ProbabilityMap, res.Width, res.Height,
+				d.config.DbThresh, d.config.DbBoxThresh, opts)
 			// Apply Soft-NMS on the results
-			regs = SoftNonMaxSuppression(regs, d.config.NMSMethod, d.config.NMSThreshold, d.config.SoftNMSSigma, d.config.SoftNMSThresh)
+			regs = SoftNonMaxSuppression(regs, d.config.NMSMethod, d.config.NMSThreshold,
+				d.config.SoftNMSSigma, d.config.SoftNMSThresh)
 		default:
 			// Hard NMS as before
-			regs = PostProcessDBWithNMSOptions(res.ProbabilityMap, res.Width, res.Height, d.config.DbThresh, d.config.DbBoxThresh, d.config.NMSThreshold, opts)
+			regs = PostProcessDBWithNMSOptions(res.ProbabilityMap, res.Width, res.Height,
+				d.config.DbThresh, d.config.DbBoxThresh, d.config.NMSThreshold, opts)
 		}
 	} else {
-		regs = PostProcessDBWithOptions(res.ProbabilityMap, res.Width, res.Height, d.config.DbThresh, d.config.DbBoxThresh, opts)
+		regs = PostProcessDBWithOptions(res.ProbabilityMap, res.Width, res.Height,
+			d.config.DbThresh, d.config.DbBoxThresh, opts)
 	}
 	regs = ScaleRegionsToOriginal(regs, res.Width, res.Height, res.OriginalWidth, res.OriginalHeight)
 	return regs, nil

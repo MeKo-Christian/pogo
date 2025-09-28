@@ -352,7 +352,8 @@ func PostProcessDB(prob []float32, w, h int, dbThresh, boxMinConf float32) []Det
 }
 
 // PostProcessDBWithNMS applies DB post-processing followed by NMS.
-func PostProcessDBWithNMS(prob []float32, w, h int, dbThresh, boxMinConf float32, iouThreshold float64) []DetectedRegion {
+func PostProcessDBWithNMS(prob []float32, w, h int, dbThresh, boxMinConf float32,
+	iouThreshold float64) []DetectedRegion {
 	regs := PostProcessDB(prob, w, h, dbThresh, boxMinConf)
 	if len(regs) == 0 {
 		return regs
@@ -366,7 +367,8 @@ type PostProcessOptions struct {
 }
 
 // PostProcessDBWithOptions is like PostProcessDB but allows selecting polygon mode.
-func PostProcessDBWithOptions(prob []float32, w, h int, dbThresh, boxMinConf float32, opts PostProcessOptions) []DetectedRegion {
+func PostProcessDBWithOptions(prob []float32, w, h int, dbThresh, boxMinConf float32,
+	opts PostProcessOptions) []DetectedRegion {
 	if len(prob) != w*h || w <= 0 || h <= 0 {
 		return nil
 	}
@@ -378,7 +380,8 @@ func PostProcessDBWithOptions(prob []float32, w, h int, dbThresh, boxMinConf flo
 }
 
 // PostProcessDBWithNMSOptions applies DB post-processing with options followed by NMS.
-func PostProcessDBWithNMSOptions(prob []float32, w, h int, dbThresh, boxMinConf float32, iouThreshold float64, opts PostProcessOptions) []DetectedRegion {
+func PostProcessDBWithNMSOptions(prob []float32, w, h int, dbThresh, boxMinConf float32,
+	iouThreshold float64, opts PostProcessOptions) []DetectedRegion {
 	regs := PostProcessDBWithOptions(prob, w, h, dbThresh, boxMinConf, opts)
 	if len(regs) == 0 {
 		return regs

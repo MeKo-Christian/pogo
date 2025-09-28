@@ -98,7 +98,8 @@ func (br BenchmarkResult) String() string {
 	avgDuration := br.Duration / time.Duration(br.Iterations)
 
 	return fmt.Sprintf("%s: %d iterations, avg: %v, total: %v, mem: +%d KB",
-		br.Name, br.Iterations, avgDuration, br.Duration, int64(memDiff)/1024) //nolint:gosec // G115: Safe conversion for memory display
+		br.Name, br.Iterations, avgDuration, br.Duration,
+		int64(memDiff)/1024) //nolint:gosec // G115: Safe conversion for memory display
 }
 
 // Benchmark represents a benchmark function.

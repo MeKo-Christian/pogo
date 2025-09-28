@@ -369,7 +369,8 @@ func init() {
 	imageCmd.Flags().Float64("orientation-threshold", 0.7, "orientation confidence threshold (0..1)")
 	imageCmd.Flags().StringP("language", "l", "en", "recognition language")
 	imageCmd.Flags().String("dict", "", "comma-separated dictionary file paths to merge for recognition")
-	imageCmd.Flags().String("dict-langs", "", "comma-separated language codes to auto-select dictionaries (e.g., en,de,fr)")
+	imageCmd.Flags().String("dict-langs", "", "comma-separated language codes to auto-select "+
+		"dictionaries (e.g., en,de,fr)")
 	imageCmd.Flags().Int("rec-height", 0, "recognizer input height (0=auto, typical: 32 or 48)")
 	imageCmd.Flags().Float64("min-rec-conf", 0.0, "minimum recognition confidence (filter output)")
 	imageCmd.Flags().String("overlay-dir", "", "directory to write overlay images (drawn boxes)")
@@ -381,7 +382,8 @@ func init() {
 
 	// Rectification flags (minimal CPU-only)
 	imageCmd.Flags().Bool("rectify", false, "enable document rectification (experimental)")
-	imageCmd.Flags().String("rectify-model", models.GetLayoutModelPath("", models.LayoutUVDoc), "override rectification model path")
+	imageCmd.Flags().String("rectify-model",
+		models.GetLayoutModelPath("", models.LayoutUVDoc), "override rectification model path")
 	imageCmd.Flags().Float64("rectify-mask-threshold", 0.5, "rectification mask threshold (0..1)")
 	imageCmd.Flags().Int("rectify-height", 1024, "rectified page output height (advisory)")
 	imageCmd.Flags().String("rectify-debug-dir", "", "directory to write rectification debug images (mask, overlay)")
@@ -389,7 +391,8 @@ func init() {
 	// GPU acceleration flags
 	imageCmd.Flags().Bool("gpu", false, "enable GPU acceleration using CUDA")
 	imageCmd.Flags().Int("gpu-device", 0, "CUDA device ID to use (default: 0)")
-	imageCmd.Flags().String("gpu-mem-limit", "auto", "GPU memory limit (e.g., '2GB', '512MB', 'auto' for recommended limit)")
+	imageCmd.Flags().String("gpu-mem-limit", "auto", "GPU memory limit "+
+		"(e.g., '2GB', '512MB', 'auto' for recommended limit)")
 
 	// Detection polygon mode: minrect (default) or contour
 	imageCmd.Flags().String("det-polygon-mode", "minrect", "detector polygon mode: minrect or contour")

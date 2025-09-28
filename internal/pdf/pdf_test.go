@@ -284,7 +284,7 @@ func TestCollectExtractedImages_MixedFormatsAndPages(t *testing.T) {
 	writeImg := func(name string, enc string) {
 		f, err := os.Create(filepath.Join(tempDir, name)) //nolint:gosec // controlled test path
 		require.NoError(t, err)
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		img := image.NewRGBA(image.Rect(0, 0, 8, 6))
 		for y := range 6 {

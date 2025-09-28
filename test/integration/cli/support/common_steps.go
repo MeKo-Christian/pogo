@@ -25,13 +25,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 
 	destFile, err := os.Create(dst) //nolint:gosec // G304: Test file copy with controlled paths
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 
 	_, err = io.Copy(destFile, sourceFile)
 	return err
@@ -317,7 +317,7 @@ func (testCtx *TestContext) iRunCommandInternal(command string) error {
 	for _, envVar := range testCtx.EnvVars {
 		keyValue := strings.SplitN(envVar, "=", 2)
 		if len(keyValue) == 2 {
-			os.Setenv(keyValue[0], keyValue[1]) //nolint:gosec // G104: Test environment setup, error typically ignored
+			_ = os.Setenv(keyValue[0], keyValue[1])
 		}
 	}
 
@@ -329,7 +329,7 @@ func (testCtx *TestContext) iRunCommandInternal(command string) error {
 			return fmt.Errorf("failed to change working directory: %w", err)
 		}
 		// Restore working directory after command execution
-		defer os.Chdir(currentDir)
+		defer func() { _ = os.Chdir(currentDir) }()
 	}
 
 	// Execute the command
@@ -472,7 +472,15 @@ func (testCtx *TestContext) aCustomDetectionModelExistsAt(path string) error {
 	}
 
 	// Map the requested path to our testdata model
-	modelPath := filepath.Join(projectRoot, "testdata", "models", "custom", "detection", "mobile", "PP-OCRv5_mobile_det.onnx")
+	modelPath := filepath.Join(
+		projectRoot,
+		"testdata",
+		"models",
+		"custom",
+		"detection",
+		"mobile",
+		"PP-OCRv5_mobile_det.onnx",
+	)
 
 	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 		return fmt.Errorf("custom detection model not found: %s", modelPath)
@@ -489,7 +497,15 @@ func (testCtx *TestContext) aCustomRecognitionModelExistsAt(path string) error {
 	}
 
 	// Map the requested path to our testdata model
-	modelPath := filepath.Join(projectRoot, "testdata", "models", "custom", "recognition", "mobile", "PP-OCRv5_mobile_rec.onnx")
+	modelPath := filepath.Join(
+		projectRoot,
+		"testdata",
+		"models",
+		"custom",
+		"recognition",
+		"mobile",
+		"PP-OCRv5_mobile_rec.onnx",
+	)
 
 	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 		return fmt.Errorf("custom recognition model not found: %s", modelPath)
@@ -1107,15 +1123,19 @@ func (testCtx *TestContext) RegisterCommonSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^timing information should be displayed$`, testCtx.timingInformationShouldBeDisplayed)
 
 	// Filtering verification
-	sc.Step(`^only regions with confidence (\d+.\d+) should be detected$`, testCtx.onlyRegionsWithConfidenceShouldBeDetected)
-	sc.Step(`^only text with recognition confidence (\d+.\d+) should be included$`, testCtx.onlyTextWithRecognitionConfidenceShouldBeIncluded)
+	sc.Step(`^only regions with confidence (\d+.\d+) should be detected$`,
+		testCtx.onlyRegionsWithConfidenceShouldBeDetected)
+	sc.Step(`^only text with recognition confidence (\d+.\d+) should be included$`,
+		testCtx.onlyTextWithRecognitionConfidenceShouldBeIncluded)
 
 	// Recognition settings verification
 	sc.Step(`^the recognizer should use pixel height input (\d+)$`, testCtx.theRecognizerShouldUsePixelHeightInput)
 
 	// Orientation detection verification
-	sc.Step(`^orientation detection should be enabled with threshold (\d+.\d+)$`, testCtx.orientationDetectionShouldBeEnabledWithThreshold)
-	sc.Step(`^text line orientation detection should be enabled with threshold (\d+.\d+)$`, testCtx.textLineOrientationDetectionShouldBeEnabledWithThreshold)
+	sc.Step(`^orientation detection should be enabled with threshold (\d+.\d+)$`,
+		testCtx.orientationDetectionShouldBeEnabledWithThreshold)
+	sc.Step(`^text line orientation detection should be enabled with threshold (\d+.\d+)$`,
+		testCtx.textLineOrientationDetectionShouldBeEnabledWithThreshold)
 
 	// Output format verification
 	sc.Step(`^the output should be in JSON format$`, testCtx.theOutputShouldBeInJSONFormat)
@@ -1156,14 +1176,18 @@ func (testCtx *TestContext) RegisterCommonSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^models should be loaded from "([^"]*)"$`, testCtx.modelsShouldBeLoadedFrom)
 
 	// Error message verification
-	sc.Step(`^the error should mention invalid configuration values$`, testCtx.theErrorShouldMentionInvalidConfigurationValues)
+	sc.Step(`^the error should mention invalid configuration values$`,
+		testCtx.theErrorShouldMentionInvalidConfigurationValues)
 
 	// Help content verification
-	sc.Step(`^the help should list all available flags$`, testCtx.theHelpShouldListAllAvailableFlags)
-	sc.Step(`^the help should list all available subcommands$`, testCtx.theHelpShouldListAllAvailableSubcommands)
+	sc.Step(`^the help should list all available flags$`,
+		testCtx.theHelpShouldListAllAvailableFlags)
+	sc.Step(`^the help should list all available subcommands$`,
+		testCtx.theHelpShouldListAllAvailableSubcommands)
 
 	// Flag and global option documentation verification
-	sc.Step(`^flag descriptions should be clear and helpful$`, testCtx.flagDescriptionsShouldBeClearAndHelpful)
+	sc.Step(`^flag descriptions should be clear and helpful$`,
+		testCtx.flagDescriptionsShouldBeClearAndHelpful)
 	sc.Step(`^global flags should be documented$`, testCtx.globalFlagsShouldBeDocumented)
 
 	// Build information verification
@@ -1183,8 +1207,10 @@ func (testCtx *TestContext) RegisterCommonSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^orientation detection should be enabled$`, testCtx.orientationDetectionShouldBeEnabled)
 	sc.Step(`^the command might fail$`, testCtx.theCommandMightFail)
 	sc.Step(`^the OCR models are not available$`, testCtx.theOCRModelsAreNotAvailable)
-	sc.Step(`^text line orientation detection should be enabled with threshold ([0-9.]+)$`, testCtx.textLineOrientationDetectionShouldBeEnabledWithThreshold)
-	sc.Step(`^overlay images should be created in "([^"]*)" directory$`, testCtx.overlayImagesShouldBeCreatedInDirectory)
+	sc.Step(`^text line orientation detection should be enabled with threshold ([0-9.]+)$`,
+		testCtx.textLineOrientationDetectionShouldBeEnabledWithThreshold)
+	sc.Step(`^overlay images should be created in "([^"]*)" directory$`,
+		testCtx.overlayImagesShouldBeCreatedInDirectory)
 	sc.Step(`^the file should contain the OCR output$`, testCtx.theFileShouldContainTheOCROutput)
 	sc.Step(`^the file should contain the OCR results$`, testCtx.theFileShouldContainTheOCRResults)
 	sc.Step(`^the file should contain valid JSON-Code$`, testCtx.theFileShouldContainValidJSONCode)

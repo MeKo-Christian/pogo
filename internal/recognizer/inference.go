@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"os"
 	"time"
 
 	"github.com/MeKo-Tech/pogo/internal/detector"
@@ -81,7 +80,7 @@ func (r *Recognizer) RecognizeRegion(img image.Image, region detector.DetectedRe
 	if err != nil {
 		return nil, fmt.Errorf("create input tensor: %w", err)
 	}
-	defer inputTensor.Destroy()
+	defer func() { _ = inputTensor.Destroy() }()
 	outputs := []onnxrt.Value{nil}
 	if err := session.Run([]onnxrt.Value{inputTensor}, outputs); err != nil {
 		return nil, fmt.Errorf("inference failed: %w", err)
@@ -89,9 +88,7 @@ func (r *Recognizer) RecognizeRegion(img image.Image, region detector.DetectedRe
 	defer func() {
 		for _, o := range outputs {
 			if o != nil {
-				if err := o.Destroy(); err != nil {
-					fmt.Fprintf(os.Stderr, "Error destroying output tensor: %v\n", err)
-				}
+				_ = o.Destroy()
 			}
 		}
 	}()
@@ -237,7 +234,7 @@ func (r *Recognizer) RecognizeBatch(img image.Image, regions []detector.Detected
 	if err != nil {
 		return nil, fmt.Errorf("create input tensor: %w", err)
 	}
-	defer inputTensor.Destroy()
+	defer func() { _ = inputTensor.Destroy() }()
 	outputs := []onnxrt.Value{nil}
 	if err := session.Run([]onnxrt.Value{inputTensor}, outputs); err != nil {
 		return nil, fmt.Errorf("inference failed: %w", err)
@@ -245,7 +242,7 @@ func (r *Recognizer) RecognizeBatch(img image.Image, regions []detector.Detected
 	defer func() {
 		for _, o := range outputs {
 			if o != nil {
-				o.Destroy() //nolint:gosec // G104: Resource cleanup, error typically ignored
+				_ = o.Destroy()
 			}
 		}
 	}()
