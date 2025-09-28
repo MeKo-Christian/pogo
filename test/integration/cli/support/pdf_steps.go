@@ -249,36 +249,7 @@ func (testCtx *TestContext) onlyPagesShouldBeProcessed(pages string) error {
 
 	// For JSON output, check the number of pages in the result
 	if strings.Contains(testCtx.LastCommand, "--format json") {
-		var data []interface{} // PDF JSON output is an array
-		if err := json.Unmarshal([]byte(testCtx.LastOutput), &data); err != nil {
-			return fmt.Errorf("failed to parse JSON output: %w", err)
-		}
-		if len(data) == 0 {
-			return errors.New("JSON output contains no PDF results")
-		}
-		pdfResult, ok := data[0].(map[string]interface{})
-		if !ok {
-			return errors.New("first PDF result is not a valid object")
-		}
-		pagesField, exists := pdfResult["pages"]
-		if !exists {
-			return errors.New("PDF result does not contain pages field")
-		}
-		if pagesField == nil {
-			// If pages is null, no pages were processed
-			if expectedPages > 0 {
-				return fmt.Errorf("expected %d pages, but got 0 (pages is null)", expectedPages)
-			}
-			return nil
-		}
-		pagesArray, ok := pagesField.([]interface{})
-		if !ok {
-			return errors.New("pages field is not an array")
-		}
-		if len(pagesArray) != expectedPages {
-			return fmt.Errorf("expected %d pages, but got %d", expectedPages, len(pagesArray))
-		}
-		return nil
+		return testCtx.checkJSONPages(expectedPages)
 	}
 
 	// For text output, check for page indicators
@@ -294,6 +265,39 @@ func (testCtx *TestContext) onlyPagesShouldBeProcessed(pages string) error {
 		return fmt.Errorf("expected %d pages processed, but output suggests %d", expectedPages, pageCount)
 	}
 
+	return nil
+}
+
+func (testCtx *TestContext) checkJSONPages(expectedPages int) error {
+	var data []interface{} // PDF JSON output is an array
+	if err := json.Unmarshal([]byte(testCtx.LastOutput), &data); err != nil {
+		return fmt.Errorf("failed to parse JSON output: %w", err)
+	}
+	if len(data) == 0 {
+		return errors.New("JSON output contains no PDF results")
+	}
+	pdfResult, ok := data[0].(map[string]interface{})
+	if !ok {
+		return errors.New("first PDF result is not a valid object")
+	}
+	pagesField, exists := pdfResult["pages"]
+	if !exists {
+		return errors.New("PDF result does not contain pages field")
+	}
+	if pagesField == nil {
+		// If pages is null, no pages were processed
+		if expectedPages > 0 {
+			return fmt.Errorf("expected %d pages, but got 0 (pages is null)", expectedPages)
+		}
+		return nil
+	}
+	pagesArray, ok := pagesField.([]interface{})
+	if !ok {
+		return errors.New("pages field is not an array")
+	}
+	if len(pagesArray) != expectedPages {
+		return fmt.Errorf("expected %d pages, but got %d", expectedPages, len(pagesArray))
+	}
 	return nil
 }
 
