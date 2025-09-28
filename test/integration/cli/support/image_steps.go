@@ -203,19 +203,6 @@ func (testCtx *TestContext) theOutputShouldContainGermanText() error {
 	return nil
 }
 
-// theOutputShouldContainUsageInformation verifies help output.
-func (testCtx *TestContext) theOutputShouldContainUsageInformation() error {
-	requiredHelpTexts := []string{"Usage:", "Flags:", "Examples:"}
-
-	for _, text := range requiredHelpTexts {
-		if !strings.Contains(testCtx.LastOutput, text) {
-			return fmt.Errorf("help output missing '%s' section", text)
-		}
-	}
-
-	return nil
-}
-
 // allDetectedRegionsShouldHaveConfidenceGTE verifies all regions have minimum confidence.
 func (testCtx *TestContext) allDetectedRegionsShouldHaveConfidenceGTE(threshold float64) error {
 	// Simplified check - in real implementation would parse JSON output

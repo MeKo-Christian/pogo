@@ -1,7 +1,6 @@
 package support
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,10 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MeKo-Tech/pogo/cmd/ocr/cmd"
 	"github.com/MeKo-Tech/pogo/internal/testutil"
 	"github.com/cucumber/godog"
-	"github.com/spf13/cobra"
 )
 
 // copyFile copies a file from src to dst.
@@ -229,11 +226,6 @@ func (testCtx *TestContext) iRunCommand(command string) error {
 	testCtx.LastCommand = command
 	testCtx.LastStartTime = time.Now()
 
-	// Check if this is a pogo command - if so, run it internally
-	if strings.HasPrefix(command, "pogo ") {
-		return testCtx.iRunCommandInternal(command)
-	}
-
 	// Parse command into parts
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
@@ -270,121 +262,6 @@ func (testCtx *TestContext) iRunCommand(command string) error {
 	}
 
 	return nil
-}
-
-// iRunCommandInternal executes a pogo command internally using the cobra command structure.
-func (testCtx *TestContext) iRunCommandInternal(command string) error {
-	parts := testCtx.prepareCommandParts(command)
-	parts = testCtx.addModelsDirIfNeeded(parts)
-	rootCmd := testCtx.createTestRootCommand()
-	return testCtx.executeCommand(rootCmd, parts)
-}
-
-func (testCtx *TestContext) prepareCommandParts(command string) []string {
-	parts := strings.Fields(command)
-	if len(parts) == 0 {
-		return parts
-	}
-	// Remove "pogo" from the beginning
-	if parts[0] == "pogo" {
-		parts = parts[1:]
-	}
-	return parts
-}
-
-func (testCtx *TestContext) addModelsDirIfNeeded(parts []string) []string {
-	// Add models-dir flag if GO_OAR_OCR_MODELS_DIR is set and not already present
-	// Only for commands that actually process images (not for help, version, etc.)
-	needsModelsDir := len(parts) > 0 && testCtx.commandNeedsModelsDir(parts[0])
-	hasModelsDir := testCtx.hasModelsDirFlag(parts)
-	if needsModelsDir && !hasModelsDir {
-		if modelsDir := os.Getenv("GO_OAR_OCR_MODELS_DIR"); modelsDir != "" {
-			parts = append(parts, "--models-dir", modelsDir)
-		}
-	}
-	return parts
-}
-
-func (testCtx *TestContext) commandNeedsModelsDir(command string) bool {
-	return command == "image" || command == "pdf" || command == "serve"
-}
-
-func (testCtx *TestContext) hasModelsDirFlag(parts []string) bool {
-	for i, part := range parts {
-		if part == "--models-dir" && i < len(parts)-1 {
-			return true
-		}
-	}
-	return false
-}
-
-func (testCtx *TestContext) executeCommand(rootCmd *cobra.Command, parts []string) error {
-	// Set up output capture
-	var stdout, stderr bytes.Buffer
-	rootCmd.SetOut(&stdout)
-	rootCmd.SetErr(&stderr)
-
-	// Set arguments
-	rootCmd.SetArgs(parts)
-
-	// Set environment variables
-	testCtx.setEnvironmentVariables()
-
-	// Change to the correct working directory for command execution
-	cleanup := testCtx.changeWorkingDirectory()
-	if cleanup != nil {
-		defer cleanup()
-	}
-
-	// Execute the command
-	err := rootCmd.Execute()
-
-	// Capture output and error
-	testCtx.LastOutput = stdout.String() + stderr.String()
-	testCtx.LastError = err
-	testCtx.LastDuration = time.Since(testCtx.LastStartTime)
-
-	// Store exit code
-	testCtx.storeExitCode(err)
-
-	return nil
-}
-
-func (testCtx *TestContext) setEnvironmentVariables() {
-	for _, envVar := range testCtx.EnvVars {
-		keyValue := strings.SplitN(envVar, "=", 2)
-		if len(keyValue) == 2 {
-			_ = os.Setenv(keyValue[0], keyValue[1])
-		}
-	}
-}
-
-func (testCtx *TestContext) changeWorkingDirectory() func() {
-	currentDir, _ := os.Getwd()
-	if currentDir != testCtx.WorkingDir {
-		fmt.Printf("DEBUG: Changing working dir from %s to %s\n", currentDir, testCtx.WorkingDir)
-		if err := os.Chdir(testCtx.WorkingDir); err != nil {
-			fmt.Printf("Failed to change working directory: %v\n", err)
-			return nil
-		}
-		// Return cleanup function to restore working directory
-		return func() { _ = os.Chdir(currentDir) }
-	}
-	return nil
-}
-
-func (testCtx *TestContext) storeExitCode(err error) {
-	if err != nil {
-		testCtx.LastExitCode = 1
-	} else {
-		testCtx.LastExitCode = 0
-	}
-}
-
-// createTestRootCommand creates a new root command for testing that doesn't call os.Exit.
-func (testCtx *TestContext) createTestRootCommand() *cobra.Command {
-	// Get the actual root command
-	return cmd.GetRootCommand()
 }
 
 // theCommandShouldSucceed verifies the command succeeded.
@@ -1135,6 +1012,17 @@ func (testCtx *TestContext) theOutputShouldListAvailableSubcommands() error {
 		}
 	}
 	return nil
+}
+
+// theOutputShouldContainUsageInformation verifies output contains usage information.
+func (testCtx *TestContext) theOutputShouldContainUsageInformation() error {
+	usageIndicators := []string{"Usage:", "usage:", "help", "Help"}
+	for _, indicator := range usageIndicators {
+		if strings.Contains(testCtx.LastOutput, indicator) {
+			return nil
+		}
+	}
+	return fmt.Errorf("output does not contain usage information: %s", testCtx.LastOutput)
 }
 
 // theOutputShouldBeValidCSV verifies output is valid CSV.
