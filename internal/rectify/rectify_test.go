@@ -103,7 +103,7 @@ func TestConfig_UpdateModelPath(t *testing.T) {
 func TestValidateModelFile(t *testing.T) {
 	// Test with existing file
 	tempDir := testutil.CreateTempDir(t)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	validFile := filepath.Join(tempDir, "test.onnx")
 	if err := os.WriteFile(validFile, []byte("fake model"), 0644); err != nil {
@@ -248,8 +248,7 @@ func TestNormalizeAndValidateImage(t *testing.T) {
 	}
 
 	// Test nil image
-	_, _, _, err = r.normalizeAndValidateImage(nil)
-	if err == nil {
+	if _, _, _, err := r.normalizeAndValidateImage(nil); err == nil {
 		t.Error("Expected error for nil image")
 	}
 }
@@ -264,8 +263,7 @@ func TestExtractOutputData(t *testing.T) {
 
 	// Create a mock tensor - this is tricky without ONNX runtime
 	// For now, just test that the function exists and handles nil input
-	_, _, _, err := r.extractOutputData(nil)
-	if err == nil {
+	if _, _, _, err := r.extractOutputData(nil); err == nil {
 		t.Error("Expected error for nil tensor")
 	}
 }
@@ -487,7 +485,7 @@ func TestAbs(t *testing.T) {
 
 func TestDumpMaskPNG(t *testing.T) {
 	tempDir := testutil.CreateTempDir(t)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Create test mask data
 	w, h := 32, 32
@@ -517,7 +515,7 @@ func TestDumpMaskPNG(t *testing.T) {
 
 func TestDumpOverlayPNG(t *testing.T) {
 	tempDir := testutil.CreateTempDir(t)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	src := makeTestImage(64, 64)
 	quad := []utils.Point{
@@ -544,7 +542,7 @@ func TestDumpOverlayPNG(t *testing.T) {
 
 func TestDumpComparePNG(t *testing.T) {
 	tempDir := testutil.CreateTempDir(t)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	src := makeTestImage(64, 64)
 	dst := makeTestImage(32, 32)

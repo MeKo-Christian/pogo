@@ -68,6 +68,42 @@ func GetRootCommand() *cobra.Command {
 	return rootCmd
 }
 
+// setupLogging configures the logging based on the global configuration.
+func setupLogging(cmd *cobra.Command, args []string) {
+	// Initialize configuration if not already done
+	if globalConfig == nil {
+		initConfig()
+	}
+
+	// Determine log level from config
+	var logLevel slog.Level
+
+	// Check verbose flag first for backward compatibility
+	if globalConfig.Verbose {
+		logLevel = slog.LevelDebug
+	} else {
+		// Parse log-level from config
+		switch globalConfig.LogLevel {
+		case "debug":
+			logLevel = slog.LevelDebug
+		case "info":
+			logLevel = slog.LevelInfo
+		case "warn":
+			logLevel = slog.LevelWarn
+		case "error":
+			logLevel = slog.LevelError
+		default:
+			logLevel = slog.LevelInfo
+		}
+	}
+
+	// Set up structured logging
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: logLevel,
+	}))
+	slog.SetDefault(logger)
+}
+
 func init() {
 	// Initialize configuration loader
 	cobra.OnInitialize(initConfig)
@@ -90,44 +126,17 @@ func init() {
 	rootCmd.PersistentFlags().Bool("version", false, "print version information and exit")
 
 	// Bind flags to viper
-	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
-	viper.BindPFlag("log_level", rootCmd.PersistentFlags().Lookup("log-level"))
-	viper.BindPFlag("models_dir", rootCmd.PersistentFlags().Lookup("models-dir"))
-
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		// Initialize configuration if not already done
-		if globalConfig == nil {
-			initConfig()
-		}
-
-		// Determine log level from config
-		var logLevel slog.Level
-
-		// Check verbose flag first for backward compatibility
-		if globalConfig.Verbose {
-			logLevel = slog.LevelDebug
-		} else {
-			// Parse log-level from config
-			switch globalConfig.LogLevel {
-			case "debug":
-				logLevel = slog.LevelDebug
-			case "info":
-				logLevel = slog.LevelInfo
-			case "warn":
-				logLevel = slog.LevelWarn
-			case "error":
-				logLevel = slog.LevelError
-			default:
-				logLevel = slog.LevelInfo
-			}
-		}
-
-		// Set up structured logging
-		logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level: logLevel,
-		}))
-		slog.SetDefault(logger)
+	if err := viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose")); err != nil {
+		panic(fmt.Sprintf("failed to bind flag: %v", err))
 	}
+	if err := viper.BindPFlag("log_level", rootCmd.PersistentFlags().Lookup("log-level")); err != nil {
+		panic(fmt.Sprintf("failed to bind flag: %v", err))
+	}
+	if err := viper.BindPFlag("models_dir", rootCmd.PersistentFlags().Lookup("models-dir")); err != nil {
+		panic(fmt.Sprintf("failed to bind flag: %v", err))
+	}
+
+	rootCmd.PersistentPreRun = setupLogging
 }
 
 // initConfig reads in config file and ENV variables if set.

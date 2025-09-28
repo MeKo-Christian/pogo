@@ -168,7 +168,7 @@ func TestFindProjectRoot(t *testing.T) {
 	// Change to subdirectory and test
 	oldWd, _ := os.Getwd()
 	defer func() {
-		os.Chdir(oldWd)
+		_ = os.Chdir(oldWd)
 	}()
 
 	if err := os.Chdir(subDir); err != nil {
@@ -191,7 +191,7 @@ func TestFindProjectRootNoGoMod(t *testing.T) {
 
 	oldWd, _ := os.Getwd()
 	defer func() {
-		os.Chdir(oldWd)
+		_ = os.Chdir(oldWd)
 	}()
 
 	if err := os.Chdir(tempDir); err != nil {
@@ -289,7 +289,7 @@ func TestSetONNXLibraryPath(t *testing.T) {
 	// Change to project directory
 	oldWd, _ := os.Getwd()
 	defer func() {
-		os.Chdir(oldWd)
+		_ = os.Chdir(oldWd)
 	}()
 
 	if err := os.Chdir(projectDir); err != nil {
@@ -317,5 +317,3 @@ func TestSetONNXLibraryPathNoLibraries(t *testing.T) {
 	// The important thing is that the function completes without panicking
 	_ = err
 }
-
-

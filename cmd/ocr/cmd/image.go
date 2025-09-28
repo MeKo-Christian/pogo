@@ -363,70 +363,88 @@ func parseMemorySize(s string) (uint64, error) {
 	return value * multiplier, nil
 }
 
-func init() {
-	rootCmd.AddCommand(imageCmd)
-
+func addImageFlags(cmd *cobra.Command) {
 	// Image-specific flags
-	imageCmd.Flags().StringP("format", "f", "text", "output format (text, json, csv)")
-	imageCmd.Flags().StringP("output", "o", "", "output file (default: stdout)")
-	imageCmd.Flags().Float64("confidence", 0.5, "minimum confidence threshold")
-	imageCmd.Flags().Bool("detect-orientation", false, "enable document orientation detection")
-	imageCmd.Flags().Float64("orientation-threshold", 0.7, "orientation confidence threshold (0..1)")
-	imageCmd.Flags().StringP("language", "l", "en", "recognition language")
-	imageCmd.Flags().String("dict", "", "comma-separated dictionary file paths to merge for recognition")
-	imageCmd.Flags().String("dict-langs", "", "comma-separated language codes to auto-select "+
+	cmd.Flags().StringP("format", "f", "text", "output format (text, json, csv)")
+	cmd.Flags().StringP("output", "o", "", "output file (default: stdout)")
+	cmd.Flags().Float64("confidence", 0.5, "minimum confidence threshold")
+	cmd.Flags().Bool("detect-orientation", false, "enable document orientation detection")
+	cmd.Flags().Float64("orientation-threshold", 0.7, "orientation confidence threshold (0..1)")
+	cmd.Flags().StringP("language", "l", "en", "recognition language")
+	cmd.Flags().String("dict", "", "comma-separated dictionary file paths to merge for recognition")
+	cmd.Flags().String("dict-langs", "", "comma-separated language codes to auto-select "+
 		"dictionaries (e.g., en,de,fr)")
-	imageCmd.Flags().Int("rec-height", 0, "recognizer input height (0=auto, typical: 32 or 48)")
-	imageCmd.Flags().Float64("min-rec-conf", 0.0, "minimum recognition confidence (filter output)")
-	imageCmd.Flags().String("overlay-dir", "", "directory to write overlay images (drawn boxes)")
-	imageCmd.Flags().Bool("detect", true, "run detection (deprecated; pipeline runs full OCR)")
-	imageCmd.Flags().String("det-model", "", "override detection model path (defaults to organized models path)")
-	imageCmd.Flags().String("rec-model", "", "override recognition model path (defaults to organized models path)")
-	imageCmd.Flags().Bool("detect-textline", false, "enable per-text-line orientation detection")
-	imageCmd.Flags().Float64("textline-threshold", 0.6, "text line orientation confidence threshold (0..1)")
+	cmd.Flags().Int("rec-height", 0, "recognizer input height (0=auto, typical: 32 or 48)")
+	cmd.Flags().Float64("min-rec-conf", 0.0, "minimum recognition confidence (filter output)")
+	cmd.Flags().String("overlay-dir", "", "directory to write overlay images (drawn boxes)")
+	cmd.Flags().Bool("detect", true, "run detection (deprecated; pipeline runs full OCR)")
+	cmd.Flags().String("det-model", "", "override detection model path (defaults to organized models path)")
+	cmd.Flags().String("rec-model", "", "override recognition model path (defaults to organized models path)")
+	cmd.Flags().Bool("detect-textline", false, "enable per-text-line orientation detection")
+	cmd.Flags().Float64("textline-threshold", 0.6, "text line orientation confidence threshold (0..1)")
 
 	// Rectification flags (minimal CPU-only)
-	imageCmd.Flags().Bool("rectify", false, "enable document rectification (experimental)")
-	imageCmd.Flags().String("rectify-model",
+	cmd.Flags().Bool("rectify", false, "enable document rectification (experimental)")
+	cmd.Flags().String("rectify-model",
 		models.GetLayoutModelPath("", models.LayoutUVDoc), "override rectification model path")
-	imageCmd.Flags().Float64("rectify-mask-threshold", 0.5, "rectification mask threshold (0..1)")
-	imageCmd.Flags().Int("rectify-height", 1024, "rectified page output height (advisory)")
-	imageCmd.Flags().String("rectify-debug-dir", "", "directory to write rectification debug images (mask, overlay)")
+	cmd.Flags().Float64("rectify-mask-threshold", 0.5, "rectification mask threshold (0..1)")
+	cmd.Flags().Int("rectify-height", 1024, "rectified page output height (advisory)")
+	cmd.Flags().String("rectify-debug-dir", "", "directory to write rectification debug images (mask, overlay)")
 
 	// GPU acceleration flags
-	imageCmd.Flags().Bool("gpu", false, "enable GPU acceleration using CUDA")
-	imageCmd.Flags().Int("gpu-device", 0, "CUDA device ID to use (default: 0)")
-	imageCmd.Flags().String("gpu-mem-limit", "auto", "GPU memory limit "+
+	cmd.Flags().Bool("gpu", false, "enable GPU acceleration using CUDA")
+	cmd.Flags().Int("gpu-device", 0, "CUDA device ID to use (default: 0)")
+	cmd.Flags().String("gpu-mem-limit", "auto", "GPU memory limit "+
 		"(e.g., '2GB', '512MB', 'auto' for recommended limit)")
 
 	// Detection polygon mode: minrect (default) or contour
-	imageCmd.Flags().String("det-polygon-mode", "minrect", "detector polygon mode: minrect or contour")
+	cmd.Flags().String("det-polygon-mode", "minrect", "detector polygon mode: minrect or contour")
+}
 
-	// Bind flags to viper configuration keys
-	viper.BindPFlag("output.format", imageCmd.Flags().Lookup("format"))
-	viper.BindPFlag("output.file", imageCmd.Flags().Lookup("output"))
-	viper.BindPFlag("pipeline.detector.db_box_thresh", imageCmd.Flags().Lookup("confidence"))
-	viper.BindPFlag("features.orientation_enabled", imageCmd.Flags().Lookup("detect-orientation"))
-	viper.BindPFlag("features.orientation_threshold", imageCmd.Flags().Lookup("orientation-threshold"))
-	viper.BindPFlag("pipeline.recognizer.language", imageCmd.Flags().Lookup("language"))
-	viper.BindPFlag("pipeline.recognizer.dict_path", imageCmd.Flags().Lookup("dict"))
-	viper.BindPFlag("pipeline.recognizer.dict_langs", imageCmd.Flags().Lookup("dict-langs"))
-	viper.BindPFlag("pipeline.recognizer.image_height", imageCmd.Flags().Lookup("rec-height"))
-	viper.BindPFlag("pipeline.recognizer.min_confidence", imageCmd.Flags().Lookup("min-rec-conf"))
-	viper.BindPFlag("output.overlay_dir", imageCmd.Flags().Lookup("overlay-dir"))
-	viper.BindPFlag("pipeline.detector.model_path", imageCmd.Flags().Lookup("det-model"))
-	viper.BindPFlag("pipeline.recognizer.model_path", imageCmd.Flags().Lookup("rec-model"))
-	viper.BindPFlag("features.textline_enabled", imageCmd.Flags().Lookup("detect-textline"))
-	viper.BindPFlag("features.textline_threshold", imageCmd.Flags().Lookup("textline-threshold"))
-	viper.BindPFlag("features.rectification_enabled", imageCmd.Flags().Lookup("rectify"))
-	viper.BindPFlag("features.rectification_model_path", imageCmd.Flags().Lookup("rectify-model"))
-	viper.BindPFlag("features.rectification_threshold", imageCmd.Flags().Lookup("rectify-mask-threshold"))
-	viper.BindPFlag("features.rectification_height", imageCmd.Flags().Lookup("rectify-height"))
-	viper.BindPFlag("features.rectification_debug_dir", imageCmd.Flags().Lookup("rectify-debug-dir"))
-	viper.BindPFlag("gpu.enabled", imageCmd.Flags().Lookup("gpu"))
-	viper.BindPFlag("gpu.device", imageCmd.Flags().Lookup("gpu-device"))
-	viper.BindPFlag("gpu.memory_limit", imageCmd.Flags().Lookup("gpu-mem-limit"))
-	viper.BindPFlag("pipeline.detector.polygon_mode", imageCmd.Flags().Lookup("det-polygon-mode"))
+// bindImageFlags binds all flags to viper configuration keys.
+func bindImageFlags(cmd *cobra.Command) {
+	flagBindings := []struct {
+		key  string
+		flag string
+	}{
+		{"output.format", "format"},
+		{"output.file", "output"},
+		{"pipeline.detector.db_box_thresh", "confidence"},
+		{"features.orientation_enabled", "detect-orientation"},
+		{"features.orientation_threshold", "orientation-threshold"},
+		{"pipeline.recognizer.language", "language"},
+		{"pipeline.recognizer.dict_path", "dict"},
+		{"pipeline.recognizer.dict_langs", "dict-langs"},
+		{"pipeline.recognizer.image_height", "rec-height"},
+		{"pipeline.recognizer.min_confidence", "min-rec-conf"},
+		{"output.overlay_dir", "overlay-dir"},
+		{"pipeline.detector.model_path", "det-model"},
+		{"pipeline.recognizer.model_path", "rec-model"},
+		{"features.textline_enabled", "detect-textline"},
+		{"features.textline_threshold", "textline-threshold"},
+		{"features.rectification_enabled", "rectify"},
+		{"features.rectification_model_path", "rectify-model"},
+		{"features.rectification_threshold", "rectify-mask-threshold"},
+		{"features.rectification_height", "rectify-height"},
+		{"features.rectification_debug_dir", "rectify-debug-dir"},
+		{"gpu.enabled", "gpu"},
+		{"gpu.device", "gpu-device"},
+		{"gpu.memory_limit", "gpu-mem-limit"},
+		{"pipeline.detector.polygon_mode", "det-polygon-mode"},
+	}
+
+	for _, binding := range flagBindings {
+		if err := viper.BindPFlag(binding.key, cmd.Flags().Lookup(binding.flag)); err != nil {
+			panic(fmt.Sprintf("failed to bind flag %s: %v", binding.flag, err))
+		}
+	}
+}
+
+func init() {
+	rootCmd.AddCommand(imageCmd)
+
+	addImageFlags(imageCmd)
+	bindImageFlags(imageCmd)
 
 	// Ensure subcommand help prints expected sections when executed directly in tests
 	imageCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
