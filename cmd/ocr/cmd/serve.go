@@ -184,7 +184,8 @@ func init() {
 	serveCmd.Flags().String("rec-model", "", "override recognition model path")
 	serveCmd.Flags().Float64("min-det-conf", 0.5, "detector box threshold (db_box_thresh)")
 	serveCmd.Flags().String("dict", "", "comma-separated dictionary file paths to merge for recognition")
-	serveCmd.Flags().String("dict-langs", "", "comma-separated language codes to auto-select dictionaries (e.g., en,de,fr)")
+	serveCmd.Flags().String("dict-langs", "",
+		"comma-separated language codes to auto-select dictionaries (e.g., en,de,fr)")
 	serveCmd.Flags().Bool("detect-orientation", false, "enable document orientation detection")
 	serveCmd.Flags().Float64("orientation-threshold", 0.7, "orientation confidence threshold (0..1)")
 	serveCmd.Flags().Bool("detect-textline", false, "enable per-text-line orientation detection")

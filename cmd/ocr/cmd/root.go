@@ -54,7 +54,8 @@ func init() {
 	if envDir := os.Getenv(models.EnvModelsDir); envDir != "" {
 		defaultModelsDir = envDir
 	}
-	rootCmd.PersistentFlags().String("models-dir", defaultModelsDir, "directory containing ONNX models (can also be set via GO_OAR_OCR_MODELS_DIR environment variable)")
+	rootCmd.PersistentFlags().String("models-dir", defaultModelsDir,
+		"directory containing ONNX models (can also be set via GO_OAR_OCR_MODELS_DIR environment variable)")
 
 	// Version flag for tests and usability
 	rootCmd.PersistentFlags().Bool("version", false, "print version information and exit")

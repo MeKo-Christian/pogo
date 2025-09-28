@@ -146,7 +146,13 @@ func (p *Pipeline) ProcessImagesParallelContext(ctx context.Context, images []im
 }
 
 // worker processes images from the jobs channel.
-func (p *Pipeline) worker(ctx context.Context, jobs <-chan imageJob, results chan<- imageResult, wg *sync.WaitGroup, config ParallelConfig) {
+func (p *Pipeline) worker(
+	ctx context.Context,
+	jobs <-chan imageJob,
+	results chan<- imageResult,
+	wg *sync.WaitGroup,
+	_ ParallelConfig,
+) {
 	defer wg.Done()
 
 	for {
@@ -174,7 +180,10 @@ func (p *Pipeline) worker(ctx context.Context, jobs <-chan imageJob, results cha
 
 // ProcessImagesParallelBatched processes images in parallel with micro-batching support.
 // This can be more efficient for very large numbers of small images.
-func (p *Pipeline) ProcessImagesParallelBatched(images []image.Image, config ParallelConfig) ([]*OCRImageResult, error) {
+func (p *Pipeline) ProcessImagesParallelBatched(
+	images []image.Image,
+	config ParallelConfig,
+) ([]*OCRImageResult, error) {
 	return p.ProcessImagesParallelBatchedContext(context.Background(), images, config)
 }
 
@@ -275,7 +284,12 @@ type ParallelStats struct {
 }
 
 // CalculateParallelStats calculates performance statistics for parallel processing.
-func CalculateParallelStats(images []image.Image, results []*OCRImageResult, duration time.Duration, workerCount int) ParallelStats {
+func CalculateParallelStats(
+	images []image.Image,
+	results []*OCRImageResult,
+	duration time.Duration,
+	workerCount int,
+) ParallelStats {
 	totalImages := len(images)
 	processedImages := 0
 	failedImages := 0

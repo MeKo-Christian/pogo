@@ -111,7 +111,8 @@ func ValidateGPUConfig(config GPUConfig) error {
 		"kSameAsRequested": true,
 	}
 	if config.ArenaExtendStrategy != "" && !validStrategies[config.ArenaExtendStrategy] {
-		return fmt.Errorf("invalid arena extend strategy: %s (must be 'kNextPowerOfTwo' or 'kSameAsRequested')", config.ArenaExtendStrategy)
+		return fmt.Errorf("invalid arena extend strategy: %s (must be 'kNextPowerOfTwo' or "+
+			"'kSameAsRequested')", config.ArenaExtendStrategy)
 	}
 
 	validAlgoSearch := map[string]bool{
@@ -120,7 +121,8 @@ func ValidateGPUConfig(config GPUConfig) error {
 		"DEFAULT":    true,
 	}
 	if config.CUDNNConvAlgoSearch != "" && !validAlgoSearch[config.CUDNNConvAlgoSearch] {
-		return fmt.Errorf("invalid CUDNN conv algo search: %s (must be 'EXHAUSTIVE', 'HEURISTIC', or 'DEFAULT')", config.CUDNNConvAlgoSearch)
+		return fmt.Errorf("invalid CUDNN conv algo search: %s (must be 'EXHAUSTIVE', 'HEURISTIC', or "+
+			"'DEFAULT')", config.CUDNNConvAlgoSearch)
 	}
 
 	return nil

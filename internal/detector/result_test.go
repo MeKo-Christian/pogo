@@ -10,8 +10,16 @@ import (
 
 func makeDummyRegions() []DetectedRegion {
 	return []DetectedRegion{
-		{Box: utils.NewBox(10, 10, 50, 40), Polygon: []utils.Point{{X: 10, Y: 10}, {X: 50, Y: 10}, {X: 50, Y: 40}, {X: 10, Y: 40}}, Confidence: 0.9},
-		{Box: utils.NewBox(60, 5, 80, 20), Polygon: []utils.Point{{X: 60, Y: 5}, {X: 80, Y: 5}, {X: 80, Y: 20}, {X: 60, Y: 20}}, Confidence: 0.8},
+		{
+			Box:        utils.NewBox(10, 10, 50, 40),
+			Polygon:    []utils.Point{{X: 10, Y: 10}, {X: 50, Y: 10}, {X: 50, Y: 40}, {X: 10, Y: 40}},
+			Confidence: 0.9,
+		},
+		{
+			Box:        utils.NewBox(60, 5, 80, 20),
+			Polygon:    []utils.Point{{X: 60, Y: 5}, {X: 80, Y: 5}, {X: 80, Y: 20}, {X: 60, Y: 20}},
+			Confidence: 0.8,
+		},
 	}
 }
 

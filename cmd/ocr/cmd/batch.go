@@ -377,7 +377,8 @@ func processImagesParallel(pl *pipeline.Pipeline, imagePaths []string, config pi
 
 		base := filepath.Base(meta.Path)
 		outPath := filepath.Join(overlayDir, strings.TrimSuffix(base, filepath.Ext(base))+"_overlay.png")
-		if f, err := os.Create(outPath); err == nil { //nolint:gosec // G304: outPath constructed from CLI overlay-dir flag, expected user input
+		if f, err := os.Create(outPath); err == nil { //nolint:gosec
+			// G304: outPath constructed from CLI overlay-dir flag, expected user input
 			_ = png.Encode(f, ov)
 			_ = f.Close()
 		}

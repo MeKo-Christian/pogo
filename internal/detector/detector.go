@@ -79,89 +79,126 @@ type DetectionResult struct {
 	ProcessingTime int64     // Inference time in nanoseconds
 }
 
-// NewDetector creates a new text detector with the given configuration.
-func NewDetector(config Config) (*Detector, error) {
+// validateConfig validates the detector configuration.
+func validateConfig(config Config) error {
 	if config.ModelPath == "" {
-		return nil, errors.New("model path cannot be empty")
+		return errors.New("model path cannot be empty")
+	}
+	return nil
+}
+
+// validateModelFile checks if the model file exists.
+func validateModelFile(modelPath string) error {
+	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
+		return fmt.Errorf("model file not found: %s", modelPath)
+	}
+	return nil
+}
+
+// setupONNXEnvironment sets up the ONNX Runtime environment.
+func setupONNXEnvironment(useGPU bool) error {
+	if err := onnx.SetONNXLibraryPath(useGPU); err != nil {
+		return fmt.Errorf("failed to set ONNX Runtime library path: %w", err)
 	}
 
-	// Verify model file exists
-	if _, err := os.Stat(config.ModelPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("model file not found: %s", config.ModelPath)
-	}
-
-	// Set ONNX Runtime library path
-	if err := onnx.SetONNXLibraryPath(config.GPU.UseGPU); err != nil {
-		return nil, fmt.Errorf("failed to set ONNX Runtime library path: %w", err)
-	}
-
-	// Initialize ONNX Runtime environment (only if not already initialized)
 	if !onnxruntime_go.IsInitialized() {
 		if err := onnxruntime_go.InitializeEnvironment(); err != nil {
-			return nil, fmt.Errorf("failed to initialize ONNX Runtime: %w", err)
+			return fmt.Errorf("failed to initialize ONNX Runtime: %w", err)
 		}
 	}
+	return nil
+}
 
-	// Get model metadata first
-	inputs, outputs, err := onnxruntime_go.GetInputOutputInfo(config.ModelPath)
+// validateModelInfo gets and validates model input/output information.
+func validateModelInfo(modelPath string) (onnxruntime_go.InputOutputInfo, onnxruntime_go.InputOutputInfo, error) {
+	inputs, outputs, err := onnxruntime_go.GetInputOutputInfo(modelPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get model input/output info: %w", err)
+		return onnxruntime_go.InputOutputInfo{}, onnxruntime_go.InputOutputInfo{}, fmt.Errorf("failed to get model input/output info: %w", err)
 	}
 
 	if len(inputs) != 1 {
-		return nil, fmt.Errorf("expected 1 input, got %d", len(inputs))
+		return onnxruntime_go.InputOutputInfo{}, onnxruntime_go.InputOutputInfo{}, fmt.Errorf("expected 1 input, got %d", len(inputs))
 	}
 	if len(outputs) != 1 {
-		return nil, fmt.Errorf("expected 1 output, got %d", len(outputs))
+		return onnxruntime_go.InputOutputInfo{}, onnxruntime_go.InputOutputInfo{}, fmt.Errorf("expected 1 output, got %d", len(outputs))
 	}
 
 	inputInfo := inputs[0]
 	outputInfo := outputs[0]
 
-	// Validate input shape (should be [N, C, H, W])
 	if len(inputInfo.Dimensions) != 4 {
-		return nil, fmt.Errorf("expected 4D input tensor, got %dD", len(inputInfo.Dimensions))
+		return onnxruntime_go.InputOutputInfo{}, onnxruntime_go.InputOutputInfo{}, fmt.Errorf("expected 4D input tensor, got %dD", len(inputInfo.Dimensions))
 	}
 
-	// Create session options
+	return inputInfo, outputInfo, nil
+}
+
+// createSession creates the ONNX session with the given configuration.
+func createSession(modelPath string, inputInfo, outputInfo onnxruntime_go.InputOutputInfo, config Config) (*onnxruntime_go.DynamicAdvancedSession, error) {
 	sessionOptions, err := onnxruntime_go.NewSessionOptions()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session options: %w", err)
 	}
 	defer func() {
 		if err := sessionOptions.Destroy(); err != nil {
-			// Log but don't return error in defer
 			fmt.Printf("Failed to destroy session options: %v", err)
 		}
 	}()
 
-	// Configure GPU acceleration if requested
 	if err := onnx.ConfigureSessionForGPU(sessionOptions, config.GPU); err != nil {
 		return nil, fmt.Errorf("failed to configure GPU: %w", err)
 	}
 
-	// Set thread count if specified
 	if config.NumThreads > 0 {
-		err = sessionOptions.SetIntraOpNumThreads(config.NumThreads)
-		if err != nil {
+		if err = sessionOptions.SetIntraOpNumThreads(config.NumThreads); err != nil {
 			return nil, fmt.Errorf("failed to set thread count: %w", err)
 		}
 	}
 
-	// Create session with proper input/output names
-	session, err := onnxruntime_go.NewDynamicAdvancedSession(config.ModelPath,
+	session, err := onnxruntime_go.NewDynamicAdvancedSession(modelPath,
 		[]string{inputInfo.Name}, []string{outputInfo.Name}, sessionOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ONNX session: %w", err)
 	}
 
-	// Set up image constraints based on config
-	imageConstraints := utils.ImageConstraints{
+	return session, nil
+}
+
+// setupImageConstraints creates image constraints based on config.
+func setupImageConstraints(config Config) utils.ImageConstraints {
+	return utils.ImageConstraints{
 		MaxWidth:  config.MaxImageSize,
 		MaxHeight: config.MaxImageSize,
 		MinWidth:  32,
 		MinHeight: 32,
 	}
+}
+
+// NewDetector creates a new text detector with the given configuration.
+func NewDetector(config Config) (*Detector, error) {
+	if err := validateConfig(config); err != nil {
+		return nil, err
+	}
+
+	if err := validateModelFile(config.ModelPath); err != nil {
+		return nil, err
+	}
+
+	if err := setupONNXEnvironment(config.GPU.UseGPU); err != nil {
+		return nil, err
+	}
+
+	inputInfo, outputInfo, err := validateModelInfo(config.ModelPath)
+	if err != nil {
+		return nil, err
+	}
+
+	session, err := createSession(config.ModelPath, inputInfo, outputInfo, config)
+	if err != nil {
+		return nil, err
+	}
+
+	imageConstraints := setupImageConstraints(config)
 
 	detector := &Detector{
 		config:           config,

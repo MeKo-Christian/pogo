@@ -170,13 +170,8 @@ func filterRegions(regions []DetectedRegion, minConf float64) []DetectedRegion {
 	return out
 }
 
-// NonMaxSuppression performs greedy NMS on regions' axis-aligned boxes.
-// Keeps higher-confidence regions when IoU exceeds threshold.
-func NonMaxSuppression(regions []DetectedRegion, iouThreshold float64) []DetectedRegion {
-	if len(regions) <= 1 {
-		return regions
-	}
-	// Sort indices by confidence desc
+// sortRegionsByConfidence sorts region indices by confidence in descending order.
+func sortRegionsByConfidence(regions []DetectedRegion) []int {
 	idx := make([]int, len(regions))
 	for i := range idx {
 		idx[i] = i
@@ -191,8 +186,20 @@ func NonMaxSuppression(regions []DetectedRegion, iouThreshold float64) []Detecte
 		}
 		idx[i], idx[maxJ] = idx[maxJ], idx[i]
 	}
+	return idx
+}
+
+// NonMaxSuppression performs greedy NMS on regions' axis-aligned boxes.
+// Keeps higher-confidence regions when IoU exceeds threshold.
+func NonMaxSuppression(regions []DetectedRegion, iouThreshold float64) []DetectedRegion {
+	if len(regions) <= 1 {
+		return regions
+	}
+
+	idx := sortRegionsByConfidence(regions)
 	kept := make([]DetectedRegion, 0, len(regions))
 	suppressed := make([]bool, len(regions))
+
 	for i := range idx {
 		a := idx[i]
 		if suppressed[a] {

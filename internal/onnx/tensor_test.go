@@ -26,7 +26,8 @@ func TestNewBatchImageTensor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewBatchImageTensor error: %v", err)
 	}
-	if len(ten.Shape) != 4 || ten.Shape[0] != 2 || ten.Shape[1] != int64(c) || ten.Shape[2] != int64(h) || ten.Shape[3] != int64(w) {
+	if len(ten.Shape) != 4 || ten.Shape[0] != 2 || ten.Shape[1] != int64(c) ||
+		ten.Shape[2] != int64(h) || ten.Shape[3] != int64(w) {
 		t.Fatalf("unexpected shape: %v", ten.Shape)
 	}
 	if err := VerifyImageTensor(ten); err != nil {
