@@ -106,7 +106,7 @@ func TestValidateModelFile(t *testing.T) {
 	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	validFile := filepath.Join(tempDir, "test.onnx")
-	if err := os.WriteFile(validFile, []byte("fake model"), 0644); err != nil {
+	if err := os.WriteFile(validFile, []byte("fake model"), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 

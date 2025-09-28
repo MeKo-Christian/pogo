@@ -53,7 +53,8 @@ func traceContourMoore(labels []int, w, h, label int, st compStats) []utils.Poin
 // traceContourLoop performs the main contour tracing loop.
 func traceContourLoop(labels []int, w, h, label int, cx, cy, bx, by *int,
 	startCx, startCy, startBx, startBy, maxSteps int,
-	pts *[]utils.Point, addPoint func(int, int)) []utils.Point {
+	pts *[]utils.Point, addPoint func(int, int),
+) []utils.Point {
 	steps := 0
 
 	for steps < maxSteps {

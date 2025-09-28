@@ -196,7 +196,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 - [ ] Multi-scale inference + result merging (IoU/IoB based)
 - [ ] Optional image pyramid for small text sensitivity
 - [x] NMS improvements: Soft-NMS
-- [ ] NMS improvements: class-agnostic tuning
+- [x] NMS improvements: class-agnostic tuning
 - [ ] Adaptive thresholds (auto-tune db_thresh/box_thresh per image)
 - [ ] Provider options (CUDA/DirectML) and graph optimization levels
 - [ ] Warmup runs and session pre-allocation (IO binding) to reduce latency

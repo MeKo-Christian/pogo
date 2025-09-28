@@ -1,6 +1,9 @@
 package utils
 
-import "math"
+import (
+	"math"
+	"sort"
+)
 
 // SimplifyPolygon reduces the number of points in a polygon using the
 // Douglas–Peucker algorithm with the given tolerance epsilon.
@@ -156,16 +159,14 @@ func buildUpperHull(p []Point) []Point {
 }
 
 func sortPoints(p []Point) {
-	// simple insertion sort since n is usually small
-	for i := 1; i < len(p); i++ {
-		v := p[i]
-		j := i - 1
-		for j >= 0 && (p[j].X > v.X || (p[j].X == v.X && p[j].Y > v.Y)) {
-			p[j+1] = p[j]
-			j--
+	// Use efficient stdlib sort instead of O(n²) insertion sort
+	// to handle large datasets properly
+	sort.Slice(p, func(i, j int) bool {
+		if p[i].X != p[j].X {
+			return p[i].X < p[j].X
 		}
-		p[j+1] = v
-	}
+		return p[i].Y < p[j].Y
+	})
 }
 
 func cross(o, a, b Point) float64 {

@@ -67,7 +67,8 @@ func applyConfidenceFilters(res *pipeline.OCRImageResult, confFlag, minRecConf f
 
 // generateAndSaveOverlay creates an overlay image and saves it to disk.
 func generateAndSaveOverlay(img image.Image, res *pipeline.OCRImageResult,
-	meta utils.ImageMetadata, overlayDir string) {
+	meta utils.ImageMetadata, overlayDir string,
+) {
 	ov := pipeline.RenderOverlay(img, res, color.RGBA{255, 0, 0, 255}, color.RGBA{0, 255, 0, 255})
 	if ov == nil {
 		return
@@ -88,7 +89,8 @@ func generateAndSaveOverlay(img image.Image, res *pipeline.OCRImageResult,
 
 // processSingleImage processes a single image through the OCR pipeline.
 func processSingleImage(pl *pipeline.Pipeline, path string, confFlag, minRecConf float64,
-	overlayDir string) (*pipeline.OCRImageResult, error) {
+	overlayDir string,
+) (*pipeline.OCRImageResult, error) {
 	// Load and validate image
 	img, meta, err := loadAndValidateImage(path)
 	if err != nil {
@@ -114,7 +116,8 @@ func processSingleImage(pl *pipeline.Pipeline, path string, confFlag, minRecConf
 
 // processImagesParallel loads and processes images in parallel.
 func processImagesParallel(pl *pipeline.Pipeline, imagePaths []string,
-	confFlag, minRecConf float64, overlayDir string) ([]*pipeline.OCRImageResult, error) {
+	confFlag, minRecConf float64, overlayDir string,
+) ([]*pipeline.OCRImageResult, error) {
 	imageResults := make([]*pipeline.OCRImageResult, len(imagePaths))
 
 	for i, path := range imagePaths {

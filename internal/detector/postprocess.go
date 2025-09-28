@@ -42,7 +42,8 @@ type compStats struct {
 
 // performComponentBFS performs BFS traversal for a connected component starting from a seed pixel.
 func performComponentBFS(mask []bool, prob []float32, visited []int, labels []int,
-	w, h, startX, startY, label int) compStats {
+	w, h, startX, startY, label int,
+) compStats {
 	idx := func(x, y int) int { return y*w + x }
 	startIdx := idx(startX, startY)
 
@@ -88,7 +89,8 @@ func updateComponentStats(st *compStats, prob float32, cx, cy int) {
 
 // processNeighbors processes all 4-connected neighbors of a pixel.
 func processNeighbors(mask []bool, visited []int, labels []int, q *list.List,
-	w, h, cx, cy, label int, idx func(int, int) int, dirs [][2]int) {
+	w, h, cx, cy, label int, idx func(int, int) int, dirs [][2]int,
+) {
 	for _, d := range dirs {
 		nx, ny := cx+d[0], cy+d[1]
 		if isValidNeighbor(mask, visited, w, h, nx, ny) {
@@ -247,6 +249,71 @@ func NonMaxSuppression(regions []DetectedRegion, iouThreshold float64) []Detecte
 	return kept
 }
 
+// AdaptiveNonMaxSuppression performs greedy NMS with adaptive IoU thresholds.
+func AdaptiveNonMaxSuppression(regions []DetectedRegion, baseThreshold, scaleFactor float64) []DetectedRegion {
+	if len(regions) <= 1 {
+		return regions
+	}
+
+	idx := sortRegionsByConfidence(regions)
+	kept := make([]DetectedRegion, 0, len(regions))
+	suppressed := make([]bool, len(regions))
+
+	for i := range idx {
+		a := idx[i]
+		if suppressed[a] {
+			continue
+		}
+		kept = append(kept, regions[a])
+		for j := i + 1; j < len(idx); j++ {
+			b := idx[j]
+			if suppressed[b] {
+				continue
+			}
+			// Use adaptive threshold based on region characteristics
+			adaptiveThreshold := calculateAdaptiveIoUThreshold(baseThreshold, scaleFactor, regions[a], regions[b])
+			if ComputeRegionIoU(regions[a].Box, regions[b].Box) > adaptiveThreshold {
+				suppressed[b] = true
+			}
+		}
+	}
+	return kept
+}
+
+// SizeAwareNonMaxSuppression performs greedy NMS with size-based adaptive thresholds.
+func SizeAwareNonMaxSuppression(regions []DetectedRegion, baseThreshold, sizeScaleFactor float64,
+	minSize, maxSize int,
+) []DetectedRegion {
+	if len(regions) <= 1 {
+		return regions
+	}
+
+	idx := sortRegionsByConfidence(regions)
+	kept := make([]DetectedRegion, 0, len(regions))
+	suppressed := make([]bool, len(regions))
+
+	for i := range idx {
+		a := idx[i]
+		if suppressed[a] {
+			continue
+		}
+		kept = append(kept, regions[a])
+		for j := i + 1; j < len(idx); j++ {
+			b := idx[j]
+			if suppressed[b] {
+				continue
+			}
+			// Use size-based adaptive threshold
+			adaptiveThreshold := calculateSizeBasedIoUThreshold(baseThreshold, sizeScaleFactor,
+				minSize, maxSize, regions[a], regions[b])
+			if ComputeRegionIoU(regions[a].Box, regions[b].Box) > adaptiveThreshold {
+				suppressed[b] = true
+			}
+		}
+	}
+	return kept
+}
+
 // sortRegionsByConfidenceDesc sorts regions by confidence in descending order using selection sort.
 func sortRegionsByConfidenceDesc(regions []DetectedRegion) {
 	n := len(regions)
@@ -301,7 +368,8 @@ func calculateSoftNMSWeight(iou, iouThreshold, sigma float64, method string) flo
 // suppressed. Boxes with final confidence below scoreThresh are discarded.
 // Returns regions sorted by confidence descending.
 func SoftNonMaxSuppression(regions []DetectedRegion, method string,
-	iouThreshold, sigma, scoreThresh float64) []DetectedRegion {
+	iouThreshold, sigma, scoreThresh float64,
+) []DetectedRegion {
 	n := len(regions)
 	if n <= 1 {
 		return handleEdgeCases(regions, n, scoreThresh)
@@ -343,7 +411,8 @@ func applySoftNMS(regs *[]DetectedRegion, iouThreshold, sigma float64, method st
 
 // decayOverlappingRegions decays the confidence of regions that overlap with the current region.
 func decayOverlappingRegions(regs []DetectedRegion, i int,
-	iouThreshold, sigma float64, method string, scoreThresh float64) {
+	iouThreshold, sigma float64, method string, scoreThresh float64,
+) {
 	for j := i + 1; j < len(regs); j++ {
 		if regs[j].Confidence < scoreThresh {
 			continue
@@ -415,7 +484,8 @@ func PostProcessDB(prob []float32, w, h int, dbThresh, boxMinConf float32) []Det
 
 // PostProcessDBWithNMS applies DB post-processing followed by NMS.
 func PostProcessDBWithNMS(prob []float32, w, h int, dbThresh, boxMinConf float32,
-	iouThreshold float64) []DetectedRegion {
+	iouThreshold float64,
+) []DetectedRegion {
 	regs := PostProcessDB(prob, w, h, dbThresh, boxMinConf)
 	if len(regs) == 0 {
 		return regs
@@ -430,7 +500,8 @@ type PostProcessOptions struct {
 
 // PostProcessDBWithOptions is like PostProcessDB but allows selecting polygon mode.
 func PostProcessDBWithOptions(prob []float32, w, h int, dbThresh, boxMinConf float32,
-	opts PostProcessOptions) []DetectedRegion {
+	opts PostProcessOptions,
+) []DetectedRegion {
 	if len(prob) != w*h || w <= 0 || h <= 0 {
 		return nil
 	}
@@ -443,7 +514,8 @@ func PostProcessDBWithOptions(prob []float32, w, h int, dbThresh, boxMinConf flo
 
 // PostProcessDBWithNMSOptions applies DB post-processing with options followed by NMS.
 func PostProcessDBWithNMSOptions(prob []float32, w, h int, dbThresh, boxMinConf float32,
-	iouThreshold float64, opts PostProcessOptions) []DetectedRegion {
+	iouThreshold float64, opts PostProcessOptions,
+) []DetectedRegion {
 	regs := PostProcessDBWithOptions(prob, w, h, dbThresh, boxMinConf, opts)
 	if len(regs) == 0 {
 		return regs
@@ -466,4 +538,79 @@ func ComputeRegionIoU(a, b utils.Box) float64 {
 	aArea := a.Width() * a.Height()
 	bArea := b.Width() * b.Height()
 	return inter / (aArea + bArea - inter)
+}
+
+// AdaptiveNMSThresholds contains tunable parameters for adaptive NMS.
+type AdaptiveNMSThresholds struct {
+	BaseThreshold float64 // Base IoU threshold
+	ScaleFactor   float64 // Overall scaling factor
+	SizeWeight    float64 // Weight for size-based adjustment
+	ConfWeight    float64 // Weight for confidence-based adjustment
+	MinThreshold  float64 // Minimum allowed threshold
+	MaxThreshold  float64 // Maximum allowed threshold
+}
+
+// DefaultAdaptiveNMSThresholds returns default adaptive NMS parameters.
+func DefaultAdaptiveNMSThresholds() AdaptiveNMSThresholds {
+	return AdaptiveNMSThresholds{
+		BaseThreshold: 0.3,
+		ScaleFactor:   1.0,
+		SizeWeight:    0.1,
+		ConfWeight:    0.05,
+		MinThreshold:  0.1,
+		MaxThreshold:  0.8,
+	}
+}
+
+// calculateAdaptiveIoUThreshold computes an adaptive IoU threshold based on region characteristics.
+func calculateAdaptiveIoUThreshold(baseThreshold, scaleFactor float64, regionA, regionB DetectedRegion) float64 {
+	// Calculate size-based adjustment
+	sizeA := regionA.Box.Width() * regionA.Box.Height()
+	sizeB := regionB.Box.Width() * regionB.Box.Height()
+	avgSize := (sizeA + sizeB) / 2.0
+
+	// Normalize size (assuming typical text region sizes)
+	normalizedSize := math.Min(avgSize/10000.0, 1.0) // Cap at 1.0 for very large regions
+
+	// Calculate confidence-based adjustment
+	avgConf := (regionA.Confidence + regionB.Confidence) / 2.0
+
+	// Adaptive threshold: base + size adjustment + confidence adjustment
+	adaptiveThreshold := baseThreshold * scaleFactor
+	adaptiveThreshold += 0.1 * normalizedSize   // Larger regions can have higher IoU tolerance
+	adaptiveThreshold -= 0.05 * (avgConf - 0.5) // Higher confidence regions can be more strict
+
+	// Clamp to reasonable bounds
+	if adaptiveThreshold < 0.1 {
+		adaptiveThreshold = 0.1
+	}
+	if adaptiveThreshold > 0.8 {
+		adaptiveThreshold = 0.8
+	}
+
+	return adaptiveThreshold
+}
+
+// calculateSizeBasedIoUThreshold computes size-aware IoU threshold.
+func calculateSizeBasedIoUThreshold(baseThreshold, sizeScaleFactor float64,
+	minSize, maxSize int, regionA, regionB DetectedRegion,
+) float64 {
+	sizeA := regionA.Box.Width() * regionA.Box.Height()
+	sizeB := regionB.Box.Width() * regionB.Box.Height()
+	avgSize := (sizeA + sizeB) / 2.0
+
+	// Normalize size between min and max
+	sizeRange := float64(maxSize - minSize)
+	if sizeRange <= 0 {
+		return baseThreshold
+	}
+
+	normalizedSize := (avgSize - float64(minSize)) / sizeRange
+	normalizedSize = math.Max(0, math.Min(1, normalizedSize)) // Clamp to [0,1]
+
+	// Smaller regions get stricter thresholds (less tolerance for overlap)
+	// Larger regions get more lenient thresholds (more tolerance for overlap)
+	sizeAdjustment := sizeScaleFactor * (normalizedSize - 0.5)
+
+	return baseThreshold + sizeAdjustment
 }

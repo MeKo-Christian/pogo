@@ -57,6 +57,14 @@ type DetectorConfig struct {
 	NMSThreshold float64 `mapstructure:"nms_threshold" yaml:"nms_threshold" json:"nms_threshold"`
 	NumThreads   int     `mapstructure:"num_threads" yaml:"num_threads" json:"num_threads"`
 	MaxImageSize int     `mapstructure:"max_image_size" yaml:"max_image_size" json:"max_image_size"`
+
+	// Class-agnostic NMS tuning
+	UseAdaptiveNMS     bool    `mapstructure:"use_adaptive_nms" yaml:"use_adaptive_nms" json:"use_adaptive_nms"`
+	AdaptiveNMSScale   float64 `mapstructure:"adaptive_nms_scale" yaml:"adaptive_nms_scale" json:"adaptive_nms_scale"`
+	SizeAwareNMS       bool    `mapstructure:"size_aware_nms" yaml:"size_aware_nms" json:"size_aware_nms"`
+	MinRegionSize      int     `mapstructure:"min_region_size" yaml:"min_region_size" json:"min_region_size"`
+	MaxRegionSize      int     `mapstructure:"max_region_size" yaml:"max_region_size" json:"max_region_size"`
+	SizeNMSScaleFactor float64 `mapstructure:"size_nms_scale_factor" yaml:"size_nms_scale_factor" json:"size_nms_scale_factor"`
 }
 
 // RecognizerConfig contains text recognition settings.

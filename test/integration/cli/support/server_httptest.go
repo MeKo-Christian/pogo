@@ -298,7 +298,8 @@ func (testCtx *TestContext) readImageData(file multipart.File) ([]byte, error) {
 
 // processImageData processes the image data based on decode success.
 func (testCtx *TestContext) processImageData(w http.ResponseWriter, mockPipeline *MockPipeline,
-	mockBase64ImageData string, filename string, imageData []byte, r *http.Request) {
+	mockBase64ImageData string, filename string, imageData []byte, r *http.Request,
+) {
 	if testCtx.shouldSimulateDecodeFailure(filename) {
 		testCtx.handleDecodeFailure(w, mockPipeline, mockBase64ImageData, r)
 	} else {
@@ -314,7 +315,8 @@ func (testCtx *TestContext) shouldSimulateDecodeFailure(filename string) bool {
 
 // handleDecodeFailure handles the case where image decoding fails.
 func (testCtx *TestContext) handleDecodeFailure(w http.ResponseWriter,
-	mockPipeline *MockPipeline, mockBase64ImageData string, r *http.Request) {
+	mockPipeline *MockPipeline, mockBase64ImageData string, r *http.Request,
+) {
 	img := testCtx.createSimpleTestImage(100, 50)
 	result, _ := mockPipeline.ProcessImage(img)
 
@@ -345,7 +347,8 @@ func (testCtx *TestContext) handleDecodeFailure(w http.ResponseWriter,
 
 // handleSuccessfulDecode handles the case where image decoding succeeds.
 func (testCtx *TestContext) handleSuccessfulDecode(w http.ResponseWriter,
-	mockPipeline *MockPipeline, mockBase64ImageData string, imageData []byte, r *http.Request) {
+	mockPipeline *MockPipeline, mockBase64ImageData string, imageData []byte, r *http.Request,
+) {
 	img, _, err := image.Decode(bytes.NewReader(imageData))
 	if err != nil {
 		http.Error(w, "Invalid image format", http.StatusBadRequest)
@@ -363,7 +366,8 @@ func (testCtx *TestContext) handleSuccessfulDecode(w http.ResponseWriter,
 
 // sendOCRResponse sends the OCR result response.
 func (testCtx *TestContext) sendOCRResponse(w http.ResponseWriter,
-	result *pipeline.OCRImageResult, mockBase64ImageData string, r *http.Request) {
+	result *pipeline.OCRImageResult, mockBase64ImageData string, r *http.Request,
+) {
 	// Get format parameter
 	format := r.FormValue("format")
 	if format == "" {

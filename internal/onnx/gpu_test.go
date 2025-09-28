@@ -148,20 +148,20 @@ func TestFindProjectRoot(t *testing.T) {
 	// Create a temporary directory structure with go.mod
 	tempDir := t.TempDir()
 	projectDir := filepath.Join(tempDir, "project")
-	if err := os.MkdirAll(projectDir, 0755); err != nil {
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatalf("Failed to create project directory: %v", err)
 	}
 
 	// Create go.mod file
 	goModPath := filepath.Join(projectDir, "go.mod")
 	goModContent := "module test\n\ngo 1.21\n"
-	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
+	if err := os.WriteFile(goModPath, []byte(goModContent), 0o644); err != nil {
 		t.Fatalf("Failed to create go.mod: %v", err)
 	}
 
 	// Create subdirectory
 	subDir := filepath.Join(projectDir, "subdir")
-	if err := os.MkdirAll(subDir, 0755); err != nil {
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 
@@ -237,7 +237,7 @@ func TestTrySetLibraryPath(t *testing.T) {
 	// Create a temporary file to simulate a library
 	tempDir := t.TempDir()
 	libPath := filepath.Join(tempDir, "libonnxruntime.so")
-	if err := os.WriteFile(libPath, []byte("fake library"), 0644); err != nil {
+	if err := os.WriteFile(libPath, []byte("fake library"), 0o644); err != nil {
 		t.Fatalf("Failed to create fake library file: %v", err)
 	}
 
@@ -257,13 +257,13 @@ func TestSetONNXLibraryPath(t *testing.T) {
 	// Create a temporary project structure
 	tempDir := t.TempDir()
 	projectDir := filepath.Join(tempDir, "project")
-	if err := os.MkdirAll(projectDir, 0755); err != nil {
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatalf("Failed to create project directory: %v", err)
 	}
 
 	// Create go.mod
 	goModPath := filepath.Join(projectDir, "go.mod")
-	if err := os.WriteFile(goModPath, []byte("module test\n\ngo 1.21\n"), 0644); err != nil {
+	if err := os.WriteFile(goModPath, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
 		t.Fatalf("Failed to create go.mod: %v", err)
 	}
 
@@ -278,11 +278,11 @@ func TestSetONNXLibraryPath(t *testing.T) {
 
 	// Create CPU library
 	cpuLibDir := filepath.Join(projectDir, "onnxruntime", "lib")
-	if err := os.MkdirAll(cpuLibDir, 0755); err != nil {
+	if err := os.MkdirAll(cpuLibDir, 0o755); err != nil {
 		t.Fatalf("Failed to create CPU lib directory: %v", err)
 	}
 	cpuLibPath := filepath.Join(cpuLibDir, libName)
-	if err := os.WriteFile(cpuLibPath, []byte("fake cpu library"), 0644); err != nil {
+	if err := os.WriteFile(cpuLibPath, []byte("fake cpu library"), 0o644); err != nil {
 		t.Fatalf("Failed to create fake CPU library: %v", err)
 	}
 

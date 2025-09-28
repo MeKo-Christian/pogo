@@ -44,7 +44,7 @@ Examples:
 
 		// Create directory if it doesn't exist
 		if dir := filepath.Dir(filename); dir != "." {
-			if err := os.MkdirAll(dir, 0750); err != nil {
+			if err := os.MkdirAll(dir, 0o750); err != nil {
 				return fmt.Errorf("failed to create directory %s: %w", dir, err)
 			}
 		}

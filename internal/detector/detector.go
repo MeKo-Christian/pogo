@@ -31,6 +31,14 @@ type Config struct {
 	SoftNMSThresh  float64        // Score threshold for Soft-NMS output filtering
 	PolygonMode    string         // "minrect" (default) or "contour"
 	GPU            onnx.GPUConfig // GPU acceleration configuration
+
+	// Class-agnostic NMS tuning
+	UseAdaptiveNMS     bool    // Enable adaptive NMS thresholds
+	AdaptiveNMSScale   float64 // Scale factor for adaptive IoU thresholds (default: 1.0)
+	SizeAwareNMS       bool    // Enable size-based NMS tuning
+	MinRegionSize      int     // Minimum region size for size-aware NMS (default: 32)
+	MaxRegionSize      int     // Maximum region size for size-aware NMS (default: 1024)
+	SizeNMSScaleFactor float64 // Scale factor for size-based IoU adjustment (default: 0.1)
 }
 
 // DefaultConfig returns a default detector configuration.
@@ -49,6 +57,14 @@ func DefaultConfig() Config {
 		SoftNMSThresh:  0.1,
 		PolygonMode:    "minrect",
 		GPU:            onnx.DefaultGPUConfig(),
+
+		// Class-agnostic NMS tuning defaults
+		UseAdaptiveNMS:     false,
+		AdaptiveNMSScale:   1.0,
+		SizeAwareNMS:       false,
+		MinRegionSize:      32,
+		MaxRegionSize:      1024,
+		SizeNMSScaleFactor: 0.1,
 	}
 }
 
@@ -137,7 +153,8 @@ func validateModelInfo(modelPath string) (onnxruntime_go.InputOutputInfo, onnxru
 
 // createSession creates the ONNX session with the given configuration.
 func createSession(modelPath string, inputInfo, outputInfo onnxruntime_go.InputOutputInfo,
-	config Config) (*onnxruntime_go.DynamicAdvancedSession, error) {
+	config Config,
+) (*onnxruntime_go.DynamicAdvancedSession, error) {
 	sessionOptions, err := onnxruntime_go.NewSessionOptions()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session options: %w", err)
@@ -514,7 +531,8 @@ func (d *Detector) runBatchInferenceCore(batchTensor onnx.Tensor) ([]float32, in
 
 // splitBatchOutput splits batch output data into individual results.
 func splitBatchOutput(outputData []float32, results []*DetectionResult,
-	batchSize, channels, outputHeight, outputWidth int) {
+	batchSize, channels, outputHeight, outputWidth int,
+) {
 	elementsPerImage := channels * outputHeight * outputWidth
 	for i := range batchSize {
 		startIdx := i * elementsPerImage

@@ -100,10 +100,14 @@ func (rm *ResourceManager) Start() {
 
 // Stop stops resource monitoring and releases resources.
 func (rm *ResourceManager) Stop() {
-	close(rm.stopChan)
-
 	rm.statsMutex.Lock()
 	defer rm.statsMutex.Unlock()
+
+	if !rm.monitoringActive {
+		return
+	}
+
+	close(rm.stopChan)
 
 	if rm.memoryMonitor != nil {
 		rm.memoryMonitor.Stop()
@@ -312,11 +316,15 @@ func (mm *MemoryMonitor) Start() {
 
 // Stop stops memory monitoring.
 func (mm *MemoryMonitor) Stop() {
-	close(mm.stopChan)
-
 	mm.mutex.Lock()
+	defer mm.mutex.Unlock()
+
+	if !mm.active {
+		return
+	}
+
+	close(mm.stopChan)
 	mm.active = false
-	mm.mutex.Unlock()
 }
 
 // GetCurrentUsage returns the current memory usage in bytes.

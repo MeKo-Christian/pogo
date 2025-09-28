@@ -81,3 +81,7 @@ docs/_build/
 
 # Cache
 .gocache*/
+
+# Results
+results.txt
+results.json

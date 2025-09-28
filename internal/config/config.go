@@ -74,6 +74,14 @@ func defaultDetectorConfig() DetectorConfig {
 		NMSThreshold: cfg.NMSThreshold,
 		NumThreads:   cfg.NumThreads,
 		MaxImageSize: cfg.MaxImageSize,
+
+		// Class-agnostic NMS tuning defaults
+		UseAdaptiveNMS:     cfg.UseAdaptiveNMS,
+		AdaptiveNMSScale:   cfg.AdaptiveNMSScale,
+		SizeAwareNMS:       cfg.SizeAwareNMS,
+		MinRegionSize:      cfg.MinRegionSize,
+		MaxRegionSize:      cfg.MaxRegionSize,
+		SizeNMSScaleFactor: cfg.SizeNMSScaleFactor,
 	}
 }
 
@@ -136,6 +144,12 @@ func (c *Config) validateThresholds() error {
 	if err := validateThreshold(c.Pipeline.Detector.NMSThreshold, "detector.nms_threshold"); err != nil {
 		return err
 	}
+	if err := validateThreshold(c.Pipeline.Detector.AdaptiveNMSScale, "detector.adaptive_nms_scale"); err != nil {
+		return err
+	}
+	if err := validateThreshold(c.Pipeline.Detector.SizeNMSScaleFactor, "detector.size_nms_scale_factor"); err != nil {
+		return err
+	}
 	if err := validateThreshold(c.Pipeline.Recognizer.MinConfidence, "recognizer.min_confidence"); err != nil {
 		return err
 	}
@@ -168,6 +182,16 @@ func (c *Config) validatePositiveIntegers() error {
 	}
 	if c.Batch.Workers <= 0 {
 		return fmt.Errorf("invalid batch workers: %d (must be positive)", c.Batch.Workers)
+	}
+	if c.Pipeline.Detector.MinRegionSize <= 0 {
+		return fmt.Errorf("invalid detector min region size: %d (must be positive)", c.Pipeline.Detector.MinRegionSize)
+	}
+	if c.Pipeline.Detector.MaxRegionSize <= 0 {
+		return fmt.Errorf("invalid detector max region size: %d (must be positive)", c.Pipeline.Detector.MaxRegionSize)
+	}
+	if c.Pipeline.Detector.MaxRegionSize < c.Pipeline.Detector.MinRegionSize {
+		return fmt.Errorf("detector max region size (%d) must be >= min region size (%d)",
+			c.Pipeline.Detector.MaxRegionSize, c.Pipeline.Detector.MinRegionSize)
 	}
 
 	return nil
@@ -284,6 +308,15 @@ func (c *Config) toDetectorConfig() detector.Config {
 	if c.Pipeline.Detector.ModelPath != "" {
 		cfg.ModelPath = c.Pipeline.Detector.ModelPath
 	}
+
+	// Class-agnostic NMS tuning
+	cfg.UseAdaptiveNMS = c.Pipeline.Detector.UseAdaptiveNMS
+	cfg.AdaptiveNMSScale = c.Pipeline.Detector.AdaptiveNMSScale
+	cfg.SizeAwareNMS = c.Pipeline.Detector.SizeAwareNMS
+	cfg.MinRegionSize = c.Pipeline.Detector.MinRegionSize
+	cfg.MaxRegionSize = c.Pipeline.Detector.MaxRegionSize
+	cfg.SizeNMSScaleFactor = c.Pipeline.Detector.SizeNMSScaleFactor
+
 	return cfg
 }
 

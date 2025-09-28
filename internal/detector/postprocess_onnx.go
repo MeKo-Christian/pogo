@@ -28,10 +28,31 @@ func (d *Detector) DetectRegions(img image.Image) ([]DetectedRegion, error) {
 			regs = SoftNonMaxSuppression(regs, d.config.NMSMethod, d.config.NMSThreshold,
 				d.config.SoftNMSSigma, d.config.SoftNMSThresh)
 		default:
-			slog.Debug("Using Hard-NMS for region filtering", "iou_threshold", d.config.NMSThreshold)
-			// Hard NMS as before
-			regs = PostProcessDBWithNMSOptions(res.ProbabilityMap, res.Width, res.Height,
-				d.config.DbThresh, d.config.DbBoxThresh, d.config.NMSThreshold, opts)
+			// Check for adaptive NMS features
+			switch {
+			case d.config.UseAdaptiveNMS:
+				slog.Debug("Using Adaptive NMS for region filtering",
+					"base_threshold", d.config.NMSThreshold,
+					"scale_factor", d.config.AdaptiveNMSScale)
+				regs = PostProcessDBWithOptions(res.ProbabilityMap, res.Width, res.Height,
+					d.config.DbThresh, d.config.DbBoxThresh, opts)
+				regs = AdaptiveNonMaxSuppression(regs, d.config.NMSThreshold, d.config.AdaptiveNMSScale)
+			case d.config.SizeAwareNMS:
+				slog.Debug("Using Size-Aware NMS for region filtering",
+					"base_threshold", d.config.NMSThreshold,
+					"size_scale_factor", d.config.SizeNMSScaleFactor,
+					"min_size", d.config.MinRegionSize,
+					"max_size", d.config.MaxRegionSize)
+				regs = PostProcessDBWithOptions(res.ProbabilityMap, res.Width, res.Height,
+					d.config.DbThresh, d.config.DbBoxThresh, opts)
+				regs = SizeAwareNonMaxSuppression(regs, d.config.NMSThreshold, d.config.SizeNMSScaleFactor,
+					d.config.MinRegionSize, d.config.MaxRegionSize)
+			default:
+				slog.Debug("Using Hard-NMS for region filtering", "iou_threshold", d.config.NMSThreshold)
+				// Hard NMS as before
+				regs = PostProcessDBWithNMSOptions(res.ProbabilityMap, res.Width, res.Height,
+					d.config.DbThresh, d.config.DbBoxThresh, d.config.NMSThreshold, opts)
+			}
 		}
 	} else {
 		slog.Debug("NMS disabled, using DB post-processing only")

@@ -198,6 +198,12 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("pipeline.detector.nms_threshold", defaults.Pipeline.Detector.NMSThreshold)
 	l.v.SetDefault("pipeline.detector.num_threads", defaults.Pipeline.Detector.NumThreads)
 	l.v.SetDefault("pipeline.detector.max_image_size", defaults.Pipeline.Detector.MaxImageSize)
+	l.v.SetDefault("pipeline.detector.use_adaptive_nms", defaults.Pipeline.Detector.UseAdaptiveNMS)
+	l.v.SetDefault("pipeline.detector.adaptive_nms_scale", defaults.Pipeline.Detector.AdaptiveNMSScale)
+	l.v.SetDefault("pipeline.detector.size_aware_nms", defaults.Pipeline.Detector.SizeAwareNMS)
+	l.v.SetDefault("pipeline.detector.min_region_size", defaults.Pipeline.Detector.MinRegionSize)
+	l.v.SetDefault("pipeline.detector.max_region_size", defaults.Pipeline.Detector.MaxRegionSize)
+	l.v.SetDefault("pipeline.detector.size_nms_scale_factor", defaults.Pipeline.Detector.SizeNMSScaleFactor)
 
 	l.v.SetDefault("pipeline.recognizer.language", defaults.Pipeline.Recognizer.Language)
 	l.v.SetDefault("pipeline.recognizer.image_height", defaults.Pipeline.Recognizer.ImageHeight)

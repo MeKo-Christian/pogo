@@ -52,7 +52,8 @@ func (p *Pipeline) ProcessImagesParallel(images []image.Image, config ParallelCo
 
 // ProcessImagesParallelContext processes images in parallel with context cancellation support.
 func (p *Pipeline) ProcessImagesParallelContext(ctx context.Context, images []image.Image,
-	config ParallelConfig) ([]*OCRImageResult, error) {
+	config ParallelConfig,
+) ([]*OCRImageResult, error) {
 	if err := p.validateParallelProcessing(images); err != nil {
 		return nil, err
 	}
@@ -93,7 +94,8 @@ func (p *Pipeline) applyConfigDefaults(config ParallelConfig) ParallelConfig {
 }
 
 func (p *Pipeline) executeParallelProcessing(ctx context.Context, images []image.Image,
-	config ParallelConfig) ([]*OCRImageResult, error) {
+	config ParallelConfig,
+) ([]*OCRImageResult, error) {
 	// Initialize progress tracking
 	if config.ProgressCallback != nil {
 		config.ProgressCallback.OnStart(len(images))
@@ -116,7 +118,8 @@ func (p *Pipeline) createChannels(imageCount int) (chan imageJob, chan imageResu
 }
 
 func (p *Pipeline) startWorkers(ctx context.Context, jobs chan imageJob, results chan imageResult,
-	config ParallelConfig) *sync.WaitGroup {
+	config ParallelConfig,
+) *sync.WaitGroup {
 	var wg sync.WaitGroup
 	slog.Debug("Starting worker pool", "worker_count", config.MaxWorkers)
 	for range config.MaxWorkers {
@@ -147,7 +150,8 @@ func (p *Pipeline) waitForCompletion(wg *sync.WaitGroup, results chan imageResul
 }
 
 func (p *Pipeline) collectAndOrderResults(ctx context.Context, results chan imageResult,
-	images []image.Image, config ParallelConfig) ([]*OCRImageResult, error) {
+	images []image.Image, config ParallelConfig,
+) ([]*OCRImageResult, error) {
 	resultMap, errorMap := p.aggregateResults(results, len(images), config)
 
 	// Check for context cancellation
@@ -159,7 +163,8 @@ func (p *Pipeline) collectAndOrderResults(ctx context.Context, results chan imag
 }
 
 func (p *Pipeline) aggregateResults(results chan imageResult, totalImages int,
-	config ParallelConfig) (map[int]*OCRImageResult, map[int]error) {
+	config ParallelConfig,
+) (map[int]*OCRImageResult, map[int]error) {
 	resultMap := make(map[int]*OCRImageResult)
 	errorMap := make(map[int]error)
 	processedCount := 0
@@ -179,7 +184,8 @@ func (p *Pipeline) aggregateResults(results chan imageResult, totalImages int,
 }
 
 func (p *Pipeline) buildOrderedResults(resultMap map[int]*OCRImageResult, errorMap map[int]error,
-	images []image.Image, config ParallelConfig) ([]*OCRImageResult, error) {
+	images []image.Image, config ParallelConfig,
+) ([]*OCRImageResult, error) {
 	orderedResults := make([]*OCRImageResult, len(images))
 	var firstError error
 
@@ -298,7 +304,8 @@ func updateProgress(
 //
 
 func (p *Pipeline) ProcessImagesParallelBatchedContext(ctx context.Context, images []image.Image,
-	config ParallelConfig) ([]*OCRImageResult, error) {
+	config ParallelConfig,
+) ([]*OCRImageResult, error) {
 	if config.BatchSize <= 1 {
 		// No batching requested, use regular parallel processing
 		return p.ProcessImagesParallelContext(ctx, images, config)

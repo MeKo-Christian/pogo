@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MeKo-Tech/pogo/cmd/ocr/cmd"
 	"github.com/MeKo-Tech/pogo/internal/testutil"
 	"github.com/MeKo-Tech/pogo/test/integration/cli/support"
 	"github.com/cucumber/godog"
@@ -24,6 +25,14 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create test context: %v", err))
 	}
+
+	// Reset viper configuration to prevent state leakage between scenarios
+	// This is necessary because viper retains flag values from previous scenario executions
+	viper := cmd.GetConfigLoader().GetViper()
+	viper.Set("pipeline.recognizer.dict_path", "")
+	viper.Set("pipeline.recognizer.dict_langs", "")
+	viper.Set("pipeline.detector.model_path", "")
+	viper.Set("pipeline.recognizer.model_path", "")
 
 	// Register step definitions
 	testContext.RegisterCommonSteps(sc)

@@ -201,7 +201,8 @@ func createSessionOptions(cfg Config) (*onnxrt.SessionOptions, error) {
 }
 
 func createONNXSession(modelPath string, in, out onnxrt.InputOutputInfo,
-	opts *onnxrt.SessionOptions) (*onnxrt.DynamicAdvancedSession, error) {
+	opts *onnxrt.SessionOptions,
+) (*onnxrt.DynamicAdvancedSession, error) {
 	sess, err := onnxrt.NewDynamicAdvancedSession(modelPath, []string{in.Name}, []string{out.Name}, opts)
 	if err != nil {
 		return nil, fmt.Errorf("session: %w", err)
