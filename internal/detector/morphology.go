@@ -7,16 +7,16 @@ const (
 	MorphNone MorphologicalOp = iota
 	MorphDilate
 	MorphErode
-	MorphOpening  // Erode then Dilate - removes small noise
-	MorphClosing  // Dilate then Erode - fills gaps
-	MorphSmooth   // Gaussian-like smoothing
+	MorphOpening // Erode then Dilate - removes small noise
+	MorphClosing // Dilate then Erode - fills gaps
+	MorphSmooth  // Gaussian-like smoothing
 )
 
 // MorphConfig holds configuration for morphological operations.
 type MorphConfig struct {
 	Operation  MorphologicalOp
-	KernelSize int  // Size of the morphological kernel (e.g., 3 for 3x3)
-	Iterations int  // Number of times to apply the operation
+	KernelSize int // Size of the morphological kernel (e.g., 3 for 3x3)
+	Iterations int // Number of times to apply the operation
 }
 
 // DefaultMorphConfig returns default morphological operation configuration.
@@ -37,7 +37,7 @@ func ApplyMorphologicalOperation(probMap []float32, width, height int, config Mo
 	result := make([]float32, len(probMap))
 	copy(result, probMap)
 
-	for i := 0; i < config.Iterations; i++ {
+	for range config.Iterations {
 		switch config.Operation {
 		case MorphDilate:
 			result = dilateFloat32(result, width, height, config.KernelSize)
@@ -67,8 +67,8 @@ func dilateFloat32(probMap []float32, width, height, kernelSize int) []float32 {
 	result := make([]float32, len(probMap))
 	half := kernelSize / 2
 
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
+	for y := range height {
+		for x := range width {
 			maxVal := float32(0.0)
 
 			// Check all pixels in the kernel
@@ -101,8 +101,8 @@ func erodeFloat32(probMap []float32, width, height, kernelSize int) []float32 {
 	result := make([]float32, len(probMap))
 	half := kernelSize / 2
 
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
+	for y := range height {
+		for x := range width {
 			minVal := float32(1.0)
 
 			// Check all pixels in the kernel
@@ -137,8 +137,8 @@ func smoothFloat32(probMap []float32, width, height, kernelSize int) []float32 {
 
 	// Simple box filter for smoothing (could be improved with Gaussian weights)
 
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
+	for y := range height {
+		for x := range width {
 			sum := float32(0.0)
 			count := float32(0.0)
 

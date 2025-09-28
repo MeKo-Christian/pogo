@@ -36,8 +36,8 @@ func connectedComponents(mask []bool, prob []float32, w, h int) ([]compStats, []
 	var comps []compStats
 	label := 1
 
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			idx := y*w + x
 			if mask[idx] && visited[idx] == 0 {
 				st := performComponentBFS(mask, prob, visited, labels, w, h, x, y, label)
@@ -173,4 +173,3 @@ func regionsFromComponents(comps []compStats, labels []int, w, h int, useMinArea
 	}
 	return regions
 }
-

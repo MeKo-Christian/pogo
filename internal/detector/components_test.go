@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// Helper function for float comparison
+// Helper function for float comparison.
 func abs32(x float32) float32 {
 	if x < 0 {
 		return -x

@@ -149,26 +149,31 @@ pogo pdf scan.pdf --format json       # → Full PDF extraction
 ### Advanced Configuration
 
 **Model Control:**
+
 - `--models-dir <dir>` → Custom model directory
 
 **Detection Tuning:**
+
 - `--det-model <path>` → Custom detector model
 - `--confidence <0..1>` → Detection confidence threshold
 - `--det-polygon-mode minrect|contour` → Polygon extraction mode
 
 **Recognition Power:**
+
 - `--rec-model <path>` → Custom recognizer model
 - `--rec-height <32|48>` → Input height optimization
 - `--dict <paths,comma>` → Custom dictionaries
 - `--dict-langs <en,de,...>` → Language-specific processing
 
 **Intelligence Features:**
+
 - `--detect-orientation` → Auto document rotation
 - `--orientation-threshold <0..1>` → Orientation confidence
 - `--detect-textline` → Per-line skew correction
 - `--textline-threshold <0..1>` → Textline confidence
 
 **Rectification (Experimental):**
+
 - `--rectify` → Enable page rectification
 - `--rectify-model <path>` → Custom rectification model
 - `--rectify-mask-threshold <0..1>` → Mask sensitivity
@@ -176,11 +181,13 @@ pogo pdf scan.pdf --format json       # → Full PDF extraction
 - `--rectify-debug-dir <dir>` → Debug visualization export
 
 **Output Mastery:**
+
 - `--format text|json|csv` → Choose your format
 - `--output <file>` → Save to file
 - `--overlay-dir <dir>` → Visual debugging overlays
 
 **Debugging:**
+
 - `--log-level debug|info|warn|error` → Logging verbosity
 - `--verbose` → Full debug output (alias for `--log-level=debug`)
 
@@ -222,12 +229,12 @@ pogo serve --port 8080 --language en --detect-orientation
 
 ### API Endpoints
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/ocr/image` | POST | Process uploaded images (multipart) |
-| `/ocr/pdf` | POST | Extract text from PDF files |
-| `/health` | GET | System health check |
-| `/models` | GET | List available AI models |
+| Endpoint     | Method | Purpose                             |
+| ------------ | ------ | ----------------------------------- |
+| `/ocr/image` | POST   | Process uploaded images (multipart) |
+| `/ocr/pdf`   | POST   | Extract text from PDF files         |
+| `/health`    | GET    | System health check                 |
+| `/models`    | GET    | List available AI models            |
 
 > **Server Configuration**: All CLI pipeline flags work identically (det/rec models, orientation, textline, dictionaries). Visual overlays supported in responses.
 
@@ -262,12 +269,14 @@ curl -s -F pdf=@scan.pdf -F format=text http://localhost:8080/ocr/pdf
 ### Mission Complete
 
 **Core OCR Engine:**
+
 - ✓ **ONNX Runtime Integration** - Blazing fast detector & recognizer
 - ✓ **Smart Orientation** - Document + per-text-line classifiers
 - ✓ **Auto-Rectification** - UVDoc with quality gating & homography warping
 - ✓ **Production Pipeline** - Full batch & PDF processing workflows
 
 **Interface Excellence:**
+
 - ✓ **CLI Mastery** - Complete command-line interface
 - ✓ **HTTP Server** - Production-ready API endpoints
 - ✓ **Comprehensive Testing** - Utils, ONNX setup, pipeline validation
@@ -307,22 +316,28 @@ scripts/          # ONNX Runtime setup automation
 ## Troubleshooting Guide
 
 ### ONNX Runtime Issues
+
 **Problem**: `ONNX Runtime not found`
 **Solution**:
+
 ```bash
 ./scripts/setup-onnxruntime.sh && source scripts/setup-env.sh
 ```
+
 > **Linux users**: `onnxruntime/lib` is auto-detected!
 
 ### Model Loading Issues
+
 **Problem**: `Model not found`
 **Solution**: Verify files in `models/` or use `--models-dir` override
 
 ### Empty Recognition Results
+
 **Problem**: `Recognition returns empty text`
 **Solution**: Check dictionary paths and language cleaning rules
 
 ### Rectification Not Working
+
 **Problem**: `Rectification not applied`
 **Solution**: Enable debug mode with `--rectify-debug-dir` and adjust `--rectify-mask-threshold`
 
@@ -331,6 +346,7 @@ scripts/          # ONNX Runtime setup automation
 ## Credits & Inspiration
 
 **Built on the shoulders of giants:**
+
 - **OAR-OCR & PaddleOCR** - Pioneering OCR model architectures
 - **pdfcpu** - Blazing fast PDF image extraction engine
 

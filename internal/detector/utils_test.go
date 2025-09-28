@@ -114,7 +114,7 @@ func TestSortRegionsByConfidenceDesc(t *testing.T) {
 
 func TestSortRegionsByConfidenceDescFrom(t *testing.T) {
 	regions := []DetectedRegion{
-		{Box: utils.NewBox(0, 0, 10, 10), Confidence: 0.5},  // index 0 - not sorted
+		{Box: utils.NewBox(0, 0, 10, 10), Confidence: 0.5},   // index 0 - not sorted
 		{Box: utils.NewBox(10, 10, 20, 20), Confidence: 0.3}, // index 1 - start sorting from here
 		{Box: utils.NewBox(20, 20, 30, 30), Confidence: 0.9}, // index 2
 		{Box: utils.NewBox(30, 30, 40, 40), Confidence: 0.7}, // index 3

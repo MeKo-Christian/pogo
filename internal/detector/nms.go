@@ -67,7 +67,7 @@ func AdaptiveNonMaxSuppression(regions []DetectedRegion, baseThreshold, scaleFac
 	suppressed := make([]bool, len(regions))
 	var kept []DetectedRegion
 
-	for a := 0; a < len(regions); a++ {
+	for a := range len(regions) {
 		if suppressed[a] {
 			continue
 		}
@@ -102,7 +102,7 @@ func SizeAwareNonMaxSuppression(regions []DetectedRegion, baseThreshold, sizeSca
 	suppressed := make([]bool, len(regions))
 	var kept []DetectedRegion
 
-	for a := 0; a < len(regions); a++ {
+	for a := range len(regions) {
 		if suppressed[a] {
 			continue
 		}
@@ -237,7 +237,7 @@ func handleEdgeCases(regions []DetectedRegion, n int, scoreThresh float64) []Det
 // applySoftNMS applies the Soft-NMS algorithm to regions.
 func applySoftNMS(regs *[]DetectedRegion, iouThreshold, sigma float64, method string, scoreThresh float64) {
 	n := len(*regs)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		// Find the region with highest confidence in remaining regions
 		maxIdx := i
 		for j := i + 1; j < n; j++ {

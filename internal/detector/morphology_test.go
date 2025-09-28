@@ -212,7 +212,7 @@ func TestApplyMorphologicalOperation_InvalidParams(t *testing.T) {
 	}
 }
 
-// Helper function for float comparison
+// Helper function for float comparison.
 func abs(x float32) float32 {
 	if x < 0 {
 		return -x
