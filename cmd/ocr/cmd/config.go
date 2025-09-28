@@ -69,7 +69,8 @@ Examples:
 		if _, err := fmt.Fprintf(file, "#\n"); err != nil {
 			return fmt.Errorf("failed to write header: %w", err)
 		}
-		if _, err := fmt.Fprintf(file, "# This file contains all available configuration options with their default values.\n"); err != nil {
+		if _, err := fmt.Fprintf(file,
+			"# This file contains all available configuration options with their default values.\n"); err != nil {
 			return fmt.Errorf("failed to write header: %w", err)
 		}
 		if _, err := fmt.Fprintf(file, "# Uncomment and modify the values you want to change.\n"); err != nil {
@@ -124,9 +125,6 @@ Examples:
   pogo config validate --config /path/to/config.yaml`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var cfg *config.Config
-		var err error
-
 		if len(args) > 0 {
 			// Validate specific file
 			loader := config.NewLoader()
@@ -140,7 +138,7 @@ Examples:
 			fmt.Printf("Configuration file %s is valid\n", args[0])
 		} else {
 			// Validate resolved configuration
-			cfg = GetConfig()
+			cfg := GetConfig()
 			if err := cfg.Validate(); err != nil {
 				return fmt.Errorf("configuration validation failed: %w", err)
 			}

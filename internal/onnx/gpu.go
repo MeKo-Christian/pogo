@@ -11,6 +11,15 @@ import (
 	"github.com/yalue/onnxruntime_go"
 )
 
+const (
+	osLinux    = "linux"
+	osDarwin   = "darwin"
+	osWindows  = "windows"
+	libLinux   = "libonnxruntime.so"
+	libDarwin  = "libonnxruntime.dylib"
+	libWindows = "onnxruntime.dll"
+)
+
 // GPUConfig holds configuration for GPU acceleration using CUDA.
 type GPUConfig struct {
 	UseGPU                bool   // Enable GPU acceleration
@@ -168,12 +177,12 @@ func findProjectRoot() (string, error) {
 // getLibraryName returns the appropriate library filename for the current OS.
 func getLibraryName() (string, error) {
 	switch runtime.GOOS {
-	case "linux":
-		return "libonnxruntime.so", nil
-	case "darwin":
-		return "libonnxruntime.dylib", nil
-	case "windows":
-		return "onnxruntime.dll", nil
+	case osLinux:
+		return libLinux, nil
+	case osDarwin:
+		return libDarwin, nil
+	case osWindows:
+		return libWindows, nil
 	default:
 		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}

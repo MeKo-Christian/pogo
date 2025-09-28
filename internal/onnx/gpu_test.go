@@ -216,17 +216,17 @@ func TestGetLibraryName(t *testing.T) {
 
 	// Verify the name is appropriate for the current OS
 	switch runtime.GOOS {
-	case "linux":
-		if name != "libonnxruntime.so" {
-			t.Errorf("Expected 'libonnxruntime.so' for Linux, got '%s'", name)
+	case osLinux:
+		if name != libLinux {
+			t.Errorf("Expected '%s' for Linux, got '%s'", libLinux, name)
 		}
-	case "darwin":
-		if name != "libonnxruntime.dylib" {
-			t.Errorf("Expected 'libonnxruntime.dylib' for Darwin, got '%s'", name)
+	case osDarwin:
+		if name != libDarwin {
+			t.Errorf("Expected '%s' for Darwin, got '%s'", libDarwin, name)
 		}
-	case "windows":
-		if name != "onnxruntime.dll" {
-			t.Errorf("Expected 'onnxruntime.dll' for Windows, got '%s'", name)
+	case osWindows:
+		if name != libWindows {
+			t.Errorf("Expected '%s' for Windows, got '%s'", libWindows, name)
 		}
 	default:
 		t.Errorf("Unsupported OS: %s", runtime.GOOS)
@@ -268,12 +268,12 @@ func TestSetONNXLibraryPath(t *testing.T) {
 	}
 
 	// Create fake library files
-	libName := "libonnxruntime.so"
+	libName := libLinux
 	switch runtime.GOOS {
-	case "darwin":
-		libName = "libonnxruntime.dylib"
-	case "windows":
-		libName = "onnxruntime.dll"
+	case osDarwin:
+		libName = libDarwin
+	case osWindows:
+		libName = libWindows
 	}
 
 	// Create CPU library
@@ -318,12 +318,4 @@ func TestSetONNXLibraryPathNoLibraries(t *testing.T) {
 	_ = err
 }
 
-// Helper function to check if slice contains string.
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}
+

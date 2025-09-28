@@ -73,7 +73,8 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Global flags that apply to all commands
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is search in ., $HOME, $HOME/.config/pogo, /etc/pogo)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "",
+		"config file (default is search in ., $HOME, $HOME/.config/pogo, /etc/pogo)")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output (equivalent to --log-level=debug)")
 	rootCmd.PersistentFlags().String("log-level", "info", "log level (debug, info, warn, error)")
 
