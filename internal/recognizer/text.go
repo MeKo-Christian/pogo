@@ -37,76 +37,109 @@ func PostProcessText(s string, opts CleanOptions) string {
 	if s == "" {
 		return s
 	}
-	// Unicode normalization
+
+	s = applyNormalization(s, opts)
+	s = applyZeroWidthRemoval(s, opts)
+	s = applyControlCharRemoval(s, opts)
+	s = applyReplacements(s, opts)
+	s = applyWhitespaceCollapse(s, opts)
+	s = applyTrim(s, opts)
+
+	return s
+}
+
+func applyNormalization(s string, opts CleanOptions) string {
 	switch strings.ToUpper(opts.NormalizeForm) {
 	case "NFC", "":
-		s = norm.NFC.String(s)
+		return norm.NFC.String(s)
 	case "NFKC":
-		s = norm.NFKC.String(s)
+		return norm.NFKC.String(s)
 	case "NFD":
-		s = norm.NFD.String(s)
+		return norm.NFD.String(s)
 	case "NFKD":
-		s = norm.NFKD.String(s)
-	}
-
-	// Remove zero-width characters
-	if opts.RemoveZeroWidth {
-		s = removeZeroWidth(s)
-	}
-
-	// Remove control chars (except tab, newline, carriage return)
-	if opts.RemoveControlChars {
-		var b strings.Builder
-		b.Grow(len(s))
-		for _, r := range s {
-			if r == '\n' || r == '\r' || r == '\t' {
-				b.WriteRune(r)
-				continue
-			}
-			if unicode.IsControl(r) {
-				continue
-			}
-			b.WriteRune(r)
-		}
-		s = b.String()
-	}
-
-	// Apply language-specific replacements if requested
-	if opts.Language != "" && opts.ReplaceMap == nil {
-		opts.ReplaceMap = DefaultReplaceMapForLanguage(opts.Language)
-	}
-
-	// Apply replacements
-	if len(opts.ReplaceMap) > 0 {
-		// Replace longer keys first to avoid partial overlaps
-		keys := make([]string, 0, len(opts.ReplaceMap))
-		for k := range opts.ReplaceMap {
-			keys = append(keys, k)
-		}
-		// simple length-desc sort
-		for i := range len(keys) - 1 {
-			maxIdx := i
-			for j := i + 1; j < len(keys); j++ {
-				if len(keys[j]) > len(keys[maxIdx]) {
-					maxIdx = j
-				}
-			}
-			keys[i], keys[maxIdx] = keys[maxIdx], keys[i]
-		}
-		for _, k := range keys {
-			s = strings.ReplaceAll(s, k, opts.ReplaceMap[k])
-		}
-	}
-
-	// Collapse whitespace
-	if opts.CollapseWhitespace {
-		s = collapseWhitespace(s)
-	}
-
-	if opts.Trim {
-		s = strings.TrimSpace(s)
+		return norm.NFKD.String(s)
 	}
 	return s
+}
+
+func applyZeroWidthRemoval(s string, opts CleanOptions) string {
+	if opts.RemoveZeroWidth {
+		return removeZeroWidth(s)
+	}
+	return s
+}
+
+func applyControlCharRemoval(s string, opts CleanOptions) string {
+	if opts.RemoveControlChars {
+		return removeControlChars(s)
+	}
+	return s
+}
+
+func applyReplacements(s string, opts CleanOptions) string {
+	if len(opts.ReplaceMap) > 0 {
+		return applyReplaceMap(s, opts.ReplaceMap)
+	}
+	if opts.Language != "" {
+		replaceMap := DefaultReplaceMapForLanguage(opts.Language)
+		return applyReplaceMap(s, replaceMap)
+	}
+	return s
+}
+
+func applyReplaceMap(s string, replaceMap map[string]string) string {
+	// Replace longer keys first to avoid partial overlaps
+	keys := sortedKeysByLength(replaceMap)
+	for _, k := range keys {
+		s = strings.ReplaceAll(s, k, replaceMap[k])
+	}
+	return s
+}
+
+func sortedKeysByLength(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	// Sort by length descending
+	for i := range len(keys) - 1 {
+		for j := i + 1; j < len(keys); j++ {
+			if len(keys[j]) > len(keys[i]) {
+				keys[i], keys[j] = keys[j], keys[i]
+			}
+		}
+	}
+	return keys
+}
+
+func applyWhitespaceCollapse(s string, opts CleanOptions) string {
+	if opts.CollapseWhitespace {
+		return collapseWhitespace(s)
+	}
+	return s
+}
+
+func applyTrim(s string, opts CleanOptions) string {
+	if opts.Trim {
+		return strings.TrimSpace(s)
+	}
+	return s
+}
+
+func removeControlChars(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == '\n' || r == '\r' || r == '\t' {
+			b.WriteRune(r)
+			continue
+		}
+		if unicode.IsControl(r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // DefaultReplaceMapForLanguage returns common replacements for a language.
@@ -167,6 +200,15 @@ func ValidateText(s string) bool {
 	if s == "" {
 		return true
 	}
+	letters, digits, controls, total := countCharacters(s)
+	if total == 0 {
+		return true
+	}
+	return validateRatios(controls, letters+digits, total)
+}
+
+// countCharacters counts different types of characters in the string.
+func countCharacters(s string) (int, int, int, int) {
 	var letters, digits, controls, total int
 	for _, r := range s {
 		total++
@@ -181,10 +223,12 @@ func ValidateText(s string) bool {
 			}
 		}
 	}
-	if total == 0 {
-		return true
-	}
+	return letters, digits, controls, total
+}
+
+// validateRatios checks if the character ratios meet validation criteria.
+func validateRatios(controls, textChars, total int) bool {
 	controlRatio := float64(controls) / float64(total)
-	textRatio := float64(letters+digits) / float64(total)
+	textRatio := float64(textChars) / float64(total)
 	return controlRatio < 0.05 && textRatio > 0.3
 }

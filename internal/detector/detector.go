@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"log/slog"
 	"os"
 	"runtime"
 	"sync"
@@ -53,10 +54,7 @@ func DefaultConfig() Config {
 
 // UpdateModelPath updates the ModelPath based on modelsDir and UseServerModel flag.
 func (c *Config) UpdateModelPath(modelsDir string) {
-	// Only update ModelPath if not already set (preserves overrides)
-	if c.ModelPath == "" {
-		c.ModelPath = models.GetDetectionModelPath(modelsDir, c.UseServerModel)
-	}
+	c.ModelPath = models.GetDetectionModelPath(modelsDir, c.UseServerModel)
 }
 
 // Detector performs text detection using ONNX Runtime.
@@ -113,28 +111,33 @@ func setupONNXEnvironment(useGPU bool) error {
 func validateModelInfo(modelPath string) (onnxruntime_go.InputOutputInfo, onnxruntime_go.InputOutputInfo, error) {
 	inputs, outputs, err := onnxruntime_go.GetInputOutputInfo(modelPath)
 	if err != nil {
-		return onnxruntime_go.InputOutputInfo{}, onnxruntime_go.InputOutputInfo{}, fmt.Errorf("failed to get model input/output info: %w", err)
+		return onnxruntime_go.InputOutputInfo{}, onnxruntime_go.InputOutputInfo{},
+			fmt.Errorf("failed to get model input/output info: %w", err)
 	}
 
 	if len(inputs) != 1 {
-		return onnxruntime_go.InputOutputInfo{}, onnxruntime_go.InputOutputInfo{}, fmt.Errorf("expected 1 input, got %d", len(inputs))
+		return onnxruntime_go.InputOutputInfo{}, onnxruntime_go.InputOutputInfo{},
+			fmt.Errorf("expected 1 input, got %d", len(inputs))
 	}
 	if len(outputs) != 1 {
-		return onnxruntime_go.InputOutputInfo{}, onnxruntime_go.InputOutputInfo{}, fmt.Errorf("expected 1 output, got %d", len(outputs))
+		return onnxruntime_go.InputOutputInfo{}, onnxruntime_go.InputOutputInfo{},
+			fmt.Errorf("expected 1 output, got %d", len(outputs))
 	}
 
 	inputInfo := inputs[0]
 	outputInfo := outputs[0]
 
 	if len(inputInfo.Dimensions) != 4 {
-		return onnxruntime_go.InputOutputInfo{}, onnxruntime_go.InputOutputInfo{}, fmt.Errorf("expected 4D input tensor, got %dD", len(inputInfo.Dimensions))
+		return onnxruntime_go.InputOutputInfo{}, onnxruntime_go.InputOutputInfo{},
+			fmt.Errorf("expected 4D input tensor, got %dD", len(inputInfo.Dimensions))
 	}
 
 	return inputInfo, outputInfo, nil
 }
 
 // createSession creates the ONNX session with the given configuration.
-func createSession(modelPath string, inputInfo, outputInfo onnxruntime_go.InputOutputInfo, config Config) (*onnxruntime_go.DynamicAdvancedSession, error) {
+func createSession(modelPath string, inputInfo, outputInfo onnxruntime_go.InputOutputInfo,
+	config Config) (*onnxruntime_go.DynamicAdvancedSession, error) {
 	sessionOptions, err := onnxruntime_go.NewSessionOptions()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session options: %w", err)
@@ -184,6 +187,13 @@ func NewDetector(config Config) (*Detector, error) {
 		return nil, err
 	}
 
+	slog.Debug("Initializing detector",
+		"model_path", config.ModelPath,
+		"gpu_enabled", config.GPU.UseGPU,
+		"max_image_size", config.MaxImageSize,
+		"use_nms", config.UseNMS,
+		"nms_method", config.NMSMethod)
+
 	if err := setupONNXEnvironment(config.GPU.UseGPU); err != nil {
 		return nil, err
 	}
@@ -208,6 +218,7 @@ func NewDetector(config Config) (*Detector, error) {
 		imageConstraints: imageConstraints,
 	}
 
+	slog.Debug("Detector initialized successfully")
 	return detector, nil
 }
 
@@ -278,6 +289,76 @@ func (d *Detector) preprocessImage(img image.Image) (onnx.Tensor, error) {
 	return tensor, nil
 }
 
+// runInferenceCore performs the ONNX inference and returns the output tensor.
+func (d *Detector) runInferenceCore(inputTensor onnxruntime_go.Value) (onnxruntime_go.Value, error) {
+	// Run inference - ONNX Runtime will allocate output tensors automatically
+	outputs := []onnxruntime_go.Value{nil}
+	err := d.session.Run([]onnxruntime_go.Value{inputTensor}, outputs)
+	if err != nil {
+		return nil, fmt.Errorf("inference failed: %w", err)
+	}
+	if len(outputs) != 1 {
+		return nil, fmt.Errorf("expected 1 output, got %d", len(outputs))
+	}
+	return outputs[0], nil
+}
+
+// runInferenceInternal performs the core inference logic and returns output data and dimensions.
+func (d *Detector) runInferenceInternal(tensor onnx.Tensor) ([]float32, int, int, error) {
+	// Verify tensor shape
+	if err := onnx.VerifyImageTensor(tensor); err != nil {
+		return nil, 0, 0, fmt.Errorf("invalid tensor: %w", err)
+	}
+
+	d.mu.RLock()
+	session := d.session
+	d.mu.RUnlock()
+
+	if session == nil {
+		return nil, 0, 0, errors.New("detector session is nil")
+	}
+
+	// Create input tensor for ONNX Runtime
+	inputTensor, err := onnxruntime_go.NewTensor(onnxruntime_go.NewShape(tensor.Shape...), tensor.Data)
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("failed to create input tensor: %w", err)
+	}
+	defer func() {
+		if err := inputTensor.Destroy(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error destroying input tensor: %v\n", err)
+		}
+	}()
+
+	outputTensor, err := d.runInferenceCore(inputTensor)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	defer func() {
+		if err := outputTensor.Destroy(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error destroying output tensor: %v\n", err)
+		}
+	}()
+
+	// Type assert to float32 tensor to access data
+	floatTensor, ok := outputTensor.(*onnxruntime_go.Tensor[float32])
+	if !ok {
+		return nil, 0, 0, fmt.Errorf("expected float32 tensor, got %T", outputTensor)
+	}
+
+	outputData := floatTensor.GetData()
+	actualOutputShape := outputTensor.GetShape()
+
+	// Validate output shape (should be [N, C, H, W] where C=1 for probability map)
+	if len(actualOutputShape) != 4 {
+		return nil, 0, 0, fmt.Errorf("expected 4D output tensor, got %dD", len(actualOutputShape))
+	}
+
+	width := int(actualOutputShape[3])
+	height := int(actualOutputShape[2])
+
+	return outputData, width, height, nil
+}
+
 // RunInference performs detection inference on a single image.
 func (d *Detector) RunInference(img image.Image) (*DetectionResult, error) {
 	if img == nil {
@@ -297,67 +378,10 @@ func (d *Detector) RunInference(img image.Image) (*DetectionResult, error) {
 		return nil, fmt.Errorf("preprocessing failed: %w", err)
 	}
 
-	// Verify tensor shape
-	if err := onnx.VerifyImageTensor(tensor); err != nil {
-		return nil, fmt.Errorf("invalid tensor: %w", err)
-	}
-
-	d.mu.RLock()
-	session := d.session
-	d.mu.RUnlock()
-
-	if session == nil {
-		return nil, errors.New("detector session is nil")
-	}
-
-	// Create input tensor for ONNX Runtime
-	inputTensor, err := onnxruntime_go.NewTensor(onnxruntime_go.NewShape(tensor.Shape...), tensor.Data)
+	outputData, width, height, err := d.runInferenceInternal(tensor)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create input tensor: %w", err)
+		return nil, err
 	}
-	defer func() {
-		if err := inputTensor.Destroy(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error destroying input tensor: %v\n", err)
-		}
-	}()
-
-	// Run inference - ONNX Runtime will allocate output tensors automatically
-	outputs := []onnxruntime_go.Value{nil}
-	err = session.Run([]onnxruntime_go.Value{inputTensor}, outputs)
-	if err != nil {
-		return nil, fmt.Errorf("inference failed: %w", err)
-	}
-	defer func() {
-		for _, output := range outputs {
-			if err := output.Destroy(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error destroying output tensor: %v\n", err)
-			}
-		}
-	}()
-
-	if len(outputs) != 1 {
-		return nil, fmt.Errorf("expected 1 output, got %d", len(outputs))
-	}
-
-	// Extract output data
-	outputTensor := outputs[0]
-
-	// Type assert to float32 tensor to access data
-	floatTensor, ok := outputTensor.(*onnxruntime_go.Tensor[float32])
-	if !ok {
-		return nil, fmt.Errorf("expected float32 tensor, got %T", outputTensor)
-	}
-
-	outputData := floatTensor.GetData()
-	actualOutputShape := outputTensor.GetShape()
-
-	// Validate output shape (should be [N, C, H, W] where C=1 for probability map)
-	if len(actualOutputShape) != 4 {
-		return nil, fmt.Errorf("expected 4D output tensor, got %dD", len(actualOutputShape))
-	}
-
-	width := int(actualOutputShape[3])
-	height := int(actualOutputShape[2])
 
 	processingTime := time.Since(start).Nanoseconds()
 
@@ -381,25 +405,15 @@ type BatchDetectionResult struct {
 	MemoryUsageMB float64            // Peak memory usage in MB
 }
 
-// RunBatchInference performs detection inference on multiple images.
-func (d *Detector) RunBatchInference(images []image.Image) (*BatchDetectionResult, error) {
-	if len(images) == 0 {
-		return nil, errors.New("no images provided")
-	}
-
-	start := time.Now()
-	var memBefore runtime.MemStats
-	runtime.ReadMemStats(&memBefore)
-
-	// Preprocess all images to tensors
+// preprocessBatchImages preprocesses a batch of images and returns tensors and result placeholders.
+func (d *Detector) preprocessBatchImages(images []image.Image) ([][]float32, []*DetectionResult, int, int, error) {
 	tensors := make([][]float32, 0, len(images))
 	results := make([]*DetectionResult, 0, len(images))
 
-	// First pass: preprocess all images and collect original dimensions
 	var commonHeight, commonWidth int
 	for i, img := range images {
 		if img == nil {
-			return nil, fmt.Errorf("image at index %d is nil", i)
+			return nil, nil, 0, 0, fmt.Errorf("image at index %d is nil", i)
 		}
 
 		// Store original dimensions
@@ -410,7 +424,7 @@ func (d *Detector) RunBatchInference(images []image.Image) (*BatchDetectionResul
 		// Preprocess image
 		tensor, err := d.preprocessImage(img)
 		if err != nil {
-			return nil, fmt.Errorf("preprocessing failed for image %d: %w", i, err)
+			return nil, nil, 0, 0, fmt.Errorf("preprocessing failed for image %d: %w", i, err)
 		}
 
 		// Verify all images have same dimensions after preprocessing
@@ -419,7 +433,7 @@ func (d *Detector) RunBatchInference(images []image.Image) (*BatchDetectionResul
 			commonHeight = int(h)
 			commonWidth = int(w)
 		} else if int(h) != commonHeight || int(w) != commonWidth {
-			return nil, fmt.Errorf("image %d has different dimensions after preprocessing: got %dx%d, expected %dx%d",
+			return nil, nil, 0, 0, fmt.Errorf("image %d has different dimensions after preprocessing: got %dx%d, expected %dx%d",
 				i, w, h, commonWidth, commonHeight)
 		}
 
@@ -433,67 +447,61 @@ func (d *Detector) RunBatchInference(images []image.Image) (*BatchDetectionResul
 		results = append(results, result)
 	}
 
-	// Create batch tensor
-	batchTensor, err := onnx.NewBatchImageTensor(tensors, 3, commonHeight, commonWidth)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create batch tensor: %w", err)
-	}
+	return tensors, results, commonHeight, commonWidth, nil
+}
 
+// runBatchInferenceCore performs batch inference and returns output data and dimensions.
+func (d *Detector) runBatchInferenceCore(batchTensor onnx.Tensor) ([]float32, int, int, int, int, error) {
 	d.mu.RLock()
 	session := d.session
 	d.mu.RUnlock()
 
 	if session == nil {
-		return nil, errors.New("detector session is nil")
+		return nil, 0, 0, 0, 0, errors.New("detector session is nil")
 	}
 
 	// Create input tensor for ONNX Runtime
 	inputTensor, err := onnxruntime_go.NewTensor(onnxruntime_go.NewShape(batchTensor.Shape...), batchTensor.Data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create batch input tensor: %w", err)
+		return nil, 0, 0, 0, 0, fmt.Errorf("failed to create batch input tensor: %w", err)
 	}
 	defer func() {
 		if err := inputTensor.Destroy(); err != nil {
-			// Log but don't return error in defer
 			fmt.Printf("Failed to destroy batch input tensor: %v", err)
 		}
 	}()
 
-	// Run batch inference - ONNX Runtime will allocate output tensors automatically
+	// Run batch inference
 	outputs := []onnxruntime_go.Value{nil}
 	err = session.Run([]onnxruntime_go.Value{inputTensor}, outputs)
 	if err != nil {
-		return nil, fmt.Errorf("batch inference failed: %w", err)
+		return nil, 0, 0, 0, 0, fmt.Errorf("batch inference failed: %w", err)
 	}
 
 	defer func() {
 		for _, output := range outputs {
 			if err := output.Destroy(); err != nil {
-				// Log but don't return error in defer
 				fmt.Printf("Failed to destroy output tensor: %v", err)
 			}
 		}
 	}()
 
 	if len(outputs) != 1 {
-		return nil, fmt.Errorf("expected 1 output, got %d", len(outputs))
+		return nil, 0, 0, 0, 0, fmt.Errorf("expected 1 output, got %d", len(outputs))
 	}
 
 	// Extract output data
 	outputTensor := outputs[0]
-
-	// Type assert to float32 tensor to access data
 	floatTensor, ok := outputTensor.(*onnxruntime_go.Tensor[float32])
 	if !ok {
-		return nil, fmt.Errorf("expected float32 tensor, got %T", outputTensor)
+		return nil, 0, 0, 0, 0, fmt.Errorf("expected float32 tensor, got %T", outputTensor)
 	}
 
 	outputData := floatTensor.GetData()
 	actualOutputShape := outputTensor.GetShape()
 
-	// Validate output shape (should be [N, C, H, W])
 	if len(actualOutputShape) != 4 {
-		return nil, fmt.Errorf("expected 4D output tensor, got %dD", len(actualOutputShape))
+		return nil, 0, 0, 0, 0, fmt.Errorf("expected 4D output tensor, got %dD", len(actualOutputShape))
 	}
 
 	batchSize := int(actualOutputShape[0])
@@ -501,50 +509,79 @@ func (d *Detector) RunBatchInference(images []image.Image) (*BatchDetectionResul
 	outputHeight := int(actualOutputShape[2])
 	outputWidth := int(actualOutputShape[3])
 
-	if batchSize != len(images) {
-		return nil, fmt.Errorf("output batch size %d doesn't match input batch size %d", batchSize, len(images))
-	}
+	return outputData, batchSize, channels, outputHeight, outputWidth, nil
+}
 
-	// Split batch output back to individual results
+// splitBatchOutput splits batch output data into individual results.
+func splitBatchOutput(outputData []float32, results []*DetectionResult,
+	batchSize, channels, outputHeight, outputWidth int) {
 	elementsPerImage := channels * outputHeight * outputWidth
 	for i := range batchSize {
 		startIdx := i * elementsPerImage
 		endIdx := startIdx + elementsPerImage
 
-		// Extract probability map for this image
 		probabilityMap := make([]float32, elementsPerImage)
 		copy(probabilityMap, outputData[startIdx:endIdx])
 
-		// Update the result with probability map data
 		results[i].ProbabilityMap = probabilityMap
 		results[i].Width = outputWidth
 		results[i].Height = outputHeight
 	}
+}
+
+// RunBatchInference performs detection inference on multiple images.
+func (d *Detector) RunBatchInference(images []image.Image) (*BatchDetectionResult, error) {
+	if len(images) == 0 {
+		return nil, errors.New("no images provided")
+	}
+
+	start := time.Now()
+	var memBefore runtime.MemStats
+	runtime.ReadMemStats(&memBefore)
+
+	// Preprocess all images
+	tensors, results, commonHeight, commonWidth, err := d.preprocessBatchImages(images)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create batch tensor
+	batchTensor, err := onnx.NewBatchImageTensor(tensors, 3, commonHeight, commonWidth)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create batch tensor: %w", err)
+	}
+
+	// Run batch inference
+	outputData, batchSize, channels, outputHeight, outputWidth, err := d.runBatchInferenceCore(batchTensor)
+	if err != nil {
+		return nil, err
+	}
+
+	if batchSize != len(images) {
+		return nil, fmt.Errorf("output batch size %d doesn't match input batch size %d", batchSize, len(images))
+	}
+
+	// Split batch output back to individual results
+	splitBatchOutput(outputData, results, batchSize, channels, outputHeight, outputWidth)
 
 	totalTime := time.Since(start).Nanoseconds()
 	var memAfter runtime.MemStats
 	runtime.ReadMemStats(&memAfter)
 
-	// Calculate throughput
 	throughputIPS := float64(len(images)) / (float64(totalTime) / 1e9)
-
-	// Calculate memory usage in MB
 	memoryUsageMB := float64(memAfter.Alloc-memBefore.Alloc) / (1024 * 1024)
 
-	// Set individual processing times (approximation)
 	avgTimePerImage := totalTime / int64(len(images))
 	for _, result := range results {
 		result.ProcessingTime = avgTimePerImage
 	}
 
-	batchResult := &BatchDetectionResult{
+	return &BatchDetectionResult{
 		Results:       results,
 		TotalTime:     totalTime,
 		ThroughputIPS: throughputIPS,
 		MemoryUsageMB: memoryUsageMB,
-	}
-
-	return batchResult, nil
+	}, nil
 }
 
 // simpleTimer provides basic timing functionality.
@@ -624,74 +661,18 @@ func (d *Detector) RunInferenceWithMetrics(img image.Image) (*DetectionResult, *
 	tensorSizeMB := float64(len(tensor.Data)*4) / (1024 * 1024) // 4 bytes per float32
 	metrics.TensorSizeMB = tensorSizeMB
 
-	// Verify tensor shape
-	if err := onnx.VerifyImageTensor(tensor); err != nil {
-		return nil, metrics, fmt.Errorf("invalid tensor: %w", err)
-	}
-
-	d.mu.RLock()
-	session := d.session
-	d.mu.RUnlock()
-
-	if session == nil {
-		return nil, metrics, errors.New("detector session is nil")
-	}
-
-	// Create input tensor for ONNX Runtime
-	inputTensor, err := onnxruntime_go.NewTensor(onnxruntime_go.NewShape(tensor.Shape...), tensor.Data)
-	if err != nil {
-		return nil, metrics, fmt.Errorf("failed to create input tensor: %w", err)
-	}
-	defer func() {
-		if err := inputTensor.Destroy(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error destroying input tensor: %v\n", err)
-		}
-	}()
-
 	// Model execution phase
 	modelTimer := newTimer()
-	outputs := []onnxruntime_go.Value{nil}
-	err = session.Run([]onnxruntime_go.Value{inputTensor}, outputs)
+	outputData, width, height, err := d.runInferenceInternal(tensor)
 	modelTime := modelTimer.stop().Nanoseconds()
 	metrics.ModelExecutionTime = modelTime
 
 	if err != nil {
-		return nil, metrics, fmt.Errorf("inference failed: %w", err)
+		return nil, metrics, err
 	}
-	defer func() {
-		for _, output := range outputs {
-			if err := output.Destroy(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error destroying output tensor: %v\n", err)
-			}
-		}
-	}()
 
-	// Postprocessing phase
+	// Postprocessing phase (minimal in this case)
 	postprocessTimer := newTimer()
-
-	if len(outputs) != 1 {
-		return nil, metrics, fmt.Errorf("expected 1 output, got %d", len(outputs))
-	}
-
-	// Extract output data
-	outputTensor := outputs[0]
-
-	// Type assert to float32 tensor to access data
-	floatTensor, ok := outputTensor.(*onnxruntime_go.Tensor[float32])
-	if !ok {
-		return nil, metrics, fmt.Errorf("expected float32 tensor, got %T", outputTensor)
-	}
-
-	outputData := floatTensor.GetData()
-	actualOutputShape := outputTensor.GetShape()
-
-	// Validate output shape (should be [N, C, H, W] where C=1 for probability map)
-	if len(actualOutputShape) != 4 {
-		return nil, metrics, fmt.Errorf("expected 4D output tensor, got %dD", len(actualOutputShape))
-	}
-
-	width := int(actualOutputShape[3])
-	height := int(actualOutputShape[2])
 
 	result := &DetectionResult{
 		ProbabilityMap: outputData,
@@ -786,20 +767,12 @@ func (d *Detector) GetModelInfo() map[string]interface{} {
 	return info
 }
 
-// Warmup runs a number of forward passes with a blank image to reduce first-run latency.
-func (d *Detector) Warmup(iterations int) error {
-	if iterations <= 0 {
-		return nil
-	}
-	// Derive a reasonable input size from inputInfo if available
+// getWarmupDimensions returns appropriate dimensions for warmup based on model input info.
+func (d *Detector) getWarmupDimensions() (int, int) {
 	d.mu.RLock()
 	in := d.inputInfo
-	sess := d.session
 	d.mu.RUnlock()
-	if sess == nil {
-		return errors.New("detector session is nil")
-	}
-	// Expect [N,C,H,W]
+
 	h, w := 320, 320
 	if len(in.Dimensions) == 4 {
 		if in.Dimensions[2] > 0 {
@@ -809,33 +782,65 @@ func (d *Detector) Warmup(iterations int) error {
 			w = int(in.Dimensions[3])
 		}
 	}
+	return h, w
+}
+
+// runWarmupIteration performs a single warmup inference iteration.
+func (d *Detector) runWarmupIteration(sess *onnxruntime_go.DynamicAdvancedSession, tensor onnx.Tensor) error {
+	inputTensor, err := onnxruntime_go.NewTensor(onnxruntime_go.NewShape(tensor.Shape...), tensor.Data)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := inputTensor.Destroy(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error destroying input tensor: %v\n", err)
+		}
+	}()
+
+	outputs := []onnxruntime_go.Value{nil}
+	runErr := sess.Run([]onnxruntime_go.Value{inputTensor}, outputs)
+	if runErr != nil {
+		return runErr
+	}
+
+	for _, o := range outputs {
+		if o != nil {
+			if err := o.Destroy(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error destroying output tensor: %v\n", err)
+			}
+		}
+	}
+	return nil
+}
+
+// Warmup runs a number of forward passes with a blank image to reduce first-run latency.
+func (d *Detector) Warmup(iterations int) error {
+	if iterations <= 0 {
+		return nil
+	}
+
+	d.mu.RLock()
+	sess := d.session
+	d.mu.RUnlock()
+
+	if sess == nil {
+		return errors.New("detector session is nil")
+	}
+
+	h, w := d.getWarmupDimensions()
+
 	// Create a black image of WxH
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
+
 	// Preprocess once
 	tensor, err := d.preprocessImage(img)
 	if err != nil {
 		return err
 	}
+
 	for range iterations {
-		inputTensor, err := onnxruntime_go.NewTensor(onnxruntime_go.NewShape(tensor.Shape...), tensor.Data)
-		if err != nil {
+		if err := d.runWarmupIteration(sess, tensor); err != nil {
 			return err
-		}
-		outputs := []onnxruntime_go.Value{nil}
-		runErr := sess.Run([]onnxruntime_go.Value{inputTensor}, outputs)
-		if err := inputTensor.Destroy(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error destroying input tensor: %v\n", err)
-		}
-		if runErr == nil {
-			for _, o := range outputs {
-				if o != nil {
-					if err := o.Destroy(); err != nil {
-						fmt.Fprintf(os.Stderr, "Error destroying output tensor: %v\n", err)
-					}
-				}
-			}
-		} else {
-			return runErr
 		}
 	}
 	return nil

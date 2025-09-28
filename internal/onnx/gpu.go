@@ -128,82 +128,101 @@ func ValidateGPUConfig(config GPUConfig) error {
 	return nil
 }
 
-// SetONNXLibraryPath sets the path to the ONNX Runtime shared library.
-// If useGPU is true, it prioritizes GPU libraries.
-func SetONNXLibraryPath(useGPU bool) error {
-	var systemPaths []string
-
+// getSystemLibraryPaths returns system library paths to try, prioritizing GPU or CPU based on useGPU.
+func getSystemLibraryPaths(useGPU bool) []string {
 	if useGPU {
-		// Try GPU libraries first
-		systemPaths = []string{
+		return []string{
 			"/opt/onnxruntime/gpu/lib/libonnxruntime.so",
 			"/usr/local/lib/libonnxruntime.so",
 			"/usr/lib/libonnxruntime.so",
 			"/opt/onnxruntime/cpu/lib/libonnxruntime.so",
 		}
-	} else {
-		// Try CPU libraries first
-		systemPaths = []string{
-			"/usr/local/lib/libonnxruntime.so",
-			"/usr/lib/libonnxruntime.so",
-			"/opt/onnxruntime/cpu/lib/libonnxruntime.so",
-		}
+	}
+	return []string{
+		"/usr/local/lib/libonnxruntime.so",
+		"/usr/lib/libonnxruntime.so",
+		"/opt/onnxruntime/cpu/lib/libonnxruntime.so",
+	}
+}
+
+// findProjectRoot finds the project root directory by looking for go.mod.
+func findProjectRoot() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current directory: %w", err)
 	}
 
+	projectRoot := cwd
+	for {
+		if _, err := os.Stat(filepath.Join(projectRoot, "go.mod")); err == nil {
+			return projectRoot, nil
+		}
+		parent := filepath.Dir(projectRoot)
+		if parent == projectRoot {
+			return "", errors.New("could not find project root")
+		}
+		projectRoot = parent
+	}
+}
+
+// getLibraryName returns the appropriate library filename for the current OS.
+func getLibraryName() (string, error) {
+	switch runtime.GOOS {
+	case "linux":
+		return "libonnxruntime.so", nil
+	case "darwin":
+		return "libonnxruntime.dylib", nil
+	case "windows":
+		return "onnxruntime.dll", nil
+	default:
+		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+// trySetLibraryPath attempts to set the ONNX library path if the file exists.
+func trySetLibraryPath(path string) bool {
+	if _, err := os.Stat(path); err == nil {
+		onnxruntime_go.SetSharedLibraryPath(path)
+		return true
+	}
+	return false
+}
+
+// SetONNXLibraryPath sets the path to the ONNX Runtime shared library.
+// If useGPU is true, it prioritizes GPU libraries.
+func SetONNXLibraryPath(useGPU bool) error {
+	// Try system paths first
+	systemPaths := getSystemLibraryPaths(useGPU)
 	for _, path := range systemPaths {
-		if _, err := os.Stat(path); err == nil {
-			onnxruntime_go.SetSharedLibraryPath(path)
+		if trySetLibraryPath(path) {
 			return nil
 		}
 	}
 
-	// Try project-relative path (for development)
-	cwd, err := os.Getwd()
+	// Try project-relative path
+	projectRoot, err := findProjectRoot()
 	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
+		return err
 	}
 
-	// Look for project root
-	projectRoot := cwd
-	for {
-		if _, err := os.Stat(filepath.Join(projectRoot, "go.mod")); err == nil {
-			break
-		}
-		parent := filepath.Dir(projectRoot)
-		if parent == projectRoot {
-			return errors.New("could not find project root")
-		}
-		projectRoot = parent
-	}
-
-	// Determine library filename based on OS
-	var libName string
-	switch runtime.GOOS {
-	case "linux":
-		libName = "libonnxruntime.so"
-	case "darwin":
-		libName = "libonnxruntime.dylib"
-	case "windows":
-		libName = "onnxruntime.dll"
-	default:
-		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	libName, err := getLibraryName()
+	if err != nil {
+		return err
 	}
 
 	// Try GPU library first if requested
 	if useGPU {
 		gpuLibPath := filepath.Join(projectRoot, "onnxruntime", "gpu", "lib", libName)
-		if _, err := os.Stat(gpuLibPath); err == nil {
-			onnxruntime_go.SetSharedLibraryPath(gpuLibPath)
+		if trySetLibraryPath(gpuLibPath) {
 			return nil
 		}
 	}
 
 	// Fallback to CPU library
 	libPath := filepath.Join(projectRoot, "onnxruntime", "lib", libName)
-	if _, err := os.Stat(libPath); err != nil {
+	if !trySetLibraryPath(libPath) {
 		return fmt.Errorf("ONNX Runtime library not found at %s", libPath)
 	}
 
-	onnxruntime_go.SetSharedLibraryPath(libPath)
 	return nil
 }

@@ -24,7 +24,9 @@ func TestLoadCharset_Valid(t *testing.T) {
 	dir := t.TempDir()
 	dictPath := filepath.Join(dir, "dict.txt")
 
-	content := "\xEF\xBB\xBFa\nß\n你\nこんにちは\nspace\n#comment\n\n" //nolint:gosmopolitan // includes BOM and Unicode, plus an ignored empty line
+	content := "\xEF\xBB\xBFa\nß\n你\nこんにちは\nspace\n#comment\n\n" + //nolint:gosmopolitan
+		""
+	// includes BOM and Unicode, plus an ignored empty line
 	require.NoError(t, os.WriteFile(dictPath, []byte(content), 0o644))
 
 	cs, err := LoadCharset(dictPath)

@@ -43,8 +43,11 @@ type TestContext struct {
 	LastTimeout       int
 
 	// Test artifacts
-	CreatedFiles       []string
-	CreatedDirectories []string
+	CreatedFiles               []string
+	CreatedDirectories         []string
+	CustomDictionaries         []string
+	CustomDetectionModelPath   string
+	CustomRecognitionModelPath string
 }
 
 // StopServer stops the running server (placeholder implementation).
@@ -111,37 +114,50 @@ func NewTestContext() (*TestContext, error) {
 func (testCtx *TestContext) Cleanup() error {
 	var errors []error
 
-	// Stop server if running
-	if testCtx.ServerProcess != nil {
-		if err := testCtx.StopServer(); err != nil {
-			errors = append(errors, fmt.Errorf("failed to stop server: %w", err))
-		}
-	}
-
-	// Remove created files
-	for _, file := range testCtx.CreatedFiles {
-		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
-			errors = append(errors, fmt.Errorf("failed to remove file %s: %w", file, err))
-		}
-	}
-
-	// Remove created directories
-	for _, dir := range testCtx.CreatedDirectories {
-		if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
-			errors = append(errors, fmt.Errorf("failed to remove directory %s: %w", dir, err))
-		}
-	}
-
-	// Remove temp directory
-	if err := os.RemoveAll(testCtx.TempDir); err != nil && !os.IsNotExist(err) {
-		errors = append(errors, fmt.Errorf("failed to remove temp directory %s: %w", testCtx.TempDir, err))
-	}
+	testCtx.cleanupServer(&errors)
+	testCtx.cleanupFiles(&errors)
+	testCtx.cleanupDirectories(&errors)
+	testCtx.cleanupTempDir(&errors)
 
 	if len(errors) > 0 {
 		return fmt.Errorf("cleanup errors: %v", errors)
 	}
 
 	return nil
+}
+
+func (testCtx *TestContext) cleanupServer(errors *[]error) {
+	// Stop server if running
+	if testCtx.ServerProcess != nil {
+		if err := testCtx.StopServer(); err != nil {
+			*errors = append(*errors, fmt.Errorf("failed to stop server: %w", err))
+		}
+	}
+}
+
+func (testCtx *TestContext) cleanupFiles(errors *[]error) {
+	// Remove created files
+	for _, file := range testCtx.CreatedFiles {
+		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
+			*errors = append(*errors, fmt.Errorf("failed to remove file %s: %w", file, err))
+		}
+	}
+}
+
+func (testCtx *TestContext) cleanupDirectories(errors *[]error) {
+	// Remove created directories
+	for _, dir := range testCtx.CreatedDirectories {
+		if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
+			*errors = append(*errors, fmt.Errorf("failed to remove directory %s: %w", dir, err))
+		}
+	}
+}
+
+func (testCtx *TestContext) cleanupTempDir(errors *[]error) {
+	// Remove temp directory
+	if err := os.RemoveAll(testCtx.TempDir); err != nil && !os.IsNotExist(err) {
+		*errors = append(*errors, fmt.Errorf("failed to remove temp directory %s: %w", testCtx.TempDir, err))
+	}
 }
 
 // AddEnvVar adds an environment variable for command execution.

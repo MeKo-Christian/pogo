@@ -128,6 +128,8 @@ func (m *MockPipeline) Close() error {
 
 // createTestHTTPServer creates an httptest server with mock handlers.
 func (testCtx *TestContext) createTestHTTPServer(port int) error {
+	// Port parameter is unused - httptest server gets its own port
+	_ = port
 	const mockBase64ImageData = "base64encodedimagedata"
 
 	// Create mock pipeline

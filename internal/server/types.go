@@ -91,6 +91,7 @@ func NewServer(config Config) (*Server, error) {
 	cfg := config.PipelineConfig
 	cfg.Detector.UpdateModelPath(cfg.ModelsDir)
 	cfg.Recognizer.UpdateModelPath(cfg.ModelsDir)
+
 	// Build components using builder fluent API
 	nb := pipeline.NewBuilder().WithModelsDir(cfg.ModelsDir).WithLanguage(cfg.Recognizer.Language)
 	nb = nb.WithThreads(cfg.Detector.NumThreads)
@@ -98,7 +99,8 @@ func NewServer(config Config) (*Server, error) {
 	if cfg.Detector.UseNMS {
 		nb = nb.WithDetectorNMS(true, cfg.Detector.NMSThreshold)
 	}
-	nb = nb.WithImageHeight(cfg.Recognizer.ImageHeight).WithRecognizeWidthPadding(cfg.Recognizer.MaxWidth, cfg.Recognizer.PadWidthMultiple)
+	nb = nb.WithImageHeight(cfg.Recognizer.ImageHeight)
+	nb = nb.WithRecognizeWidthPadding(cfg.Recognizer.MaxWidth, cfg.Recognizer.PadWidthMultiple)
 	if cfg.Detector.ModelPath != "" {
 		nb = nb.WithDetectorModelPath(cfg.Detector.ModelPath)
 	}
@@ -108,6 +110,7 @@ func NewServer(config Config) (*Server, error) {
 	if cfg.Recognizer.DictPath != "" {
 		nb = nb.WithDictionaryPath(cfg.Recognizer.DictPath)
 	}
+
 	pl, err := nb.Build()
 	if err != nil {
 		return nil, err

@@ -3,6 +3,7 @@ package pipeline
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/MeKo-Tech/pogo/internal/detector"
@@ -367,24 +368,60 @@ func (b *Builder) Validate() error {
 	b.cfg.Detector.UpdateModelPath(b.cfg.ModelsDir)
 	b.cfg.Recognizer.UpdateModelPath(b.cfg.ModelsDir)
 
+	if err := b.validateModelPaths(); err != nil {
+		return err
+	}
+	if err := b.validateModelFiles(); err != nil {
+		return err
+	}
+	if err := b.validateDictionaryFiles(); err != nil {
+		return err
+	}
+	if err := b.validateConfiguration(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *Builder) validateModelPaths() error {
 	if b.cfg.Detector.ModelPath == "" {
 		return errors.New("detector model path is empty")
 	}
 	if b.cfg.Recognizer.ModelPath == "" {
 		return errors.New("recognizer model path is empty")
 	}
-	if b.cfg.Recognizer.DictPath == "" {
+	if b.cfg.Recognizer.DictPath == "" && len(b.cfg.Recognizer.DictPaths) == 0 {
 		return errors.New("recognizer dictionary path is empty")
 	}
+	return nil
+}
+
+func (b *Builder) validateModelFiles() error {
 	if _, err := os.Stat(b.cfg.Detector.ModelPath); err != nil {
 		return fmt.Errorf("detector model not found: %s", b.cfg.Detector.ModelPath)
 	}
 	if _, err := os.Stat(b.cfg.Recognizer.ModelPath); err != nil {
 		return fmt.Errorf("recognizer model not found: %s", b.cfg.Recognizer.ModelPath)
 	}
-	if _, err := os.Stat(b.cfg.Recognizer.DictPath); err != nil {
-		return fmt.Errorf("dictionary not found: %s", b.cfg.Recognizer.DictPath)
+	return nil
+}
+
+func (b *Builder) validateDictionaryFiles() error {
+	if len(b.cfg.Recognizer.DictPaths) > 0 {
+		for _, p := range b.cfg.Recognizer.DictPaths {
+			if _, err := os.Stat(p); err != nil {
+				return fmt.Errorf("dictionary not found: %s", p)
+			}
+		}
+	} else if b.cfg.Recognizer.DictPath != "" {
+		if _, err := os.Stat(b.cfg.Recognizer.DictPath); err != nil {
+			return fmt.Errorf("dictionary not found: %s", b.cfg.Recognizer.DictPath)
+		}
 	}
+	return nil
+}
+
+func (b *Builder) validateConfiguration() error {
 	if b.cfg.Recognizer.ImageHeight <= 0 {
 		return errors.New("recognizer image height must be > 0")
 	}
@@ -403,73 +440,119 @@ type Pipeline struct {
 
 // Build initializes the OCR pipeline components.
 func (b *Builder) Build() (*Pipeline, error) {
-	// Update model paths prior to build
-	b.cfg.Detector.UpdateModelPath(b.cfg.ModelsDir)
-	b.cfg.Recognizer.UpdateModelPath(b.cfg.ModelsDir)
-	b.cfg.Orientation.UpdateModelPath(b.cfg.ModelsDir)
-	b.cfg.TextLineOrientation.UpdateModelPath(b.cfg.ModelsDir)
-	b.cfg.Rectification.UpdateModelPath(b.cfg.ModelsDir)
+	b.updateModelPaths()
 
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
 
+	p, err := b.initializeCoreComponents()
+	if err != nil {
+		return nil, err
+	}
+
+	b.setupOptionalComponents(p)
+
+	if err := b.performWarmup(p); err != nil {
+		return nil, err
+	}
+
+	b.initializeResourceManager(p)
+
+	return p, nil
+}
+
+func (b *Builder) updateModelPaths() {
+	b.cfg.Detector.UpdateModelPath(b.cfg.ModelsDir)
+	b.cfg.Recognizer.UpdateModelPath(b.cfg.ModelsDir)
+	b.cfg.Orientation.UpdateModelPath(b.cfg.ModelsDir)
+	b.cfg.TextLineOrientation.UpdateModelPath(b.cfg.ModelsDir)
+	b.cfg.Rectification.UpdateModelPath(b.cfg.ModelsDir)
+}
+
+func (b *Builder) initializeCoreComponents() (*Pipeline, error) {
 	det, err := detector.NewDetector(b.cfg.Detector)
 	if err != nil {
 		return nil, fmt.Errorf("init detector: %w", err)
 	}
+
 	rec, err := recognizer.NewRecognizer(b.cfg.Recognizer)
 	if err != nil {
 		_ = det.Close()
 		return nil, fmt.Errorf("init recognizer: %w", err)
 	}
-	p := &Pipeline{cfg: b.cfg, Detector: det, Recognizer: rec}
 
-	// Optional orientation
+	return &Pipeline{cfg: b.cfg, Detector: det, Recognizer: rec}, nil
+}
+
+func (b *Builder) setupOptionalComponents(p *Pipeline) {
+	b.setupOrientation(p)
+	b.setupTextLineOrientation(p)
+	b.setupRectification(p)
+}
+
+func (b *Builder) setupOrientation(p *Pipeline) {
 	if b.cfg.Orientation.Enabled || b.cfg.EnableOrientation {
 		cls, err := orientation.NewClassifier(b.cfg.Orientation)
 		if err != nil {
 			// Do not fail pipeline if orientation is optional; keep running without it
 			// Users can inspect info() to see if it's active.
+			slog.Warn("Failed to initialize orientation classifier, continuing without it",
+				"error", err, "model_path", b.cfg.Orientation.ModelPath)
 		} else {
 			p.Orienter = cls
+			slog.Debug("Orientation classifier initialized", "model_path", b.cfg.Orientation.ModelPath)
 		}
 	}
-	// Optional text line per-region orientation
+}
+
+func (b *Builder) setupTextLineOrientation(p *Pipeline) {
 	if b.cfg.TextLineOrientation.Enabled {
 		tl, err := orientation.NewClassifier(b.cfg.TextLineOrientation)
 		if err == nil && tl != nil {
 			p.Recognizer.SetTextLineOrienter(tl)
+			slog.Debug("Text-line orientation classifier initialized", "model_path", b.cfg.TextLineOrientation.ModelPath)
+		} else if err != nil {
+			slog.Warn("Failed to initialize text-line orientation classifier, continuing without it",
+				"error", err, "model_path", b.cfg.TextLineOrientation.ModelPath)
 		}
 	}
+}
 
-	// Optional rectification (minimal; does not fail pipeline)
+func (b *Builder) setupRectification(p *Pipeline) {
 	if b.cfg.Rectification.Enabled {
 		rx, err := rectify.New(b.cfg.Rectification)
 		if err == nil && rx != nil {
 			p.Rectifier = rx
+			slog.Debug("Rectification module initialized", "model_path", b.cfg.Rectification.ModelPath)
+		} else if err != nil {
+			slog.Warn("Failed to initialize rectification module, continuing without it",
+				"error", err, "model_path", b.cfg.Rectification.ModelPath)
 		}
 	}
+}
 
-	// Optional warmup
+func (b *Builder) performWarmup(p *Pipeline) error {
 	if b.cfg.WarmupIterations > 0 {
+		slog.Debug("Starting model warmup", "iterations", b.cfg.WarmupIterations)
 		if err := p.Detector.Warmup(b.cfg.WarmupIterations); err != nil {
 			_ = p.Close()
-			return nil, fmt.Errorf("detector warmup failed: %w", err)
+			return fmt.Errorf("detector warmup failed: %w", err)
 		}
 		if err := p.Recognizer.Warmup(b.cfg.WarmupIterations); err != nil {
 			_ = p.Close()
-			return nil, fmt.Errorf("recognizer warmup failed: %w", err)
+			return fmt.Errorf("recognizer warmup failed: %w", err)
 		}
+		slog.Debug("Model warmup completed", "iterations", b.cfg.WarmupIterations)
 	}
+	return nil
+}
 
-	// Initialize resource manager for parallel processing
+func (b *Builder) initializeResourceManager(p *Pipeline) {
 	if b.cfg.Resource.MaxMemoryBytes > 0 || b.cfg.Resource.MaxGoroutines > 0 || b.cfg.Resource.EnableAdaptiveScale {
 		p.ResourceManager = NewResourceManager(b.cfg.Resource)
 		p.ResourceManager.Start()
 	}
-
-	return p, nil
 }
 
 // Close releases all resources.

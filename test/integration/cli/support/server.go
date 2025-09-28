@@ -17,6 +17,10 @@ import (
 	"github.com/MeKo-Tech/pogo/internal/testutil"
 )
 
+const (
+	portFlag = "--port"
+)
+
 // StartServer starts the OCR server with the given command.
 func (testCtx *TestContext) StartServer(command string) error {
 	// Set LastCommand for verification steps
@@ -27,9 +31,16 @@ func (testCtx *TestContext) StartServer(command string) error {
 		return err
 	}
 
-	// Check if port is already in use
+	// Find an available port if the specified port is in use
 	if testCtx.isPortInUse(testCtx.ServerPort) {
-		return fmt.Errorf("port %d is already in use", testCtx.ServerPort)
+		availablePort, err := testCtx.findAvailablePort()
+		if err != nil {
+			return fmt.Errorf("failed to find available port: %w", err)
+		}
+		testCtx.ServerPort = availablePort
+		// Update the command to use the new port
+		command = testCtx.updateCommandPort(command, availablePort)
+		testCtx.LastCommand = command
 	}
 
 	// Parse command into parts
@@ -100,7 +111,7 @@ func (testCtx *TestContext) parseServerCommand(command string) error {
 	// Parse flags
 	for i, part := range parts {
 		switch part {
-		case "--port", "-p":
+		case portFlag, "-p":
 			if i+1 < len(parts) {
 				port, err := strconv.Atoi(parts[i+1])
 				if err != nil {
@@ -115,8 +126,8 @@ func (testCtx *TestContext) parseServerCommand(command string) error {
 		}
 
 		// Handle --port=value format
-		if strings.HasPrefix(part, "--port=") {
-			portStr := strings.TrimPrefix(part, "--port=")
+		if strings.HasPrefix(part, portFlag+"=") {
+			portStr := strings.TrimPrefix(part, portFlag+"=")
 			port, err := strconv.Atoi(portStr)
 			if err != nil {
 				return fmt.Errorf("invalid port: %s", portStr)
@@ -199,4 +210,42 @@ func (testCtx *TestContext) SendSignalToServer(signal os.Signal) error {
 	}
 
 	return testCtx.ServerProcess.Signal(signal)
+}
+
+// findAvailablePort finds an available port starting from 8081.
+func (testCtx *TestContext) findAvailablePort() (int, error) {
+	for port := 8081; port < 9000; port++ {
+		if !testCtx.isPortInUse(port) {
+			return port, nil
+		}
+	}
+	return 0, errors.New("no available ports found in range 8081-8999")
+}
+
+// updateCommandPort updates the port in a server command.
+func (testCtx *TestContext) updateCommandPort(command string, newPort int) string {
+	parts := strings.Fields(command)
+
+	// Look for --port flag and update it
+	for i, part := range parts {
+		if part == portFlag && i+1 < len(parts) {
+			parts[i+1] = strconv.Itoa(newPort)
+			return strings.Join(parts, " ")
+		}
+	}
+
+	// If no --port flag found, add it
+	// Insert before any other flags
+	for i, part := range parts {
+		if strings.HasPrefix(part, "--") && part != portFlag {
+			newParts := make([]string, 0, len(parts)+2)
+			newParts = append(newParts, parts[:i]...)
+			newParts = append(newParts, portFlag, strconv.Itoa(newPort))
+			newParts = append(newParts, parts[i:]...)
+			return strings.Join(newParts, " ")
+		}
+	}
+
+	// No flags found, add at the end
+	return command + " " + portFlag + " " + strconv.Itoa(newPort)
 }

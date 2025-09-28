@@ -86,6 +86,34 @@ func SortRegionsTopLeft(res *OCRImageResult) {
 	})
 }
 
+// validateRegionBox checks if a region's bounding box is valid within the image bounds.
+func validateRegionBox(r OCRRegionResult, imageWidth, imageHeight int, regionIndex int) error {
+	if r.Box.W < 0 || r.Box.H < 0 {
+		return fmt.Errorf("region %d has negative size", regionIndex)
+	}
+	if r.Box.X < 0 || r.Box.Y < 0 {
+		return fmt.Errorf("region %d has negative coords", regionIndex)
+	}
+	if r.Box.X+r.Box.W > imageWidth {
+		return fmt.Errorf("region %d exceeds image width", regionIndex)
+	}
+	if r.Box.Y+r.Box.H > imageHeight {
+		return fmt.Errorf("region %d exceeds image height", regionIndex)
+	}
+	return nil
+}
+
+// validateRegionConfidence checks if a region's confidence values are in valid range.
+func validateRegionConfidence(r OCRRegionResult, regionIndex int) error {
+	if r.DetConfidence < 0 || r.DetConfidence > 1 {
+		return fmt.Errorf("region %d det conf out of range", regionIndex)
+	}
+	if r.RecConfidence < 0 || r.RecConfidence > 1 {
+		return fmt.Errorf("region %d rec conf out of range", regionIndex)
+	}
+	return nil
+}
+
 // ValidateOCRImageResult performs simple consistency checks.
 func ValidateOCRImageResult(res *OCRImageResult) error {
 	if res == nil {
@@ -95,23 +123,11 @@ func ValidateOCRImageResult(res *OCRImageResult) error {
 		return fmt.Errorf("invalid image size %dx%d", res.Width, res.Height)
 	}
 	for i, r := range res.Regions {
-		if r.Box.W < 0 || r.Box.H < 0 {
-			return fmt.Errorf("region %d has negative size", i)
+		if err := validateRegionBox(r, res.Width, res.Height, i); err != nil {
+			return err
 		}
-		if r.Box.X < 0 || r.Box.Y < 0 {
-			return fmt.Errorf("region %d has negative coords", i)
-		}
-		if r.Box.X+r.Box.W > res.Width {
-			return fmt.Errorf("region %d exceeds image width", i)
-		}
-		if r.Box.Y+r.Box.H > res.Height {
-			return fmt.Errorf("region %d exceeds image height", i)
-		}
-		if r.DetConfidence < 0 || r.DetConfidence > 1 {
-			return fmt.Errorf("region %d det conf out of range", i)
-		}
-		if r.RecConfidence < 0 || r.RecConfidence > 1 {
-			return fmt.Errorf("region %d rec conf out of range", i)
+		if err := validateRegionConfidence(r, i); err != nil {
+			return err
 		}
 	}
 	return nil

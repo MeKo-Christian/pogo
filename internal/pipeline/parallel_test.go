@@ -386,7 +386,11 @@ func (p *TestPipeline) ProcessImagesParallel(images []image.Image, config Parall
 	return p.ProcessImagesParallelContext(context.Background(), images, config)
 }
 
-func (p *TestPipeline) ProcessImagesParallelContext(ctx context.Context, images []image.Image, config ParallelConfig) ([]*OCRImageResult, error) {
+func (p *TestPipeline) ProcessImagesParallelContext(
+	ctx context.Context,
+	images []image.Image,
+	config ParallelConfig,
+) ([]*OCRImageResult, error) {
 	if len(images) == 0 {
 		return nil, errors.New("no images provided")
 	}
@@ -481,12 +485,18 @@ func (p *TestPipeline) ProcessImagesParallelContext(ctx context.Context, images 
 	return orderedResults, firstError
 }
 
-func (p *TestPipeline) ProcessImagesParallelBatched(images []image.Image, config ParallelConfig) ([]*OCRImageResult, error) {
+func (p *TestPipeline) ProcessImagesParallelBatched(
+	images []image.Image,
+	config ParallelConfig,
+) ([]*OCRImageResult, error) {
 	return p.ProcessImagesParallelBatchedContext(context.Background(), images, config)
 }
 
-//nolint:dupl // Duplicate with real implementation for test mocking
-func (p *TestPipeline) ProcessImagesParallelBatchedContext(ctx context.Context, images []image.Image, config ParallelConfig) ([]*OCRImageResult, error) {
+func (p *TestPipeline) ProcessImagesParallelBatchedContext(
+	ctx context.Context,
+	images []image.Image,
+	config ParallelConfig,
+) ([]*OCRImageResult, error) {
 	if config.BatchSize <= 1 {
 		// No batching requested, use regular parallel processing
 		return p.ProcessImagesParallelContext(ctx, images, config)
@@ -569,7 +579,13 @@ func (p *TestPipeline) ProcessImagesParallelBatchedContext(ctx context.Context, 
 }
 
 // testWorker processes images from the jobs channel for TestPipeline.
-func (p *TestPipeline) testWorker(ctx context.Context, jobs <-chan imageJob, results chan<- imageResult, wg *sync.WaitGroup, config ParallelConfig) {
+func (p *TestPipeline) testWorker(
+	ctx context.Context,
+	jobs <-chan imageJob,
+	results chan<- imageResult,
+	wg *sync.WaitGroup,
+	_ ParallelConfig,
+) {
 	defer wg.Done()
 
 	for {
@@ -661,7 +677,10 @@ func (m *mockDetectorWithDelay) Warmup(iterations int) error { return nil }
 // Mock recognizer.
 type mockRecognizer struct{}
 
-func (m *mockRecognizer) RecognizeBatch(img image.Image, regions []detector.DetectedRegion) ([]recognizer.Result, error) {
+func (m *mockRecognizer) RecognizeBatch(
+	img image.Image,
+	regions []detector.DetectedRegion,
+) ([]recognizer.Result, error) {
 	// Return empty results for simplicity
 	return []recognizer.Result{}, nil
 }
@@ -674,7 +693,10 @@ func (m *mockRecognizer) SetTextLineOrienter(orienter interface{}) {}
 // Mock recognizer that fails based on image properties.
 type mockRecognizerWithImageError struct{}
 
-func (m *mockRecognizerWithImageError) RecognizeBatch(img image.Image, regions []detector.DetectedRegion) ([]recognizer.Result, error) {
+func (m *mockRecognizerWithImageError) RecognizeBatch(
+	img image.Image,
+	regions []detector.DetectedRegion,
+) ([]recognizer.Result, error) {
 	// Fail for images with 200x200 dimensions
 	bounds := img.Bounds()
 	if bounds.Dx() == 200 && bounds.Dy() == 200 {

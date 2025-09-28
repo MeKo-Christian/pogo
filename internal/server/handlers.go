@@ -9,6 +9,7 @@ import (
 	_ "image/jpeg"
 	"image/png"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"strings"
@@ -78,42 +79,10 @@ func (s *Server) ocrImageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set content length limit
-	r.Body = http.MaxBytesReader(w, r.Body, s.maxUploadMB*1024*1024)
-
-	// Parse multipart form
-	err := r.ParseMultipartForm(s.maxUploadMB * 1024 * 1024)
+	// Parse and validate request
+	img, err := s.parseImageRequest(w, r)
 	if err != nil {
-		s.writeErrorResponse(w, "Failed to parse form data", http.StatusBadRequest)
-		return
-	}
-
-	// Get uploaded file
-	file, header, err := r.FormFile("image")
-	if err != nil {
-		s.writeErrorResponse(w, "No image file provided", http.StatusBadRequest)
-		return
-	}
-	defer func() { _ = file.Close() }()
-
-	// Validate file size
-	if header.Size > s.maxUploadMB*1024*1024 {
-		s.writeErrorResponse(w, "File too large", http.StatusRequestEntityTooLarge)
-		return
-	}
-
-	// Read file content
-	imageData, err := io.ReadAll(file)
-	if err != nil {
-		s.writeErrorResponse(w, "Failed to read image data", http.StatusInternalServerError)
-		return
-	}
-
-	// Decode image
-	img, _, err := image.Decode(bytes.NewReader(imageData))
-	if err != nil {
-		s.writeErrorResponse(w, "Invalid image format", http.StatusBadRequest)
-		return
+		return // error already written
 	}
 
 	// Check if pipeline is available
@@ -129,39 +98,102 @@ func (s *Server) ocrImageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Format and send response
+	s.writeImageResponse(w, r, img, res)
+}
+
+func (s *Server) parseImageRequest(w http.ResponseWriter, r *http.Request) (image.Image, error) {
+	// Set content length limit
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxUploadMB*1024*1024)
+
+	// Parse multipart form
+	err := r.ParseMultipartForm(s.maxUploadMB * 1024 * 1024)
+	if err != nil {
+		s.writeErrorResponse(w, "Failed to parse form data", http.StatusBadRequest)
+		return nil, err
+	}
+
+	// Get uploaded file
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		s.writeErrorResponse(w, "No image file provided", http.StatusBadRequest)
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+
+	// Validate file size
+	if header.Size > s.maxUploadMB*1024*1024 {
+		s.writeErrorResponse(w, "File too large", http.StatusRequestEntityTooLarge)
+		return nil, err
+	}
+
+	// Read file content
+	imageData, err := io.ReadAll(file)
+	if err != nil {
+		s.writeErrorResponse(w, "Failed to read image data", http.StatusInternalServerError)
+		return nil, err
+	}
+
+	// Decode image
+	img, _, err := image.Decode(bytes.NewReader(imageData))
+	if err != nil {
+		s.writeErrorResponse(w, "Invalid image format", http.StatusBadRequest)
+		return nil, err
+	}
+
+	return img, nil
+}
+
+func (s *Server) writeImageResponse(
+	w http.ResponseWriter,
+	r *http.Request,
+	img image.Image,
+	res *pipeline.OCRImageResult,
+) {
 	// Determine output format: default json; allow 'format' in query or form
 	format := r.FormValue("format")
 	if format == "" {
 		format = r.URL.Query().Get("format")
 	}
-	if format == "csv" {
-		w.Header().Set("Content-Type", "text/csv")
-		s, err := pipeline.ToCSVImage(res)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("formatting failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-		_, _ = w.Write([]byte(s))
-		return
-	}
-	if format == formatText {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		s, err := pipeline.ToPlainTextImage(res)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("formatting failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-		_, _ = w.Write([]byte(s))
-		return
-	}
 
-	// overlay image output
-	if format == "overlay" || r.FormValue("overlay") == "1" {
+	switch format {
+	case "csv":
+		s.writeCSVResponse(w, res)
+	case formatText:
+		s.writeTextResponse(w, res)
+	case "overlay":
 		s.handleOverlayOutput(w, r, img, res)
+	default:
+		// Check for overlay parameter
+		if r.FormValue("overlay") == "1" {
+			s.handleOverlayOutput(w, r, img, res)
+		} else {
+			s.writeJSONResponse(w, res)
+		}
+	}
+}
+
+func (s *Server) writeCSVResponse(w http.ResponseWriter, res *pipeline.OCRImageResult) {
+	w.Header().Set("Content-Type", "text/csv")
+	csvStr, err := pipeline.ToCSVImage(res)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("formatting failed: %v", err), http.StatusInternalServerError)
 		return
 	}
+	_, _ = w.Write([]byte(csvStr))
+}
 
-	// default: json
+func (s *Server) writeTextResponse(w http.ResponseWriter, res *pipeline.OCRImageResult) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	textStr, err := pipeline.ToPlainTextImage(res)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("formatting failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	_, _ = w.Write([]byte(textStr))
+}
+
+func (s *Server) writeJSONResponse(w http.ResponseWriter, res *pipeline.OCRImageResult) {
 	w.Header().Set("Content-Type", "application/json")
 	obj := struct {
 		OCR *pipeline.OCRImageResult `json:"ocr"`
@@ -216,42 +248,15 @@ func (s *Server) ocrPdfHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set content length limit
-	r.Body = http.MaxBytesReader(w, r.Body, s.maxUploadMB*1024*1024)
-
-	// Parse multipart form
-	err := r.ParseMultipartForm(s.maxUploadMB * 1024 * 1024)
+	// Parse and validate request
+	file, header, pageRange, err := s.parsePdfRequest(w, r)
 	if err != nil {
-		// Distinguish body-too-large from generic parse error
-		if strings.Contains(strings.ToLower(err.Error()), "body too large") ||
-			strings.Contains(strings.ToLower(err.Error()), "request body too large") {
-			s.writeErrorResponse(w, "File too large", http.StatusRequestEntityTooLarge)
-		} else {
-			s.writeErrorResponse(w, "Failed to parse form data", http.StatusBadRequest)
-		}
-		return
-	}
-
-	// Get uploaded file
-	file, header, err := r.FormFile("pdf")
-	if err != nil {
-		s.writeErrorResponse(w, "No PDF file provided", http.StatusBadRequest)
-		return
+		return // error already written
 	}
 	defer func() { _ = file.Close() }()
 
-	// Validate file size
-	if header.Size > s.maxUploadMB*1024*1024 {
-		s.writeErrorResponse(w, "File too large", http.StatusRequestEntityTooLarge)
-		return
-	}
-
-	// Get page range parameter
-	pageRange := r.FormValue("pages")
-
 	// Check if pipeline is available
 	if s.pipeline == nil {
-		// For PDF endpoint, treat missing pipeline as internal error to align with tests
 		s.writeErrorResponse(w, "OCR pipeline not initialized", http.StatusInternalServerError)
 		return
 	}
@@ -263,6 +268,54 @@ func (s *Server) ocrPdfHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Format and send response
+	s.writePdfResponse(w, r, res)
+}
+
+func (s *Server) parsePdfRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+) (multipart.File, *multipart.FileHeader, string, error) {
+	// Set content length limit
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxUploadMB*1024*1024)
+
+	// Parse multipart form
+	err := r.ParseMultipartForm(s.maxUploadMB * 1024 * 1024)
+	if err != nil {
+		s.handleFormParseError(w, err)
+		return nil, nil, "", err
+	}
+
+	// Get uploaded file
+	file, header, err := r.FormFile("pdf")
+	if err != nil {
+		s.writeErrorResponse(w, "No PDF file provided", http.StatusBadRequest)
+		return nil, nil, "", err
+	}
+
+	// Validate file size
+	if header.Size > s.maxUploadMB*1024*1024 {
+		s.writeErrorResponse(w, "File too large", http.StatusRequestEntityTooLarge)
+		return nil, nil, "", err
+	}
+
+	// Get page range parameter
+	pageRange := r.FormValue("pages")
+
+	return file, header, pageRange, nil
+}
+
+func (s *Server) handleFormParseError(w http.ResponseWriter, err error) {
+	// Distinguish body-too-large from generic parse error
+	if strings.Contains(strings.ToLower(err.Error()), "body too large") ||
+		strings.Contains(strings.ToLower(err.Error()), "request body too large") {
+		s.writeErrorResponse(w, "File too large", http.StatusRequestEntityTooLarge)
+	} else {
+		s.writeErrorResponse(w, "Failed to parse form data", http.StatusBadRequest)
+	}
+}
+
+func (s *Server) writePdfResponse(w http.ResponseWriter, r *http.Request, res *pipeline.OCRPDFResult) {
 	// Determine output format: default json; allow 'format' in query or form
 	format := r.FormValue("format")
 	if format == "" {

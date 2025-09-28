@@ -18,7 +18,11 @@ import (
 // Current implementation uses the polygon's axis-aligned bounding box. If rotateIfVertical
 // is true and the cropped patch is much taller than wide, it rotates 90 degrees CCW to
 // make text roughly horizontal for recognition.
-func CropRegionImage(img image.Image, region detector.DetectedRegion, rotateIfVertical bool) (image.Image, bool, error) {
+func CropRegionImage(
+	img image.Image,
+	region detector.DetectedRegion,
+	rotateIfVertical bool,
+) (image.Image, bool, error) {
 	if img == nil {
 		return nil, false, errors.New("input image is nil")
 	}
@@ -56,21 +60,36 @@ func CropRegionImage(img image.Image, region detector.DetectedRegion, rotateIfVe
 // CropRegionImageWithOrienter is like CropRegionImage but uses a per-region
 // orientation classifier to decide rotation. The classifier returns the angle to
 // apply to make text upright. If the classifier is nil, falls back to rotateIfVertical.
-func CropRegionImageWithOrienter(img image.Image, region detector.DetectedRegion, cls *orientation.Classifier, rotateIfVertical bool) (image.Image, bool, error) {
+func CropRegionImageWithOrienter(
+	img image.Image,
+	region detector.DetectedRegion,
+	cls *orientation.Classifier,
+	rotateIfVertical bool,
+) (image.Image, bool, error) {
 	patch, _, err := CropRegionImage(img, region, false)
 	if err != nil {
 		return nil, false, err
 	}
 	if cls == nil {
-		// Fallback to aspect ratio heuristic if requested
-		if rotateIfVertical {
-			b := patch.Bounds()
-			if b.Dy() > int(float64(b.Dx())*1.5) {
-				return utils.Rotate90(patch), true, nil
-			}
-		}
+		return applyFallbackRotation(patch, rotateIfVertical)
+	}
+	return applyClassifierRotation(patch, cls)
+}
+
+// applyFallbackRotation applies rotation based on aspect ratio heuristic.
+func applyFallbackRotation(patch image.Image, rotateIfVertical bool) (image.Image, bool, error) {
+	if !rotateIfVertical {
 		return patch, false, nil
 	}
+	b := patch.Bounds()
+	if b.Dy() > int(float64(b.Dx())*1.5) {
+		return utils.Rotate90(patch), true, nil
+	}
+	return patch, false, nil
+}
+
+// applyClassifierRotation applies rotation based on classifier prediction.
+func applyClassifierRotation(patch image.Image, cls *orientation.Classifier) (image.Image, bool, error) {
 	res, err := cls.Predict(patch)
 	if err != nil {
 		return patch, false, nil //nolint:nilerr // Graceful degradation when prediction fails
@@ -83,46 +102,66 @@ func CropRegionImageWithOrienter(img image.Image, region detector.DetectedRegion
 	case 270:
 		return utils.Rotate270(patch), true, nil
 	default:
-		// If classifier didn't recommend rotation, optionally use a simple AR heuristic
-		b := patch.Bounds()
-		if b.Dy() > int(float64(b.Dx())*1.2) {
-			return utils.Rotate90(patch), true, nil
-		}
-		return patch, false, nil
+		return applyDefaultRotation(patch)
 	}
+}
+
+// applyDefaultRotation applies rotation for default case with aspect ratio check.
+func applyDefaultRotation(patch image.Image) (image.Image, bool, error) {
+	b := patch.Bounds()
+	if b.Dy() > int(float64(b.Dx())*1.2) {
+		return utils.Rotate90(patch), true, nil
+	}
+	return patch, false, nil
 }
 
 // ResizeForRecognition scales an image to a fixed target height while preserving
 // aspect ratio. If padToMultiple > 0, the width is padded with black pixels to the
 // next multiple. If maxWidth > 0, the width is clamped to maxWidth.
 func ResizeForRecognition(img image.Image, targetHeight, maxWidth, padToMultiple int) (image.Image, int, int, error) {
-	if img == nil {
-		return nil, 0, 0, errors.New("input image is nil")
+	if err := validateResizeInputs(img, targetHeight); err != nil {
+		return nil, 0, 0, err
 	}
-	if targetHeight <= 0 {
-		return nil, 0, 0, fmt.Errorf("invalid targetHeight: %d", targetHeight)
-	}
+
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
 	if w == 0 || h == 0 {
 		return imaging.New(0, 0, color.Black), 0, 0, nil
 	}
 
+	newW := calculateTargetWidth(w, h, targetHeight, maxWidth)
+	resized := imaging.Resize(img, newW, targetHeight, imaging.Lanczos)
+
+	return applyPaddingIfNeeded(resized, newW, targetHeight, padToMultiple)
+}
+
+// validateResizeInputs checks basic input validation for resize operation.
+func validateResizeInputs(img image.Image, targetHeight int) error {
+	if img == nil {
+		return errors.New("input image is nil")
+	}
+	if targetHeight <= 0 {
+		return fmt.Errorf("invalid targetHeight: %d", targetHeight)
+	}
+	return nil
+}
+
+// calculateTargetWidth computes the target width after scaling and clamping.
+func calculateTargetWidth(w, h, targetHeight, maxWidth int) int {
 	scale := float64(targetHeight) / float64(h)
 	newW := int(float64(w) * scale)
 	if newW < 1 {
 		newW = 1
 	}
-
 	// Clamp width if needed
 	if maxWidth > 0 && newW > maxWidth {
 		newW = maxWidth
 	}
+	return newW
+}
 
-	// Resize with Lanczos filter
-	resized := imaging.Resize(img, newW, targetHeight, imaging.Lanczos)
-
-	// Pad to multiple if requested
+// applyPaddingIfNeeded pads the image width to the next multiple if requested.
+func applyPaddingIfNeeded(resized image.Image, newW, targetHeight, padToMultiple int) (image.Image, int, int, error) {
 	outW := newW
 	if padToMultiple > 0 {
 		rem := newW % padToMultiple
@@ -171,7 +210,11 @@ func NormalizeForRecognitionWithPool(img image.Image) (onnx.Tensor, []float32, e
 
 // BatchCropRegions crops multiple detected regions from a single image.
 // Returns a slice of cropped patches in the same order as regions.
-func BatchCropRegions(img image.Image, regions []detector.DetectedRegion, rotateIfVertical bool) ([]image.Image, []bool, error) {
+func BatchCropRegions(
+	img image.Image,
+	regions []detector.DetectedRegion,
+	rotateIfVertical bool,
+) ([]image.Image, []bool, error) {
 	if img == nil {
 		return nil, nil, errors.New("input image is nil")
 	}

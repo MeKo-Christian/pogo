@@ -37,8 +37,58 @@ func (r *Recognizer) RecognizeRegion(img image.Image, region detector.DetectedRe
 
 	totalStart := time.Now()
 
-	// 1) Crop and optionally rotate (using per-line orientation if configured)
+	// Preprocess the region
+	preprocessed, preprocessNs, err := r.preprocessRegion(img, region)
+	if err != nil {
+		return nil, err
+	}
+
+	// Run inference
+	modelOutput, modelNs, err := r.runInference(preprocessed.tensor)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		for _, o := range modelOutput.outputs {
+			if o != nil {
+				_ = o.Destroy()
+			}
+		}
+	}()
+	mempool.PutFloat32(preprocessed.buf)
+
+	// Decode the output
+	result, decodeNs, err := r.decodeOutput(modelOutput, preprocessed)
+	if err != nil {
+		return nil, err
+	}
+
+	totalNs := time.Since(totalStart).Nanoseconds()
+	result.TimingNs = struct{ Preprocess, Model, Decode, Total int64 }{
+		Preprocess: preprocessNs,
+		Model:      modelNs,
+		Decode:     decodeNs,
+		Total:      totalNs,
+	}
+
+	return result, nil
+}
+
+type preprocessedRegion struct {
+	tensor  onnx.Tensor
+	buf     []float32
+	rotated bool
+	width   int
+	height  int
+}
+
+func (r *Recognizer) preprocessRegion(
+	img image.Image,
+	region detector.DetectedRegion,
+) (*preprocessedRegion, int64, error) {
 	t0 := time.Now()
+
+	// Crop and optionally rotate
 	var patch image.Image
 	var rotated bool
 	var err error
@@ -48,71 +98,89 @@ func (r *Recognizer) RecognizeRegion(img image.Image, region detector.DetectedRe
 		patch, rotated, err = CropRegionImage(img, region, true)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("crop region: %w", err)
+		return nil, 0, fmt.Errorf("crop region: %w", err)
 	}
 
-	// 2) Resize with fixed height and padding
+	// Resize with fixed height and padding
 	targetH := r.config.ImageHeight
 	if targetH <= 0 {
 		targetH = 32
 	}
 	resized, outW, outH, err := ResizeForRecognition(patch, targetH, r.config.MaxWidth, r.config.PadWidthMultiple)
 	if err != nil {
-		return nil, fmt.Errorf("resize: %w", err)
+		return nil, 0, fmt.Errorf("resize: %w", err)
 	}
 
-	// 3) Normalize to tensor (pooled)
+	// Normalize to tensor
 	tensor, buf, err := NormalizeForRecognitionWithPool(resized)
 	if err != nil {
-		return nil, fmt.Errorf("normalize: %w", err)
+		return nil, 0, fmt.Errorf("normalize: %w", err)
 	}
-	preprocessNs := time.Since(t0).Nanoseconds()
 
-	// 4) Run model
+	return &preprocessedRegion{
+		tensor:  tensor,
+		buf:     buf,
+		rotated: rotated,
+		width:   outW,
+		height:  outH,
+	}, time.Since(t0).Nanoseconds(), nil
+}
+
+type modelOutput struct {
+	outputs []onnxrt.Value
+	data    []float32
+	shape   []int64
+}
+
+func (r *Recognizer) runInference(tensor onnx.Tensor) (*modelOutput, int64, error) {
 	r.mu.RLock()
 	session := r.session
 	r.mu.RUnlock()
 	if session == nil {
-		return nil, errors.New("recognizer session is nil")
+		return nil, 0, errors.New("recognizer session is nil")
 	}
+
 	m0 := time.Now()
 	inputTensor, err := onnxrt.NewTensor(onnxrt.NewShape(tensor.Shape...), tensor.Data)
 	if err != nil {
-		return nil, fmt.Errorf("create input tensor: %w", err)
+		return nil, 0, fmt.Errorf("create input tensor: %w", err)
 	}
 	defer func() { _ = inputTensor.Destroy() }()
+
 	outputs := []onnxrt.Value{nil}
 	if err := session.Run([]onnxrt.Value{inputTensor}, outputs); err != nil {
-		return nil, fmt.Errorf("inference failed: %w", err)
+		return nil, 0, fmt.Errorf("inference failed: %w", err)
 	}
-	defer func() {
+
+	// Extract tensor data
+	outTensor := outputs[0]
+	floatTensor, ok := outTensor.(*onnxrt.Tensor[float32])
+	if !ok {
 		for _, o := range outputs {
 			if o != nil {
 				_ = o.Destroy()
 			}
 		}
-	}()
-	mempool.PutFloat32(buf)
-	modelNs := time.Since(m0).Nanoseconds()
-
-	// 5) Decode CTC greedy
-	d0 := time.Now()
-	outTensor := outputs[0]
-	floatTensor, ok := outTensor.(*onnxrt.Tensor[float32])
-	if !ok {
-		return nil, fmt.Errorf("expected float32 tensor, got %T", outTensor)
+		return nil, 0, fmt.Errorf("expected float32 tensor, got %T", outTensor)
 	}
-	data := floatTensor.GetData()
-	shape := outTensor.GetShape()
 
-	// Determine classes/time order
-	// Heuristic: try both and choose one where classes == charset+1
+	return &modelOutput{
+		outputs: outputs,
+		data:    floatTensor.GetData(),
+		shape:   outTensor.GetShape(),
+	}, time.Since(m0).Nanoseconds(), nil
+}
+
+func (r *Recognizer) decodeOutput(output *modelOutput, preprocessed *preprocessedRegion) (*Result, int64, error) {
+	d0 := time.Now()
+
+	// Decode CTC greedy
 	classesGuess := r.charset.Size() + 1
-	classesFirst := determineClassesFirst(shape, classesGuess)
+	classesFirst := determineClassesFirst(output.shape, classesGuess)
 	blankIndex := 0 // PaddleOCR CTC typically uses blank=0
-	decoded := DecodeCTCGreedy(data, shape, blankIndex, classesFirst)
+	decoded := DecodeCTCGreedy(output.data, output.shape, blankIndex, classesFirst)
 	if len(decoded) == 0 {
-		return nil, errors.New("empty decoded output")
+		return nil, 0, errors.New("empty decoded output")
 	}
 	seq := decoded[0]
 
@@ -128,19 +196,16 @@ func (r *Recognizer) RecognizeRegion(img image.Image, region detector.DetectedRe
 	}
 	text := string(runes)
 	conf := SequenceConfidence(seq.CollapsedProb)
-	decodeNs := time.Since(d0).Nanoseconds()
-	totalNs := time.Since(totalStart).Nanoseconds()
 
 	return &Result{
 		Text:            text,
 		Confidence:      conf,
 		CharConfidences: seq.CollapsedProb,
 		Indices:         seq.Collapsed,
-		Rotated:         rotated,
-		Width:           outW,
-		Height:          outH,
-		TimingNs:        struct{ Preprocess, Model, Decode, Total int64 }{Preprocess: preprocessNs, Model: modelNs, Decode: decodeNs, Total: totalNs},
-	}, nil
+		Rotated:         preprocessed.rotated,
+		Width:           preprocessed.width,
+		Height:          preprocessed.height,
+	}, time.Since(d0).Nanoseconds(), nil
 }
 
 // RecognizeBatch processes multiple regions on the same source image.

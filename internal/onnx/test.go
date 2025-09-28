@@ -10,9 +10,8 @@ import (
 	onnxruntime "github.com/yalue/onnxruntime_go"
 )
 
-// getONNXLibraryPath returns the path to the ONNX Runtime shared library.
-func getONNXLibraryPath() (string, error) {
-	// Get the current executable's directory to find project root
+// getStartingDirectory returns the directory to start searching for project root.
+func getStartingDirectory() (string, error) {
 	execPath, err := os.Executable()
 	if err != nil {
 		// Fallback: try to find relative to current working directory
@@ -20,18 +19,21 @@ func getONNXLibraryPath() (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("failed to get current directory: %w", err)
 		}
-		execPath = cwd
+		return cwd, nil
 	}
+	return filepath.Dir(execPath), nil
+}
 
-	// Find project root by looking for go.mod or onnxruntime directory
-	projectRoot := filepath.Dir(execPath)
+// findProjectRootFromDir finds the project root starting from the given directory.
+func findProjectRootFromDir(startDir string) (string, error) {
+	projectRoot := startDir
 	for {
 		// Check if this directory contains go.mod or onnxruntime directory
 		if _, err := os.Stat(filepath.Join(projectRoot, "go.mod")); err == nil {
-			break
+			return projectRoot, nil
 		}
 		if _, err := os.Stat(filepath.Join(projectRoot, "onnxruntime")); err == nil {
-			break
+			return projectRoot, nil
 		}
 
 		parent := filepath.Dir(projectRoot)
@@ -41,24 +43,40 @@ func getONNXLibraryPath() (string, error) {
 		}
 		projectRoot = parent
 	}
+}
 
-	// Construct path to ONNX Runtime library
-	libDir := filepath.Join(projectRoot, "onnxruntime", "lib")
-
-	// Determine library filename based on OS
-	var libName string
+// getLibraryNameForOS returns the appropriate library filename for the current OS.
+func getLibraryNameForOS() (string, error) {
 	switch runtime.GOOS {
 	case "linux":
-		libName = "libonnxruntime.so"
+		return "libonnxruntime.so", nil
 	case "darwin":
-		libName = "libonnxruntime.dylib"
+		return "libonnxruntime.dylib", nil
 	case "windows":
-		libName = "onnxruntime.dll"
+		return "onnxruntime.dll", nil
 	default:
 		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
+}
 
-	libPath := filepath.Join(libDir, libName)
+// getONNXLibraryPath returns the path to the ONNX Runtime shared library.
+func getONNXLibraryPath() (string, error) {
+	startDir, err := getStartingDirectory()
+	if err != nil {
+		return "", err
+	}
+
+	projectRoot, err := findProjectRootFromDir(startDir)
+	if err != nil {
+		return "", err
+	}
+
+	libName, err := getLibraryNameForOS()
+	if err != nil {
+		return "", err
+	}
+
+	libPath := filepath.Join(projectRoot, "onnxruntime", "lib", libName)
 
 	// Verify the library exists
 	if _, err := os.Stat(libPath); err != nil {

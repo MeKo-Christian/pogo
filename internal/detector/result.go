@@ -65,21 +65,34 @@ func RegionsFromJSON(data []byte) (DetectionResultJSON, error) {
 }
 
 // ValidateRegions performs basic sanity checks against image dimensions.
+// validatePolygonPoints checks if all polygon points are within bounds.
+func validatePolygonPoints(polygon []utils.Point, index, width, height int) error {
+	for _, p := range polygon {
+		if p.X < 0 || p.Y < 0 || p.X > float64(width) || p.Y > float64(height) {
+			return fmt.Errorf("region %d polygon point out of bounds", index)
+		}
+	}
+	return nil
+}
+
+// validateRegion checks if a single detected region is valid.
+func validateRegion(r DetectedRegion, index, width, height int) error {
+	if r.Box.Width() <= 0 || r.Box.Height() <= 0 {
+		return fmt.Errorf("region %d has non-positive box size", index)
+	}
+	if r.Box.MinX < 0 || r.Box.MinY < 0 || r.Box.MaxX > float64(width) || r.Box.MaxY > float64(height) {
+		return fmt.Errorf("region %d box out of bounds", index)
+	}
+	return validatePolygonPoints(r.Polygon, index, width, height)
+}
+
 func ValidateRegions(regs []DetectedRegion, width, height int) error {
 	if width <= 0 || height <= 0 {
 		return errors.New("invalid image dimensions for validation")
 	}
 	for i, r := range regs {
-		if r.Box.Width() <= 0 || r.Box.Height() <= 0 {
-			return fmt.Errorf("region %d has non-positive box size", i)
-		}
-		if r.Box.MinX < 0 || r.Box.MinY < 0 || r.Box.MaxX > float64(width) || r.Box.MaxY > float64(height) {
-			return fmt.Errorf("region %d box out of bounds", i)
-		}
-		for _, p := range r.Polygon {
-			if p.X < 0 || p.Y < 0 || p.X > float64(width) || p.Y > float64(height) {
-				return fmt.Errorf("region %d polygon point out of bounds", i)
-			}
+		if err := validateRegion(r, i, width, height); err != nil {
+			return err
 		}
 	}
 	return nil

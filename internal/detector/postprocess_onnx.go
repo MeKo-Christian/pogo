@@ -2,6 +2,7 @@ package detector
 
 import (
 	"image"
+	"log/slog"
 )
 
 // DetectRegions runs detection inference and post-processes regions using the
@@ -17,20 +18,27 @@ func (d *Detector) DetectRegions(img image.Image) ([]DetectedRegion, error) {
 		// Choose NMS method based on configuration
 		switch d.config.NMSMethod {
 		case "linear", "gaussian":
+			slog.Debug("Using Soft-NMS for region filtering",
+				"method", d.config.NMSMethod,
+				"iou_threshold", d.config.NMSThreshold,
+				"sigma", d.config.SoftNMSSigma)
 			regs = PostProcessDBWithOptions(res.ProbabilityMap, res.Width, res.Height,
 				d.config.DbThresh, d.config.DbBoxThresh, opts)
 			// Apply Soft-NMS on the results
 			regs = SoftNonMaxSuppression(regs, d.config.NMSMethod, d.config.NMSThreshold,
 				d.config.SoftNMSSigma, d.config.SoftNMSThresh)
 		default:
+			slog.Debug("Using Hard-NMS for region filtering", "iou_threshold", d.config.NMSThreshold)
 			// Hard NMS as before
 			regs = PostProcessDBWithNMSOptions(res.ProbabilityMap, res.Width, res.Height,
 				d.config.DbThresh, d.config.DbBoxThresh, d.config.NMSThreshold, opts)
 		}
 	} else {
+		slog.Debug("NMS disabled, using DB post-processing only")
 		regs = PostProcessDBWithOptions(res.ProbabilityMap, res.Width, res.Height,
 			d.config.DbThresh, d.config.DbBoxThresh, opts)
 	}
 	regs = ScaleRegionsToOriginal(regs, res.Width, res.Height, res.OriginalWidth, res.OriginalHeight)
+	slog.Debug("Post-processing completed", "raw_regions", len(regs))
 	return regs, nil
 }

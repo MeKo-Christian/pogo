@@ -28,13 +28,8 @@ func argmax(v []float32) (int, float32) {
 	return idx, maxVal
 }
 
-// softmaxProbOfIndex computes the softmax probability of v[idx] among v.
-// If values already look like probabilities (sum≈1 and in [0,1]), returns v[idx].
-func softmaxProbOfIndex(v []float32, idx int) float64 {
-	if len(v) == 0 || idx < 0 || idx >= len(v) {
-		return 0
-	}
-	// Quick check for probability-like outputs
+// isProbabilityDistribution checks if values look like probabilities (sum≈1 and in [0,1]).
+func isProbabilityDistribution(v []float32) bool {
 	var sum float64
 	minV, maxV := v[0], v[0]
 	for _, x := range v {
@@ -46,11 +41,12 @@ func softmaxProbOfIndex(v []float32, idx int) float64 {
 			maxV = x
 		}
 	}
-	if sum > 0.99 && sum < 1.01 && minV >= 0 && maxV <= 1 {
-		return float64(v[idx])
-	}
-	// Compute probability for arg via stable softmax
-	// p_i = exp(x_i - m) / sum_j exp(x_j - m)
+	return sum > 0.99 && sum < 1.01 && minV >= 0 && maxV <= 1
+}
+
+// computeSoftmaxProb computes the softmax probability of v[idx] using stable softmax.
+func computeSoftmaxProb(v []float32, idx int) float64 {
+	// Find max for numerical stability
 	m := float32(0)
 	for i, x := range v {
 		if i == 0 || x > m {
@@ -61,11 +57,25 @@ func softmaxProbOfIndex(v []float32, idx int) float64 {
 	for _, x := range v {
 		denom += math.Exp(float64(x - m))
 	}
-	num := math.Exp(float64(v[idx] - m))
 	if denom == 0 {
 		return 0
 	}
+	num := math.Exp(float64(v[idx] - m))
 	return num / denom
+}
+
+// softmaxProbOfIndex computes the softmax probability of v[idx] among v.
+// If values already look like probabilities (sum≈1 and in [0,1]), returns v[idx].
+func softmaxProbOfIndex(v []float32, idx int) float64 {
+	if len(v) == 0 || idx < 0 || idx >= len(v) {
+		return 0
+	}
+	// Quick check for probability-like outputs
+	if isProbabilityDistribution(v) {
+		return float64(v[idx])
+	}
+	// Compute probability for arg via stable softmax
+	return computeSoftmaxProb(v, idx)
 }
 
 // CTCCollapse removes repeated consecutive indices and blanks, returning collapsed sequence and probs.
@@ -92,56 +102,69 @@ func CTCCollapse(indices []int, probs []float64, blank int) ([]int, []float64) {
 	return outIdx, outProb
 }
 
-// DecodeCTCGreedy decodes logits with CTC greedy decoding.
-// data layout can be [N, T, C] or [N, C, T]; specify classesFirst=true for [N,C,T].
-func DecodeCTCGreedy(logits []float32, shape []int64, blank int, classesFirst bool) []DecodedSequence {
-	// Normalize shape: expect rank 3 [N, T, C] or [N, C, T]
+// normalizeShape normalizes the shape by collapsing trailing dimensions of size 1.
+func normalizeShape(shape []int64) []int64 {
 	if len(shape) < 3 {
 		return nil
 	}
-	// Collapse trailing dims of size 1
 	dims := make([]int64, 0, len(shape))
 	dims = append(dims, shape...)
 	for len(dims) > 3 && dims[len(dims)-1] == 1 {
 		dims = dims[:len(dims)-1]
 	}
+	return dims
+}
+
+// extractDimensions extracts tDim and cDim from normalized dimensions.
+func extractDimensions(dims []int64, classesFirst bool) (int, int) {
+	if len(dims) != 3 {
+		return 0, 0
+	}
+	if classesFirst {
+		return int(dims[2]), int(dims[1]) // tDim, cDim
+	}
+	return int(dims[1]), int(dims[2]) // tDim, cDim
+}
+
+// extractClassSlice extracts the class slice for a given timestep.
+func extractClassSlice(logits []float32, start, t, tDim, cDim int, classesFirst bool) []float32 {
+	if classesFirst {
+		// [C, T]: for fixed t, classes are offset t + k*T
+		clsSlice := make([]float32, cDim)
+		for k := range cDim {
+			clsSlice[k] = logits[start+k*tDim+t]
+		}
+		return clsSlice
+	}
+	// [T, C]: contiguous C at this step
+	off := start + t*cDim
+	return logits[off : off+cDim]
+}
+
+// DecodeCTCGreedy decodes logits with CTC greedy decoding.
+// data layout can be [N, T, C] or [N, C, T]; specify classesFirst=true for [N,C,T].
+func DecodeCTCGreedy(logits []float32, shape []int64, blank int, classesFirst bool) []DecodedSequence {
+	dims := normalizeShape(shape)
+	if dims == nil {
+		return nil
+	}
 	n := int(dims[0])
 	if n <= 0 {
 		return nil
 	}
-	var tDim, cDim int
-	if classesFirst {
-		cDim = int(dims[1])
-		tDim = int(dims[2])
-	} else {
-		tDim = int(dims[1])
-		cDim = int(dims[2])
-	}
+	tDim, cDim := extractDimensions(dims, classesFirst)
 	if tDim <= 0 || cDim <= 0 {
 		return nil
 	}
 
 	out := make([]DecodedSequence, n)
-	// Strides
 	perBatch := tDim * cDim
 	for b := range n {
 		start := b * perBatch
 		indices := make([]int, tDim)
 		probs := make([]float64, tDim)
 		for t := range tDim {
-			// slice of classes for this timestep
-			var clsSlice []float32
-			if classesFirst {
-				// [C, T]: for fixed t, classes are offset t + k*T
-				clsSlice = make([]float32, cDim)
-				for k := range cDim {
-					clsSlice[k] = logits[start+k*tDim+t]
-				}
-			} else {
-				// [T, C]: contiguous C at this step
-				off := start + t*cDim
-				clsSlice = logits[off : off+cDim]
-			}
+			clsSlice := extractClassSlice(logits, start, t, tDim, cDim, classesFirst)
 			idx, _ := argmax(clsSlice)
 			indices[t] = idx
 			probs[t] = softmaxProbOfIndex(clsSlice, idx)

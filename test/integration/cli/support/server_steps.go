@@ -163,24 +163,26 @@ func (testCtx *TestContext) iPOSTAnImageToWithOverlayEnabled(endpoint string) er
 	return testCtx.uploadImageToEndpointWithOverlay(endpoint, imagePath, "")
 }
 
-// uploadImageToEndpointWithOverlay performs the actual image upload with overlay enabled.
-func (testCtx *TestContext) uploadImageToEndpointWithOverlay(endpoint, imagePath, format string) error {
-	// Check if image file exists
+// ensureImageExists checks if image exists and creates synthetic one if needed.
+func (testCtx *TestContext) ensureImageExists(imagePath string) error {
 	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
 		// Create a dummy image for testing
 		if err := testCtx.createSyntheticTestImage(imagePath); err != nil {
 			return fmt.Errorf("test image not found and could not create: %s", imagePath)
 		}
 	}
+	return nil
+}
 
-	// Create multipart form
+// createMultipartForm creates a multipart form with file and optional fields.
+func (testCtx *TestContext) createMultipartForm(imagePath, format string, withOverlay bool) (*bytes.Buffer, *multipart.Writer, error) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
 	// Add file field
 	file, err := os.Open(imagePath) //nolint:gosec // G304: Test file opening with controlled path
 	if err != nil {
-		return fmt.Errorf("failed to open image file: %w", err)
+		return nil, nil, fmt.Errorf("failed to open image file: %w", err)
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
@@ -190,144 +192,101 @@ func (testCtx *TestContext) uploadImageToEndpointWithOverlay(endpoint, imagePath
 
 	part, err := writer.CreateFormFile("file", filepath.Base(imagePath))
 	if err != nil {
-		return fmt.Errorf("failed to create form file: %w", err)
+		return nil, nil, fmt.Errorf("failed to create form file: %w", err)
 	}
 
 	if _, err := io.Copy(part, file); err != nil {
-		return fmt.Errorf("failed to copy file data: %w", err)
+		return nil, nil, fmt.Errorf("failed to copy file data: %w", err)
 	}
 
 	// Add format field if specified
 	if format != "" {
 		if err := writer.WriteField("format", format); err != nil {
-			return fmt.Errorf("failed to write format field: %w", err)
+			return nil, nil, fmt.Errorf("failed to write format field: %w", err)
 		}
 	}
 
-	// Add overlay field to enable overlay
-	if err := writer.WriteField("overlay", "true"); err != nil {
-		return fmt.Errorf("failed to write overlay field: %w", err)
+	// Add overlay field if requested
+	if withOverlay {
+		if err := writer.WriteField("overlay", "true"); err != nil {
+			return nil, nil, fmt.Errorf("failed to write overlay field: %w", err)
+		}
 	}
 
 	if err := writer.Close(); err != nil {
-		return fmt.Errorf("failed to close multipart writer: %w", err)
+		return nil, nil, fmt.Errorf("failed to close multipart writer: %w", err)
 	}
 
-	// Make request
+	return &buf, writer, nil
+}
+
+// makeUploadRequest performs the HTTP upload request and returns response.
+func (testCtx *TestContext) makeUploadRequest(endpoint string, buf *bytes.Buffer, writer *multipart.Writer) ([]byte, int, error) {
 	url := fmt.Sprintf("%s%s", testCtx.GetServerURL(), endpoint)
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, &buf)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, buf)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
+		return nil, 0, fmt.Errorf("failed to make request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	// Read response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
+		return nil, resp.StatusCode, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	// Store response for verification
+	return body, resp.StatusCode, nil
+}
+
+// storeUploadResponse stores the HTTP response data in test context.
+func (testCtx *TestContext) storeUploadResponse(body []byte, statusCode int) {
 	testCtx.LastOutput = string(body)
-	testCtx.LastHTTPStatusCode = resp.StatusCode
+	testCtx.LastHTTPStatusCode = statusCode
 	testCtx.LastHTTPResponse = string(body)
 	testCtx.LastExitCode = 0
-	if resp.StatusCode >= 400 {
+	if statusCode >= 400 {
 		testCtx.LastExitCode = 1
-		testCtx.LastError = fmt.Errorf("HTTP %d", resp.StatusCode)
+		testCtx.LastError = fmt.Errorf("HTTP %d", statusCode)
+	}
+}
+
+// uploadImageToEndpointInternal performs the actual image upload with optional overlay.
+func (testCtx *TestContext) uploadImageToEndpointInternal(endpoint, imagePath, format string, withOverlay bool) error {
+	if err := testCtx.ensureImageExists(imagePath); err != nil {
+		return err
 	}
 
+	buf, writer, err := testCtx.createMultipartForm(imagePath, format, withOverlay)
+	if err != nil {
+		return err
+	}
+
+	body, statusCode, err := testCtx.makeUploadRequest(endpoint, buf, writer)
+	if err != nil {
+		return err
+	}
+
+	testCtx.storeUploadResponse(body, statusCode)
 	return nil
+}
+
+// uploadImageToEndpointWithOverlay performs the actual image upload with overlay enabled.
+func (testCtx *TestContext) uploadImageToEndpointWithOverlay(endpoint, imagePath, format string) error {
+	return testCtx.uploadImageToEndpointInternal(endpoint, imagePath, format, true)
 }
 
 // uploadImageToEndpoint performs the actual image upload.
 func (testCtx *TestContext) uploadImageToEndpoint(endpoint, imagePath, format string) error {
-	// Check if image file exists
-	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
-		// Create a dummy image for testing
-		if err := testCtx.createSyntheticTestImage(imagePath); err != nil {
-			return fmt.Errorf("test image not found and could not create: %s", imagePath)
-		}
-	}
-
-	// Create multipart form
-	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
-
-	// Add file field
-	file, err := os.Open(imagePath) //nolint:gosec // G304: Test file opening with controlled path
-	if err != nil {
-		return fmt.Errorf("failed to open image file: %w", err)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error closing file: %v\n", err)
-		}
-	}()
-
-	part, err := writer.CreateFormFile("file", filepath.Base(imagePath))
-	if err != nil {
-		return fmt.Errorf("failed to create form file: %w", err)
-	}
-
-	if _, err := io.Copy(part, file); err != nil {
-		return fmt.Errorf("failed to copy file data: %w", err)
-	}
-
-	// Add format field if specified
-	if format != "" {
-		if err := writer.WriteField("format", format); err != nil {
-			return fmt.Errorf("failed to write format field: %w", err)
-		}
-	}
-
-	if err := writer.Close(); err != nil {
-		return fmt.Errorf("failed to close multipart writer: %w", err)
-	}
-
-	// Make request
-	url := fmt.Sprintf("%s%s", testCtx.GetServerURL(), endpoint)
-	client := &http.Client{Timeout: 30 * time.Second}
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, &buf)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// Read response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
-
-	// Store response for verification
-	testCtx.LastOutput = string(body)
-	testCtx.LastHTTPStatusCode = resp.StatusCode
-	testCtx.LastHTTPResponse = string(body)
-	testCtx.LastExitCode = 0
-	if resp.StatusCode >= 400 {
-		testCtx.LastExitCode = 1
-		testCtx.LastError = fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-
-	return nil
+	return testCtx.uploadImageToEndpointInternal(endpoint, imagePath, format, false)
 }
 
 // theResponseStatusShouldBe verifies HTTP response status.

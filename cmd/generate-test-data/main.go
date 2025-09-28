@@ -96,10 +96,28 @@ func main() {
 
 // generateTestImages generates synthetic test images.
 func generateTestImages() error {
-	// Create test images using our image generation utilities
 	config := testutil.DefaultTestImageConfig()
 
-	// Generate simple images
+	if err := generateSimpleImages(config); err != nil {
+		return fmt.Errorf("failed to generate simple images: %w", err)
+	}
+
+	if err := generateMultilineImages(config); err != nil {
+		return fmt.Errorf("failed to generate multiline images: %w", err)
+	}
+
+	if err := generateRotatedImages(config); err != nil {
+		return fmt.Errorf("failed to generate rotated images: %w", err)
+	}
+
+	if err := generateScannedImages(config); err != nil {
+		return fmt.Errorf("failed to generate scanned images: %w", err)
+	}
+
+	return nil
+}
+
+func generateSimpleImages(config testutil.TestImageConfig) error {
 	simpleDir := "testdata/images/simple"
 	if err := testutil.EnsureDir(simpleDir); err != nil {
 		return fmt.Errorf("failed to create simple images directory: %w", err)
@@ -110,30 +128,16 @@ func generateTestImages() error {
 		config.Text = word
 		config.Size = testutil.SmallSize
 
-		img, err := testutil.GenerateTextImage(config)
-		if err != nil {
-			return fmt.Errorf("failed to generate image for word '%s': %w", word, err)
-		}
-
 		imagePath := fmt.Sprintf("%s/simple_%d_%s.png", simpleDir, i+1, word)
-
-		// Create a temporary file to save the image
-		file, err := os.Create(imagePath) //nolint:gosec // G304: Test data generation uses controlled paths
-		if err != nil {
-			return fmt.Errorf("failed to create image file: %w", err)
-		}
-
-		// Use our image saving logic (but without the testing.T)
-		if err := saveImageToFile(img, file); err != nil {
-			_ = file.Close() // gosec: ignore error on cleanup
-			return fmt.Errorf("failed to save image: %w", err)
-		}
-		if err := file.Close(); err != nil {
-			return fmt.Errorf("failed to close file: %w", err)
+		if err := generateAndSaveImage(config, imagePath); err != nil {
+			return fmt.Errorf("failed to generate image for word '%s': %w", word, err)
 		}
 	}
 
-	// Generate multiline images
+	return nil
+}
+
+func generateMultilineImages(config testutil.TestImageConfig) error {
 	multilineDir := "testdata/images/multiline"
 	if err := testutil.EnsureDir(multilineDir); err != nil {
 		return fmt.Errorf("failed to create multiline images directory: %w", err)
@@ -142,25 +146,15 @@ func generateTestImages() error {
 	config.Size = testutil.LargeSize
 	config.Multiline = true
 
-	img, err := testutil.GenerateTextImage(config)
-	if err != nil {
+	imagePath := multilineDir + "/multiline_document.png"
+	if err := generateAndSaveImage(config, imagePath); err != nil {
 		return fmt.Errorf("failed to generate multiline image: %w", err)
 	}
 
-	file, err := os.Create(multilineDir + "/multiline_document.png")
-	if err != nil {
-		return fmt.Errorf("failed to create multiline image file: %w", err)
-	}
+	return nil
+}
 
-	if err := saveImageToFile(img, file); err != nil {
-		_ = file.Close() // ignore error on cleanup
-		return fmt.Errorf("failed to save multiline image: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("failed to close multiline file: %w", err)
-	}
-
-	// Generate rotated images
+func generateRotatedImages(config testutil.TestImageConfig) error {
 	rotatedDir := "testdata/images/rotated"
 	if err := testutil.EnsureDir(rotatedDir); err != nil {
 		return fmt.Errorf("failed to create rotated images directory: %w", err)
@@ -173,27 +167,16 @@ func generateTestImages() error {
 		config.Rotation = rotation
 		config.Multiline = false
 
-		img, err := testutil.GenerateTextImage(config)
-		if err != nil {
-			return fmt.Errorf("failed to generate rotated image for angle %.1f: %w", rotation, err)
-		}
-
 		imagePath := fmt.Sprintf("%s/rotated_%.0f.png", rotatedDir, rotation)
-		file, err := os.Create(imagePath) //nolint:gosec // G304: Test data generation uses controlled paths
-		if err != nil {
-			return fmt.Errorf("failed to create rotated image file: %w", err)
-		}
-
-		if err := saveImageToFile(img, file); err != nil {
-			_ = file.Close() // gosec: ignore error on cleanup
-			return fmt.Errorf("failed to save rotated image: %w", err)
-		}
-		if err := file.Close(); err != nil {
-			return fmt.Errorf("failed to close file: %w", err)
+		if err := generateAndSaveImage(config, imagePath); err != nil {
+			return fmt.Errorf("failed to generate rotated image for angle %.1f: %w", rotation, err)
 		}
 	}
 
-	// Generate scanned document simulation
+	return nil
+}
+
+func generateScannedImages(config testutil.TestImageConfig) error {
 	scannedDir := "testdata/images/scanned"
 	if err := testutil.EnsureDir(scannedDir); err != nil {
 		return fmt.Errorf("failed to create scanned images directory: %w", err)
@@ -204,22 +187,30 @@ func generateTestImages() error {
 	config.Rotation = 0
 	config.Multiline = false
 
-	img, err = testutil.GenerateTextImage(config)
-	if err != nil {
+	imagePath := scannedDir + "/scanned_document.png"
+	if err := generateAndSaveImage(config, imagePath); err != nil {
 		return fmt.Errorf("failed to generate scanned document image: %w", err)
 	}
 
-	file, err = os.Create(scannedDir + "/scanned_document.png")
+	return nil
+}
+
+func generateAndSaveImage(config testutil.TestImageConfig, imagePath string) error {
+	img, err := testutil.GenerateTextImage(config)
 	if err != nil {
-		return fmt.Errorf("failed to create scanned document file: %w", err)
+		return fmt.Errorf("failed to generate image: %w", err)
 	}
 
-	if err := saveImageToFile(img, file); err != nil {
-		_ = file.Close() // ignore error on cleanup
-		return fmt.Errorf("failed to save scanned document: %w", err)
+	file, err := os.Create(imagePath) //nolint:gosec // G304: Test data generation uses controlled paths
+	if err != nil {
+		return fmt.Errorf("failed to create image file: %w", err)
 	}
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("failed to close scanned file: %w", err)
+	defer func() {
+		_ = file.Close() // gosec: ignore error on cleanup
+	}()
+
+	if err := saveImageToFile(img, file); err != nil {
+		return fmt.Errorf("failed to save image: %w", err)
 	}
 
 	return nil

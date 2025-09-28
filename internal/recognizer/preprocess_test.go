@@ -117,8 +117,14 @@ func TestBatchCropRegions(t *testing.T) {
 	require.NoError(t, err)
 
 	regions := []detector.DetectedRegion{
-		{Polygon: []utils.Point{{X: 50, Y: 50}, {X: 150, Y: 50}, {X: 150, Y: 100}, {X: 50, Y: 100}}, Box: utils.NewBox(50, 50, 150, 100)},
-		{Polygon: []utils.Point{{X: 200, Y: 120}, {X: 300, Y: 120}, {X: 300, Y: 180}, {X: 200, Y: 180}}, Box: utils.NewBox(200, 120, 300, 180)},
+		{
+			Polygon: []utils.Point{{X: 50, Y: 50}, {X: 150, Y: 50}, {X: 150, Y: 100}, {X: 50, Y: 100}},
+			Box:     utils.NewBox(50, 50, 150, 100),
+		},
+		{
+			Polygon: []utils.Point{{X: 200, Y: 120}, {X: 300, Y: 120}, {X: 300, Y: 180}, {X: 200, Y: 180}},
+			Box:     utils.NewBox(200, 120, 300, 180),
+		},
 	}
 
 	patches, rotated, err := BatchCropRegions(img, regions, true)
@@ -146,8 +152,13 @@ func TestCropRegionImageWithOrienter(t *testing.T) {
 	// Region covering most of the image
 	b := img.Bounds()
 	region := detector.DetectedRegion{
-		Polygon: []utils.Point{{X: 10, Y: 10}, {X: float64(b.Dx() - 10), Y: 10}, {X: float64(b.Dx() - 10), Y: float64(b.Dy() - 10)}, {X: 10, Y: float64(b.Dy() - 10)}},
-		Box:     utils.NewBox(10, 10, float64(b.Dx()-10), float64(b.Dy()-10)),
+		Polygon: []utils.Point{
+			{X: 10, Y: 10},
+			{X: float64(b.Dx() - 10), Y: 10},
+			{X: float64(b.Dx() - 10), Y: float64(b.Dy() - 10)},
+			{X: 10, Y: float64(b.Dy() - 10)},
+		},
+		Box: utils.NewBox(10, 10, float64(b.Dx()-10), float64(b.Dy()-10)),
 	}
 	// Heuristic-only classifier
 	oCfg := orientation.DefaultTextLineConfig()

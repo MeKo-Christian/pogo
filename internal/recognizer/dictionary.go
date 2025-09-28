@@ -16,6 +16,35 @@ type Charset struct {
 	TokenToIndex map[string]int
 }
 
+// removeBOM removes UTF-8 BOM if present from the first line.
+func removeBOM(line string, isFirstLine bool) string {
+	if isFirstLine {
+		return strings.TrimPrefix(line, "\uFEFF")
+	}
+	return line
+}
+
+// processLine processes a single line from the dictionary file.
+func processLine(line string, lineNum int) string {
+	line = strings.TrimSpace(line)
+	line = removeBOM(line, lineNum == 1)
+	return line
+}
+
+// buildCharsetMaps builds the index mappings from tokens.
+func buildCharsetMaps(tokens []string) (map[int]string, map[string]int) {
+	idxTo := make(map[int]string, len(tokens))
+	toIdx := make(map[string]int, len(tokens))
+	for i, t := range tokens {
+		// If duplicates occur, keep the first occurrence
+		if _, ok := toIdx[t]; !ok {
+			toIdx[t] = i
+		}
+		idxTo[i] = t
+	}
+	return idxTo, toIdx
+}
+
 // LoadCharset loads a dictionary file where each non-empty line is a token.
 // Leading/trailing whitespace is trimmed. UTF-8 BOM is removed if present.
 func LoadCharset(path string) (*Charset, error) {
@@ -38,13 +67,7 @@ func LoadCharset(path string) (*Charset, error) {
 	lineNum := 0
 	for scanner.Scan() {
 		lineNum++
-		line := scanner.Text()
-		// Trim CRLF and whitespace
-		line = strings.TrimSpace(line)
-		if lineNum == 1 {
-			// Remove UTF-8 BOM if present
-			line = strings.TrimPrefix(line, "\uFEFF")
-		}
+		line := processLine(scanner.Text(), lineNum)
 		if line == "" {
 			continue
 		}
@@ -57,15 +80,7 @@ func LoadCharset(path string) (*Charset, error) {
 		return nil, fmt.Errorf("dictionary is empty: %s", path)
 	}
 
-	idxTo := make(map[int]string, len(tokens))
-	toIdx := make(map[string]int, len(tokens))
-	for i, t := range tokens {
-		// If duplicates occur, keep the first occurrence
-		if _, ok := toIdx[t]; !ok {
-			toIdx[t] = i
-		}
-		idxTo[i] = t
-	}
+	idxTo, toIdx := buildCharsetMaps(tokens)
 
 	return &Charset{
 		Tokens:       tokens,

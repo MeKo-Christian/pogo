@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"runtime"
 	"sync"
 	"time"
@@ -160,6 +161,11 @@ func (rm *ResourceManager) CheckMemoryPressure() bool {
 	if utilization > rm.memoryThreshold {
 		rm.stats.MemoryPressureEvents++
 		rm.stats.LastMemoryPressure = time.Now()
+		slog.Warn("Memory pressure detected",
+			"utilization", fmt.Sprintf("%.1f%%", utilization*100),
+			"threshold", fmt.Sprintf("%.1f%%", rm.memoryThreshold*100),
+			"current_bytes", current,
+			"max_bytes", rm.maxMemoryBytes)
 		return true
 	}
 
@@ -198,10 +204,14 @@ func (rm *ResourceManager) GetOptimalWorkerCount() int {
 
 	// Reduce workers if under memory pressure
 	if rm.CheckMemoryPressure() {
+		originalOptimal := optimal
 		optimal /= 2
 		if optimal < 1 {
 			optimal = 1
 		}
+		slog.Warn("Reducing worker count due to memory pressure",
+			"original_workers", originalOptimal,
+			"reduced_workers", optimal)
 	}
 
 	return optimal
@@ -389,7 +399,11 @@ type AdaptiveWorkerPool struct {
 }
 
 // NewAdaptiveWorkerPool creates a new adaptive worker pool.
-func NewAdaptiveWorkerPool(rm *ResourceManager, minWorkers, maxWorkers int, adjustInterval time.Duration) *AdaptiveWorkerPool {
+func NewAdaptiveWorkerPool(
+	rm *ResourceManager,
+	minWorkers, maxWorkers int,
+	adjustInterval time.Duration,
+) *AdaptiveWorkerPool {
 	if minWorkers <= 0 {
 		minWorkers = 1
 	}

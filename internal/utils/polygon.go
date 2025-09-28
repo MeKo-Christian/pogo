@@ -104,6 +104,21 @@ func ConvexHull(pts []Point) []Point {
 	copy(p, pts)
 	sortPoints(p)
 	// Remove duplicates
+	p = removeDuplicatePoints(p)
+	n = len(p)
+	if n <= 1 {
+		return append([]Point(nil), p...)
+	}
+	lower := buildLowerHull(p)
+	upper := buildUpperHull(p)
+	// Concatenate lower and upper to get full hull, excluding last point of each (duplicate)
+	hull := make([]Point, 0, len(lower)+len(upper)-2)
+	hull = append(hull, lower[:len(lower)-1]...)
+	hull = append(hull, upper[:len(upper)-1]...)
+	return hull
+}
+
+func removeDuplicatePoints(p []Point) []Point {
 	q := p[:0]
 	var last Point
 	hasLast := false
@@ -114,31 +129,30 @@ func ConvexHull(pts []Point) []Point {
 			hasLast = true
 		}
 	}
-	p = q
-	n = len(p)
-	if n <= 1 {
-		return append([]Point(nil), p...)
-	}
-	lower := make([]Point, 0, n)
+	return q
+}
+
+func buildLowerHull(p []Point) []Point {
+	lower := make([]Point, 0, len(p))
 	for _, pt := range p {
 		for len(lower) >= 2 && cross(lower[len(lower)-2], lower[len(lower)-1], pt) <= 0 {
 			lower = lower[:len(lower)-1]
 		}
 		lower = append(lower, pt)
 	}
-	upper := make([]Point, 0, n)
-	for i := n - 1; i >= 0; i-- {
+	return lower
+}
+
+func buildUpperHull(p []Point) []Point {
+	upper := make([]Point, 0, len(p))
+	for i := len(p) - 1; i >= 0; i-- {
 		pt := p[i]
 		for len(upper) >= 2 && cross(upper[len(upper)-2], upper[len(upper)-1], pt) <= 0 {
 			upper = upper[:len(upper)-1]
 		}
 		upper = append(upper, pt)
 	}
-	// Concatenate lower and upper to get full hull, excluding last point of each (duplicate)
-	hull := make([]Point, 0, len(lower)+len(upper)-2)
-	hull = append(hull, lower[:len(lower)-1]...)
-	hull = append(hull, upper[:len(upper)-1]...)
-	return hull
+	return upper
 }
 
 func sortPoints(p []Point) {
@@ -170,16 +184,24 @@ func MinimumAreaRectangle(pts []Point) []Point {
 		return nil
 	}
 	if len(hull) == 1 {
-		p := hull[0]
-		return []Point{{p.X, p.Y}, {p.X + 1, p.Y}, {p.X + 1, p.Y + 1}, {p.X, p.Y + 1}}
+		return rectangleForSinglePoint(hull[0])
 	}
 	if len(hull) == 2 {
-		a := hull[0]
-		b := hull[1]
-		// Create a thin rectangle around the segment
-		return []Point{a, b, {b.X, b.Y + 1}, {a.X, a.Y + 1}}
+		return rectangleForTwoPoints(hull[0], hull[1])
 	}
+	return findMinimumAreaRectangle(hull)
+}
 
+func rectangleForSinglePoint(p Point) []Point {
+	return []Point{{p.X, p.Y}, {p.X + 1, p.Y}, {p.X + 1, p.Y + 1}, {p.X, p.Y + 1}}
+}
+
+func rectangleForTwoPoints(a, b Point) []Point {
+	// Create a thin rectangle around the segment
+	return []Point{a, b, {b.X, b.Y + 1}, {a.X, a.Y + 1}}
+}
+
+func findMinimumAreaRectangle(hull []Point) []Point {
 	bestArea := math.Inf(1)
 	var bestU, bestV Point
 	var bestMinS, bestMaxS, bestMinT, bestMaxT float64

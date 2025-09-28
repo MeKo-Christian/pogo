@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -47,11 +48,8 @@ func DefaultConfig() Config {
 
 // UpdateModelPath updates the ModelPath and DictPath based on modelsDir and UseServerModel flag.
 func (c *Config) UpdateModelPath(modelsDir string) {
-	// Only update ModelPath if not already set (preserves overrides)
-	if c.ModelPath == "" {
-		c.ModelPath = models.GetRecognitionModelPath(modelsDir, c.UseServerModel)
-	}
-	// If multiple dictionaries not specified, always align single DictPath to modelsDir
+	c.ModelPath = models.GetRecognitionModelPath(modelsDir, c.UseServerModel)
+	// Update DictPath if using single dictionary (not multiple)
 	if len(c.DictPaths) == 0 {
 		c.DictPath = models.GetDictionaryPath(modelsDir, models.DictionaryPPOCRKeysV1)
 	}
@@ -128,13 +126,16 @@ func NewRecognizer(config Config) (*Recognizer, error) {
 	// Load charset/dictionary
 	var charset *Charset
 	if len(config.DictPaths) > 0 {
+		slog.Debug("Loading merged dictionaries", "count", len(config.DictPaths), "paths", config.DictPaths)
 		charset, err = LoadCharsets(config.DictPaths)
 	} else {
+		slog.Debug("Loading single dictionary", "path", config.DictPath)
 		charset, err = LoadCharset(config.DictPath)
 	}
 	if err != nil {
 		return nil, err
 	}
+	slog.Debug("Dictionary loaded successfully", "charset_size", charset.Size())
 
 	// Create session options
 	sessionOptions, err := onnxrt.NewSessionOptions()
@@ -259,6 +260,7 @@ func (r *Recognizer) SetTextLineOrienter(cls *orientation.Classifier) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.textLineOrienter = cls
+	slog.Debug("Text-line orientation classifier assigned to recognizer")
 }
 
 // Warmup runs a number of forward passes on a blank synthetic image to reduce cold-start latency.
@@ -266,14 +268,28 @@ func (r *Recognizer) Warmup(iterations int) error {
 	if iterations <= 0 {
 		return nil
 	}
+
 	r.mu.RLock()
 	sess := r.session
 	in := r.inputInfo
 	cfg := r.config
 	r.mu.RUnlock()
+
 	if sess == nil {
 		return errors.New("recognizer session is nil")
 	}
+
+	// Prepare warmup data
+	warmupData, err := r.prepareWarmupData(cfg, in)
+	if err != nil {
+		return err
+	}
+
+	// Run warmup iterations
+	return r.runWarmupIterations(sess, warmupData, iterations)
+}
+
+func (r *Recognizer) prepareWarmupData(cfg Config, in onnxrt.InputOutputInfo) (*onnx.Tensor, error) {
 	// Determine target H from config or model
 	h := cfg.ImageHeight
 	if h <= 0 && len(in.Dimensions) == 4 && in.Dimensions[2] > 0 {
@@ -282,43 +298,87 @@ func (r *Recognizer) Warmup(iterations int) error {
 	if h <= 0 {
 		h = 32
 	}
+
 	// Choose a modest width, pad as needed
 	w := h * 4
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
+
 	// Resize/pad (no-op for correct size)
-	resized, outW, outH, err := ResizeForRecognition(img, h, 0, 8)
+	resized, _, _, err := ResizeForRecognition(img, h, 0, 8)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	// Normalize
 	ten, err := NormalizeForRecognition(resized)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	return &ten, nil
+}
+
+func (r *Recognizer) runWarmupIterations(
+	sess *onnxrt.DynamicAdvancedSession,
+	tensor *onnx.Tensor,
+	iterations int,
+) error {
 	for range iterations {
-		inputTensor, err := onnxrt.NewTensor(onnxrt.NewShape(ten.Shape...), ten.Data)
-		if err != nil {
+		if err := r.runSingleWarmupIteration(sess, tensor); err != nil {
 			return err
 		}
-		outputs := []onnxrt.Value{nil}
-		runErr := sess.Run([]onnxrt.Value{inputTensor}, outputs)
-		_ = inputTensor.Destroy()
-		if runErr == nil {
-			for _, o := range outputs {
-				if o != nil {
-					_ = o.Destroy()
-				}
-			}
-		} else {
-			return runErr
-		}
-		_ = outW
-		_ = outH
 	}
+	return nil
+}
+
+func (r *Recognizer) runSingleWarmupIteration(sess *onnxrt.DynamicAdvancedSession, tensor *onnx.Tensor) error {
+	inputTensor, err := onnxrt.NewTensor(onnxrt.NewShape(tensor.Shape...), tensor.Data)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = inputTensor.Destroy() }()
+
+	outputs := []onnxrt.Value{nil}
+	runErr := sess.Run([]onnxrt.Value{inputTensor}, outputs)
+	if runErr != nil {
+		return runErr
+	}
+
+	// Clean up outputs
+	for _, o := range outputs {
+		if o != nil {
+			_ = o.Destroy()
+		}
+	}
+
 	return nil
 }
 
 // setONNXLibraryPath sets the onnxruntime shared library path from common locations.
 func setONNXLibraryPath() error {
+	// Try system paths first
+	if path := findSystemLibraryPath(); path != "" {
+		onnxrt.SetSharedLibraryPath(path)
+		return nil
+	}
+
+	// Try project-relative path
+	root, err := findProjectRoot()
+	if err != nil {
+		return err
+	}
+
+	libPath, err := getProjectLibraryPath(root)
+	if err != nil {
+		return err
+	}
+
+	onnxrt.SetSharedLibraryPath(libPath)
+	return nil
+}
+
+// findSystemLibraryPath checks common system locations for the ONNX Runtime library.
+func findSystemLibraryPath() string {
 	systemPaths := []string{
 		"/usr/local/lib/libonnxruntime.so",
 		"/usr/lib/libonnxruntime.so",
@@ -326,43 +386,54 @@ func setONNXLibraryPath() error {
 	}
 	for _, p := range systemPaths {
 		if _, err := os.Stat(p); err == nil {
-			onnxrt.SetSharedLibraryPath(p)
-			return nil
+			return p
 		}
 	}
+	return ""
+}
 
-	// Project-relative path
+// findProjectRoot finds the project root by looking for go.mod.
+func findProjectRoot() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
+		return "", fmt.Errorf("failed to get current directory: %w", err)
 	}
 	root := cwd
 	for {
 		if _, err := os.Stat(filepath.Join(root, "go.mod")); err == nil {
-			break
+			return root, nil
 		}
 		parent := filepath.Dir(root)
 		if parent == root {
-			return errors.New("could not find project root")
+			return "", errors.New("could not find project root")
 		}
 		root = parent
 	}
+}
 
-	var libName string
-	switch runtime.GOOS {
-	case "linux":
-		libName = "libonnxruntime.so"
-	case "darwin":
-		libName = "libonnxruntime.dylib"
-	case "windows":
-		libName = "onnxruntime.dll"
-	default:
-		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+// getProjectLibraryPath constructs the project-relative library path.
+func getProjectLibraryPath(root string) (string, error) {
+	libName, err := getLibraryName()
+	if err != nil {
+		return "", err
 	}
 	libPath := filepath.Join(root, "onnxruntime", "lib", libName)
 	if _, err := os.Stat(libPath); err != nil {
-		return fmt.Errorf("ONNX Runtime library not found at %s", libPath)
+		return "", fmt.Errorf("ONNX Runtime library not found at %s", libPath)
 	}
-	onnxrt.SetSharedLibraryPath(libPath)
-	return nil
+	return libPath, nil
+}
+
+// getLibraryName returns the appropriate library name for the current OS.
+func getLibraryName() (string, error) {
+	switch runtime.GOOS {
+	case "linux":
+		return "libonnxruntime.so", nil
+	case "darwin":
+		return "libonnxruntime.dylib", nil
+	case "windows":
+		return "onnxruntime.dll", nil
+	default:
+		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
 }

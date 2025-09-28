@@ -14,6 +14,39 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 )
 
+// validateAndFilterPages filters page numbers to valid range and returns valid pages.
+func validateAndFilterPages(pageNumbers []int, pageCount int) []int {
+	var validPages []int
+	for _, page := range pageNumbers {
+		if page >= 1 && page <= pageCount {
+			validPages = append(validPages, page)
+		}
+	}
+	return validPages
+}
+
+// shouldReturnEmpty checks if we should return empty result when no valid pages found.
+func shouldReturnEmpty(pageNumbers []int, validPages []int) bool {
+	return len(pageNumbers) > 0 && len(validPages) == 0
+}
+
+// preparePageStrings converts valid page numbers to string slice for pdfcpu.
+func preparePageStrings(validPages []int) []string {
+	if len(validPages) == 0 {
+		return nil
+	}
+	pageStrings := make([]string, len(validPages))
+	for i, pageNum := range validPages {
+		pageStrings[i] = strconv.Itoa(pageNum)
+	}
+	return pageStrings
+}
+
+// extractImagesFromPDF performs the actual image extraction using pdfcpu.
+func extractImagesFromPDF(filename string, tempDir string, pageStrings []string) error {
+	return api.ExtractImagesFile(filename, tempDir, pageStrings, nil)
+}
+
 // ExtractImages extracts all images from a PDF file using pdfcpu's extract functionality.
 func ExtractImages(filename string, pageRange string) (map[int][]image.Image, error) {
 	// Parse page range if provided
@@ -29,15 +62,10 @@ func ExtractImages(filename string, pageRange string) (map[int][]image.Image, er
 	}
 
 	// Filter page numbers to valid range
-	var validPages []int
-	for _, page := range pageNumbers {
-		if page >= 1 && page <= pageCount {
-			validPages = append(validPages, page)
-		}
-	}
+	validPages := validateAndFilterPages(pageNumbers, pageCount)
 
-	// If no valid pages, return empty result
-	if len(pageNumbers) > 0 && len(validPages) == 0 {
+	// If no valid pages requested but some were specified, return empty result
+	if shouldReturnEmpty(pageNumbers, validPages) {
 		return make(map[int][]image.Image), nil
 	}
 
@@ -48,18 +76,11 @@ func ExtractImages(filename string, pageRange string) (map[int][]image.Image, er
 	}
 	defer func() { _ = os.RemoveAll(tempDir) }() // Clean up
 
-	// Convert page numbers to strings if provided
-	var pageStrings []string
-	if len(validPages) > 0 {
-		pageStrings = make([]string, len(validPages))
-		for i, pageNum := range validPages {
-			pageStrings[i] = strconv.Itoa(pageNum)
-		}
-	}
+	// Prepare page strings for extraction
+	pageStrings := preparePageStrings(validPages)
 
 	// Extract images using pdfcpu
-	err = api.ExtractImagesFile(filename, tempDir, pageStrings, nil)
-	if err != nil {
+	if err := extractImagesFromPDF(filename, tempDir, pageStrings); err != nil {
 		return nil, fmt.Errorf("failed to extract images from PDF: %w", err)
 	}
 

@@ -270,37 +270,37 @@ func createMultipartPDFFormRequest(
 	pdfData []byte,
 	filename string,
 	extraFields map[string]string,
-) (*http.Request, string, error) {
+) (*http.Request, error) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
 	// Add PDF file
 	part, err := writer.CreateFormFile("pdf", filename)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	_, err = part.Write(pdfData)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	// Add extra fields
 	for key, value := range extraFields {
 		err = writer.WriteField(key, value)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 	}
 
 	err = writer.Close()
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/ocr/pdf", &buf)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	return req, writer.FormDataContentType(), nil
+	return req, nil
 }
 
 func TestServer_HealthHandler(t *testing.T) {
@@ -903,7 +903,7 @@ func TestServer_OCRPdfHandler_FormParsing(t *testing.T) {
 			largeData[i] = byte(i % 256)
 		}
 
-		req, _, err := createMultipartPDFFormRequest(largeData, "large.pdf", nil)
+		req, err := createMultipartPDFFormRequest(largeData, "large.pdf", nil)
 		require.NoError(t, err)
 
 		w := httptest.NewRecorder()
@@ -915,7 +915,7 @@ func TestServer_OCRPdfHandler_FormParsing(t *testing.T) {
 	t.Run("invalid pdf format", func(t *testing.T) {
 		// Create request with non-PDF data
 		invalidData := []byte("This is not a PDF file")
-		req, _, err := createMultipartPDFFormRequest(invalidData, "invalid.txt", nil)
+		req, err := createMultipartPDFFormRequest(invalidData, "invalid.txt", nil)
 		require.NoError(t, err)
 
 		w := httptest.NewRecorder()

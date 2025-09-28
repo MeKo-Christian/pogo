@@ -108,7 +108,13 @@ func ValidateImageConstraints(img image.Image, constraints ImageConstraints) err
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
 	if w < constraints.MinWidth || h < constraints.MinHeight {
-		return &ImageProcessingError{Operation: "validate", Err: fmt.Errorf("image too small: %dx%d < %dx%d", w, h, constraints.MinWidth, constraints.MinHeight)}
+		return &ImageProcessingError{
+			Operation: "validate",
+			Err: fmt.Errorf(
+				"image too small: %dx%d < %dx%d",
+				w, h, constraints.MinWidth, constraints.MinHeight,
+			),
+		}
 	}
 	// No error if exceeding max — resizing pipeline will handle scale-down.
 	return nil

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"log/slog"
 	"time"
 
 	"github.com/MeKo-Tech/pogo/internal/pdf"
@@ -98,6 +99,9 @@ func (p *Pipeline) ProcessImageContext(ctx context.Context, img image.Image) (*O
 		return nil, errors.New("input image is nil")
 	}
 
+	bounds := img.Bounds()
+	slog.Debug("Starting image processing", "width", bounds.Dx(), "height", bounds.Dy())
+
 	totalStart := time.Now()
 
 	// Optional document orientation detection + rotation
@@ -108,21 +112,28 @@ func (p *Pipeline) ProcessImageContext(ctx context.Context, img image.Image) (*O
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		slog.Debug("Running orientation detection")
 		if res, err := p.Orienter.Predict(img); err == nil {
 			appliedConf = res.Confidence
 			switch res.Angle {
 			case 90:
 				working = utils.Rotate90(working)
 				appliedAngle = 90
+				slog.Debug("Applied 90° rotation", "confidence", appliedConf)
 			case 180:
 				working = utils.Rotate180(working)
 				appliedAngle = 180
+				slog.Debug("Applied 180° rotation", "confidence", appliedConf)
 			case 270:
 				working = utils.Rotate270(working)
 				appliedAngle = 270
+				slog.Debug("Applied 270° rotation", "confidence", appliedConf)
 			default:
 				appliedAngle = 0
+				slog.Debug("No rotation applied", "confidence", appliedConf)
 			}
+		} else {
+			slog.Debug("Orientation detection failed", "error", err)
 		}
 	}
 
@@ -132,20 +143,26 @@ func (p *Pipeline) ProcessImageContext(ctx context.Context, img image.Image) (*O
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		slog.Debug("Running document rectification")
 		if rxImg, err := p.Rectifier.Apply(working); err == nil && rxImg != nil {
 			working = rxImg
+			slog.Debug("Document rectification applied")
+		} else if err != nil {
+			slog.Debug("Document rectification failed", "error", err)
 		}
 	}
 	// Detection
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	slog.Debug("Starting text detection")
 	detStart := time.Now()
 	regions, err := p.Detector.DetectRegions(working)
 	if err != nil {
 		return nil, fmt.Errorf("detection failed: %w", err)
 	}
 	detNs := time.Since(detStart).Nanoseconds()
+	slog.Debug("Text detection completed", "regions_found", len(regions), "duration_ms", detNs/1000000)
 
 	// Recognition (batch)
 	recStart := time.Now()
@@ -154,10 +171,14 @@ func (p *Pipeline) ProcessImageContext(ctx context.Context, img image.Image) (*O
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		slog.Debug("Starting text recognition", "regions_count", len(regions))
 		recResults, err = p.Recognizer.RecognizeBatch(working, regions)
 		if err != nil {
 			return nil, fmt.Errorf("recognition failed: %w", err)
 		}
+		slog.Debug("Text recognition completed", "duration_ms", time.Since(recStart).Nanoseconds()/1000000)
+	} else {
+		slog.Debug("No text regions detected, skipping recognition")
 	}
 	recNs := time.Since(recStart).Nanoseconds()
 
@@ -205,7 +226,12 @@ func (p *Pipeline) ProcessImageContext(ctx context.Context, img image.Image) (*O
 		maxX := maxf4(x1, x2, x3, x4)
 		minY := minf4(y1, y2, y3, y4)
 		maxY := maxf4(y1, y2, y3, y4)
-		reg.Box = struct{ X, Y, W, H int }{X: int(minX + 0.5), Y: int(minY + 0.5), W: int(maxX - minX + 0.5), H: int(maxY - minY + 0.5)}
+		reg.Box = struct{ X, Y, W, H int }{
+			X: int(minX + 0.5),
+			Y: int(minY + 0.5),
+			W: int(maxX - minX + 0.5),
+			H: int(maxY - minY + 0.5),
+		}
 		reg.Polygon = make([]struct{ X, Y float64 }, len(r.Polygon))
 		for j, pt := range r.Polygon {
 			ox, oy := toOriginal(pt.X, pt.Y)
@@ -236,6 +262,13 @@ func (p *Pipeline) ProcessImageContext(ctx context.Context, img image.Image) (*O
 	out.Processing.DetectionNs = detNs
 	out.Processing.RecognitionNs = recNs
 	out.Processing.TotalNs = time.Since(totalStart).Nanoseconds()
+
+	slog.Debug("Image processing completed",
+		"total_duration_ms", out.Processing.TotalNs/1000000,
+		"detection_duration_ms", detNs/1000000,
+		"recognition_duration_ms", recNs/1000000,
+		"regions_processed", len(out.Regions))
+
 	return out, nil
 }
 

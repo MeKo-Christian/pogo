@@ -177,7 +177,7 @@ func TestExtractImages_ErrorCases(t *testing.T) {
 	t.Run("non-existent file", func(t *testing.T) {
 		_, err := ExtractImages("/non/existent/file.pdf", "")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to extract images from PDF")
+		assert.Contains(t, err.Error(), "failed to get page count")
 	})
 
 	t.Run("invalid page range", func(t *testing.T) {

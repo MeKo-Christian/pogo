@@ -71,30 +71,42 @@ func (testCtx *TestContext) theCSVShouldContainCoordinateColumns() error {
 	return nil
 }
 
+// countImagesInCommand counts image files referenced in the command.
+func (testCtx *TestContext) countImagesInCommand(cmdParts []string) int {
+	count := 0
+	for _, part := range cmdParts {
+		if strings.HasSuffix(part, ".png") || strings.HasSuffix(part, ".jpg") || strings.HasSuffix(part, ".jpeg") {
+			count++
+		}
+	}
+	return count
+}
+
+// countImageResultsInOutput counts image results found in the output.
+func (testCtx *TestContext) countImageResultsInOutput(cmdParts []string, output string) int {
+	count := 0
+	for _, part := range cmdParts {
+		if strings.HasSuffix(part, ".png") || strings.HasSuffix(part, ".jpg") || strings.HasSuffix(part, ".jpeg") {
+			if strings.Contains(output, part) {
+				count++
+			}
+		}
+	}
+	return count
+}
+
 // theOutputShouldContainResultsForAllImages verifies output includes all images.
 func (testCtx *TestContext) theOutputShouldContainResultsForAllImages() error {
 	// Count expected images from the command
 	cmdParts := strings.Fields(testCtx.LastCommand)
-	expectedImages := 0
-	for _, part := range cmdParts {
-		if strings.HasSuffix(part, ".png") || strings.HasSuffix(part, ".jpg") || strings.HasSuffix(part, ".jpeg") {
-			expectedImages++
-		}
-	}
+	expectedImages := testCtx.countImagesInCommand(cmdParts)
 
 	if expectedImages == 0 {
 		return fmt.Errorf("could not determine expected number of images from command: %s", testCtx.LastCommand)
 	}
 
-	// For text format, count occurrences of image file references
-	imageCount := 0
-	for _, part := range cmdParts {
-		if strings.HasSuffix(part, ".png") || strings.HasSuffix(part, ".jpg") || strings.HasSuffix(part, ".jpeg") {
-			if strings.Contains(testCtx.LastOutput, part) {
-				imageCount++
-			}
-		}
-	}
+	// Count image results in output
+	imageCount := testCtx.countImageResultsInOutput(cmdParts, testCtx.LastOutput)
 
 	if imageCount < expectedImages {
 		return fmt.Errorf("expected results for %d images, but found results for %d images", expectedImages, imageCount)

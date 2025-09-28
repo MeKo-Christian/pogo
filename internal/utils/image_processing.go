@@ -246,8 +246,19 @@ func AssessImageQuality(img image.Image) ImageQuality {
 	height := bounds.Dy()
 
 	aspectRatio := float64(width) / float64(height)
+	isGrayscale, hasAlpha := analyzePixelProperties(img, bounds)
 
-	// Check if image is grayscale (simplified check)
+	return ImageQuality{
+		Width:       width,
+		Height:      height,
+		AspectRatio: aspectRatio,
+		IsGrayscale: isGrayscale,
+		HasAlpha:    hasAlpha,
+	}
+}
+
+// analyzePixelProperties checks if image is grayscale and has alpha channel.
+func analyzePixelProperties(img image.Image, bounds image.Rectangle) (bool, bool) {
 	isGrayscale := true
 	hasAlpha := false
 
@@ -263,11 +274,5 @@ func AssessImageQuality(img image.Image) ImageQuality {
 		}
 	}
 
-	return ImageQuality{
-		Width:       width,
-		Height:      height,
-		AspectRatio: aspectRatio,
-		IsGrayscale: isGrayscale,
-		HasAlpha:    hasAlpha,
-	}
+	return isGrayscale, hasAlpha
 }

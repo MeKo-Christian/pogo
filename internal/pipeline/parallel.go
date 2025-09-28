@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"log/slog"
 	"runtime"
 	"sync"
 	"time"
@@ -50,42 +51,82 @@ func (p *Pipeline) ProcessImagesParallel(images []image.Image, config ParallelCo
 }
 
 // ProcessImagesParallelContext processes images in parallel with context cancellation support.
-func (p *Pipeline) ProcessImagesParallelContext(ctx context.Context, images []image.Image, config ParallelConfig) ([]*OCRImageResult, error) {
-	if len(images) == 0 {
-		return nil, errors.New("no images provided")
-	}
-	if p == nil || p.Detector == nil || p.Recognizer == nil {
-		return nil, errors.New("pipeline not initialized")
+func (p *Pipeline) ProcessImagesParallelContext(ctx context.Context, images []image.Image,
+	config ParallelConfig) ([]*OCRImageResult, error) {
+	if err := p.validateParallelProcessing(images); err != nil {
+		return nil, err
 	}
 
-	// Apply defaults
-	if config.MaxWorkers <= 0 {
-		config.MaxWorkers = runtime.NumCPU()
-	}
+	config = p.applyConfigDefaults(config)
+
+	slog.Debug("Starting parallel image processing",
+		"image_count", len(images),
+		"max_workers", config.MaxWorkers,
+		"batch_size", config.BatchSize,
+		"memory_limit_bytes", config.MemoryLimitBytes)
 
 	// For single image or single worker, fall back to sequential processing
 	if len(images) == 1 || config.MaxWorkers == 1 {
+		slog.Debug("Falling back to sequential processing", "reason",
+			map[bool]string{true: "single_image", false: "single_worker"}[len(images) == 1])
 		return p.ProcessImagesContext(ctx, images)
 	}
 
+	return p.executeParallelProcessing(ctx, images, config)
+}
+
+func (p *Pipeline) validateParallelProcessing(images []image.Image) error {
+	if len(images) == 0 {
+		return errors.New("no images provided")
+	}
+	if p == nil || p.Detector == nil || p.Recognizer == nil {
+		return errors.New("pipeline not initialized")
+	}
+	return nil
+}
+
+func (p *Pipeline) applyConfigDefaults(config ParallelConfig) ParallelConfig {
+	if config.MaxWorkers <= 0 {
+		config.MaxWorkers = runtime.NumCPU()
+	}
+	return config
+}
+
+func (p *Pipeline) executeParallelProcessing(ctx context.Context, images []image.Image,
+	config ParallelConfig) ([]*OCRImageResult, error) {
 	// Initialize progress tracking
 	if config.ProgressCallback != nil {
 		config.ProgressCallback.OnStart(len(images))
 		defer config.ProgressCallback.OnComplete()
 	}
 
-	// Create worker pool
-	jobs := make(chan imageJob, len(images))
-	results := make(chan imageResult, len(images))
+	jobs, results := p.createChannels(len(images))
+	wg := p.startWorkers(ctx, jobs, results, config)
 
-	// Start workers
+	p.sendJobs(ctx, jobs, images)
+	p.waitForCompletion(wg, results)
+
+	return p.collectAndOrderResults(ctx, results, images, config)
+}
+
+func (p *Pipeline) createChannels(imageCount int) (chan imageJob, chan imageResult) {
+	jobs := make(chan imageJob, imageCount)
+	results := make(chan imageResult, imageCount)
+	return jobs, results
+}
+
+func (p *Pipeline) startWorkers(ctx context.Context, jobs chan imageJob, results chan imageResult,
+	config ParallelConfig) *sync.WaitGroup {
 	var wg sync.WaitGroup
+	slog.Debug("Starting worker pool", "worker_count", config.MaxWorkers)
 	for range config.MaxWorkers {
 		wg.Add(1)
 		go p.worker(ctx, jobs, results, &wg, config)
 	}
+	return &wg
+}
 
-	// Send jobs
+func (p *Pipeline) sendJobs(ctx context.Context, jobs chan imageJob, images []image.Image) {
 	go func() {
 		defer close(jobs)
 		for i, img := range images {
@@ -96,14 +137,29 @@ func (p *Pipeline) ProcessImagesParallelContext(ctx context.Context, images []im
 			}
 		}
 	}()
+}
 
-	// Collect results
+func (p *Pipeline) waitForCompletion(wg *sync.WaitGroup, results chan imageResult) {
 	go func() {
 		wg.Wait()
 		close(results)
 	}()
+}
 
-	// Aggregate results in order
+func (p *Pipeline) collectAndOrderResults(ctx context.Context, results chan imageResult,
+	images []image.Image, config ParallelConfig) ([]*OCRImageResult, error) {
+	resultMap, errorMap := p.aggregateResults(results, len(images), config)
+
+	// Check for context cancellation
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	return p.buildOrderedResults(resultMap, errorMap, images, config)
+}
+
+func (p *Pipeline) aggregateResults(results chan imageResult, totalImages int,
+	config ParallelConfig) (map[int]*OCRImageResult, map[int]error) {
 	resultMap := make(map[int]*OCRImageResult)
 	errorMap := make(map[int]error)
 	processedCount := 0
@@ -115,16 +171,15 @@ func (p *Pipeline) ProcessImagesParallelContext(ctx context.Context, images []im
 
 		// Report progress
 		if config.ProgressCallback != nil {
-			config.ProgressCallback.OnProgress(processedCount, len(images))
+			config.ProgressCallback.OnProgress(processedCount, totalImages)
 		}
 	}
 
-	// Check for context cancellation
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
+	return resultMap, errorMap
+}
 
-	// Build ordered result slice
+func (p *Pipeline) buildOrderedResults(resultMap map[int]*OCRImageResult, errorMap map[int]error,
+	images []image.Image, config ParallelConfig) ([]*OCRImageResult, error) {
 	orderedResults := make([]*OCRImageResult, len(images))
 	var firstError error
 
@@ -187,10 +242,63 @@ func (p *Pipeline) ProcessImagesParallelBatched(
 	return p.ProcessImagesParallelBatchedContext(context.Background(), images, config)
 }
 
+// processBatch processes a single batch of images and handles results/errors.
+func (p *Pipeline) processBatch(
+	ctx context.Context,
+	batch []image.Image,
+	offset int,
+	resultMutex *sync.Mutex,
+	errorMutex *sync.Mutex,
+	allResults *[]*OCRImageResult,
+	firstError *error,
+	imagesLen int,
+) {
+	// Process batch sequentially within this goroutine
+	batchResults, err := p.ProcessImagesContext(ctx, batch)
+
+	// Handle results
+	resultMutex.Lock()
+	if *allResults == nil {
+		*allResults = make([]*OCRImageResult, imagesLen)
+	}
+	for i, result := range batchResults {
+		(*allResults)[offset+i] = result
+	}
+	resultMutex.Unlock()
+
+	// Handle errors
+	if err != nil {
+		errorMutex.Lock()
+		if *firstError == nil {
+			*firstError = fmt.Errorf("batch starting at index %d: %w", offset, err)
+		}
+		errorMutex.Unlock()
+	}
+}
+
+// updateProgress updates progress tracking in a thread-safe manner.
+func updateProgress(
+	progressMutex *sync.Mutex,
+	processedImages *int,
+	batchLen int,
+	config ParallelConfig,
+	totalImages int,
+) {
+	progressMutex.Lock()
+	*processedImages += batchLen
+	currentProcessed := *processedImages
+	progressMutex.Unlock()
+
+	if config.ProgressCallback != nil {
+		config.ProgressCallback.OnProgress(currentProcessed, totalImages)
+	}
+}
+
 // ProcessImagesParallelBatchedContext processes images in parallel batches with context support.
 //
-//nolint:dupl // Duplicate with test mock implementation
-func (p *Pipeline) ProcessImagesParallelBatchedContext(ctx context.Context, images []image.Image, config ParallelConfig) ([]*OCRImageResult, error) {
+
+func (p *Pipeline) ProcessImagesParallelBatchedContext(ctx context.Context, images []image.Image,
+	config ParallelConfig) ([]*OCRImageResult, error) {
 	if config.BatchSize <= 1 {
 		// No batching requested, use regular parallel processing
 		return p.ProcessImagesParallelContext(ctx, images, config)
@@ -229,37 +337,11 @@ func (p *Pipeline) ProcessImagesParallelBatchedContext(ctx context.Context, imag
 		go func(batch []image.Image, offset int) {
 			defer wg.Done()
 
-			// Process batch sequentially within this goroutine
-			batchResults, err := p.ProcessImagesContext(ctx, batch)
-
-			// Handle results
-			resultMutex.Lock()
-			if allResults == nil {
-				allResults = make([]*OCRImageResult, len(images))
-			}
-			for i, result := range batchResults {
-				allResults[offset+i] = result
-			}
-			resultMutex.Unlock()
-
-			// Handle errors
-			if err != nil {
-				errorMutex.Lock()
-				if firstError == nil {
-					firstError = fmt.Errorf("batch starting at index %d: %w", offset, err)
-				}
-				errorMutex.Unlock()
-			}
+			// Process batch and handle results/errors
+			p.processBatch(ctx, batch, offset, &resultMutex, &errorMutex, &allResults, &firstError, len(images))
 
 			// Update progress
-			progressMutex.Lock()
-			processedImages += len(batch)
-			currentProcessed := processedImages
-			progressMutex.Unlock()
-
-			if config.ProgressCallback != nil {
-				config.ProgressCallback.OnProgress(currentProcessed, len(images))
-			}
+			updateProgress(&progressMutex, &processedImages, len(batch), config, len(images))
 		}(batch, batchStart)
 	}
 

@@ -73,42 +73,74 @@ func New(cfg Config) (*Rectifier, error) {
 	if !cfg.Enabled {
 		return r, nil
 	}
-	if _, err := os.Stat(cfg.ModelPath); err != nil {
-		return nil, fmt.Errorf("rectify model not found: %s", cfg.ModelPath)
-	}
-	if err := setONNXLibraryPath(); err != nil {
+
+	if err := validateModelFile(cfg.ModelPath); err != nil {
 		return nil, err
 	}
+
+	session, inputInfo, outputInfo, err := createONNXSession(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	r.session = session
+	r.inputInfo = inputInfo
+	r.outputInfo = outputInfo
+	return r, nil
+}
+
+func validateModelFile(modelPath string) error {
+	if _, err := os.Stat(modelPath); err != nil {
+		return fmt.Errorf("rectify model not found: %s", modelPath)
+	}
+	return nil
+}
+
+func createONNXSession(cfg Config) (
+	*onnxrt.DynamicAdvancedSession,
+	onnxrt.InputOutputInfo,
+	onnxrt.InputOutputInfo,
+	error,
+) {
+	if err := setONNXLibraryPath(); err != nil {
+		return nil, onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{}, err
+	}
+
 	if !onnxrt.IsInitialized() {
 		if err := onnxrt.InitializeEnvironment(); err != nil {
-			return nil, fmt.Errorf("init onnx: %w", err)
+			return nil, onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{}, fmt.Errorf("init onnx: %w", err)
 		}
 	}
+
 	inputs, outputs, err := onnxrt.GetInputOutputInfo(cfg.ModelPath)
 	if err != nil {
-		return nil, fmt.Errorf("io info: %w", err)
+		return nil, onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{}, fmt.Errorf("io info: %w", err)
 	}
+
 	if len(inputs) != 1 || len(outputs) != 1 {
-		return nil, fmt.Errorf("unexpected io (in:%d out:%d)", len(inputs), len(outputs))
+		return nil, onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{},
+			fmt.Errorf("unexpected io (in:%d out:%d)", len(inputs), len(outputs))
 	}
+
 	in := inputs[0]
 	out := outputs[0]
+
 	opts, err := onnxrt.NewSessionOptions()
 	if err != nil {
-		return nil, fmt.Errorf("session opts: %w", err)
+		return nil, onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{}, fmt.Errorf("session opts: %w", err)
 	}
 	defer func() { _ = opts.Destroy() }()
+
 	if cfg.NumThreads > 0 {
 		_ = opts.SetIntraOpNumThreads(cfg.NumThreads)
 	}
+
 	sess, err := onnxrt.NewDynamicAdvancedSession(cfg.ModelPath, []string{in.Name}, []string{out.Name}, opts)
 	if err != nil {
-		return nil, fmt.Errorf("session: %w", err)
+		return nil, onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{}, fmt.Errorf("session: %w", err)
 	}
-	r.session = sess
-	r.inputInfo = in
-	r.outputInfo = out
-	return r, nil
+
+	return sess, in, out, nil
 }
 
 // Close releases ONNX resources.
@@ -262,50 +294,82 @@ func (r *Rectifier) Apply(img image.Image) (image.Image, error) {
 
 // setONNXLibraryPath mirrors orientation’s helper to prefer the project-local runtime.
 func setONNXLibraryPath() error {
-	system := []string{
+	// Try system paths first
+	if path := findSystemONNXLibrary(); path != "" {
+		onnxrt.SetSharedLibraryPath(path)
+		return nil
+	}
+
+	// Try project-relative path
+	projectLib, err := findProjectONNXLibrary()
+	if err != nil {
+		return err
+	}
+	onnxrt.SetSharedLibraryPath(projectLib)
+	return nil
+}
+
+func findSystemONNXLibrary() string {
+	systemPaths := []string{
 		"/usr/local/lib/libonnxruntime.so",
 		"/usr/lib/libonnxruntime.so",
 		"/opt/onnxruntime/cpu/lib/libonnxruntime.so",
 	}
-	for _, p := range system {
-		if _, err := os.Stat(p); err == nil {
-			onnxrt.SetSharedLibraryPath(p)
-			return nil
+	for _, path := range systemPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
 		}
 	}
-	// Project-relative
+	return ""
+}
+
+func findProjectONNXLibrary() (string, error) {
+	root, err := findProjectRoot()
+	if err != nil {
+		return "", err
+	}
+
+	libName, err := getONNXLibraryName()
+	if err != nil {
+		return "", err
+	}
+
+	libPath := filepath.Join(root, "onnxruntime", "lib", libName)
+	if _, err := os.Stat(libPath); err != nil {
+		return "", fmt.Errorf("ONNX Runtime library not found at %s", libPath)
+	}
+	return libPath, nil
+}
+
+func findProjectRoot() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return err
+		return "", err
 	}
 	root := cwd
 	for {
 		if _, err := os.Stat(filepath.Join(root, "go.mod")); err == nil {
-			break
+			return root, nil
 		}
 		parent := filepath.Dir(root)
 		if parent == root {
-			return errors.New("could not find project root")
+			return "", errors.New("could not find project root")
 		}
 		root = parent
 	}
-	var libName string
+}
+
+func getONNXLibraryName() (string, error) {
 	switch runtime.GOOS {
 	case "linux":
-		libName = "libonnxruntime.so"
+		return "libonnxruntime.so", nil
 	case "darwin":
-		libName = "libonnxruntime.dylib"
+		return "libonnxruntime.dylib", nil
 	case "windows":
-		libName = "onnxruntime.dll"
+		return "onnxruntime.dll", nil
 	default:
-		return fmt.Errorf("unsupported OS: %s", runtime.GOOS)
+		return "", fmt.Errorf("unsupported OS: %s", runtime.GOOS)
 	}
-	p := filepath.Join(root, "onnxruntime", "lib", libName)
-	if _, err := os.Stat(p); err != nil {
-		return fmt.Errorf("ONNX Runtime library not found at %s", p)
-	}
-	onnxrt.SetSharedLibraryPath(p)
-	return nil
 }
 
 // hypot returns Euclidean distance between points a and b.
@@ -317,17 +381,23 @@ func warpPerspective(src image.Image, srcQuad []utils.Point, dstW, dstH int) ima
 	if len(srcQuad) != 4 || dstW <= 0 || dstH <= 0 {
 		return nil
 	}
+
 	// Build homography from dst rect to src quad. dst corners in CCW: (0,0),(W-1,0),(W-1,H-1),(0,H-1)
 	d0 := utils.Point{X: 0, Y: 0}
 	d1 := utils.Point{X: float64(dstW - 1), Y: 0}
 	d2 := utils.Point{X: float64(dstW - 1), Y: float64(dstH - 1)}
 	d3 := utils.Point{X: 0, Y: float64(dstH - 1)}
-	H, ok := computeHomography([4]utils.Point{d0, d1, d2, d3}, [4]utils.Point{srcQuad[0], srcQuad[1], srcQuad[2], srcQuad[3]})
+	H, ok := computeHomography(
+		[4]utils.Point{d0, d1, d2, d3},
+		[4]utils.Point{srcQuad[0], srcQuad[1], srcQuad[2], srcQuad[3]},
+	)
 	if !ok {
 		return nil
 	}
+
 	// Generate destination image
 	out := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
+
 	// Precompute bounds
 	sb := src.Bounds()
 	for y := range dstH {
@@ -339,6 +409,7 @@ func warpPerspective(src image.Image, srcQuad []utils.Point, dstW, dstH int) ima
 			out.Set(x, y, cr)
 		}
 	}
+
 	return out
 }
 
@@ -361,6 +432,7 @@ func computeHomography(p, q [4]utils.Point) ([9]float64, bool) {
 		A[r][6] = -X * x
 		A[r][7] = -Y * x
 		b[r] = x
+
 		// y' = (h10 X + h11 Y + h12)/(h20 X + h21 Y + 1)
 		A[r+1][0] = 0
 		A[r+1][1] = 0
@@ -372,60 +444,97 @@ func computeHomography(p, q [4]utils.Point) ([9]float64, bool) {
 		A[r+1][7] = -Y * y
 		b[r+1] = y
 	}
+
 	// Solve using Gaussian elimination
 	h, ok := solve8x8(A, b)
 	if !ok {
 		return [9]float64{}, false
 	}
 	H := [9]float64{h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], 1}
+
 	return H, true
 }
 
-func solve8x8(A [8][8]float64, b [8]float64) ([8]float64, bool) {
-	// Augmented matrix
+func solve8x8(a [8][8]float64, b [8]float64) ([8]float64, bool) {
+	// Create working copies
+	matrix := a
+	vector := b
+
+	// Forward elimination with partial pivoting
 	for i := range 8 {
-		// Pivot
-		pivot := i
-		maxAbs := abs(A[i][i])
-		for r := i + 1; r < 8; r++ {
-			if abs(A[r][i]) > maxAbs {
-				maxAbs = abs(A[r][i])
-				pivot = r
-			}
-		}
-		if maxAbs == 0 {
+		if !pivotAndNormalize(&matrix, &vector, i) {
 			return [8]float64{}, false
 		}
-		if pivot != i {
-			A[i], A[pivot] = A[pivot], A[i]
-			b[i], b[pivot] = b[pivot], b[i]
-		}
-		// Normalize row
-		div := A[i][i]
-		for c := i; c < 8; c++ {
-			A[i][c] /= div
-		}
-		b[i] /= div
-		// Eliminate
-		for r := range 8 {
-			if r == i {
-				continue
-			}
-			factor := A[r][i]
-			if factor == 0 {
-				continue
-			}
-			for c := i; c < 8; c++ {
-				A[r][c] -= factor * A[i][c]
-			}
-			b[r] -= factor * b[i]
-		}
+		eliminateColumn(&matrix, &vector, i)
 	}
+
+	// Back substitution
 	var x [8]float64
 	for i := range 8 {
-		x[i] = b[i]
+		x[i] = vector[i]
 	}
 	return x, true
+}
+
+func pivotAndNormalize(matrix *[8][8]float64, vector *[8]float64, col int) bool {
+	// Find pivot row
+	pivotRow := findPivotRow(*matrix, col)
+	if pivotRow == -1 {
+		return false
+	}
+
+	// Swap rows if needed
+	if pivotRow != col {
+		swapRows(matrix, vector, col, pivotRow)
+	}
+
+	// Normalize pivot row
+	normalizeRow(matrix, vector, col)
+	return true
+}
+
+func findPivotRow(matrix [8][8]float64, col int) int {
+	maxAbs := abs(matrix[col][col])
+	pivotRow := col
+	for r := col + 1; r < 8; r++ {
+		if abs(matrix[r][col]) > maxAbs {
+			maxAbs = abs(matrix[r][col])
+			pivotRow = r
+		}
+	}
+	if maxAbs == 0 {
+		return -1
+	}
+	return pivotRow
+}
+
+func swapRows(matrix *[8][8]float64, vector *[8]float64, row1, row2 int) {
+	matrix[row1], matrix[row2] = matrix[row2], matrix[row1]
+	vector[row1], vector[row2] = vector[row2], vector[row1]
+}
+
+func normalizeRow(matrix *[8][8]float64, vector *[8]float64, row int) {
+	div := matrix[row][row]
+	for c := row; c < 8; c++ {
+		matrix[row][c] /= div
+	}
+	vector[row] /= div
+}
+
+func eliminateColumn(matrix *[8][8]float64, vector *[8]float64, col int) {
+	for r := range 8 {
+		if r == col {
+			continue
+		}
+		factor := matrix[r][col]
+		if factor == 0 {
+			continue
+		}
+		for c := col; c < 8; c++ {
+			matrix[r][c] -= factor * matrix[col][c]
+		}
+		vector[r] -= factor * vector[col]
+	}
 }
 
 func applyHomography(h [9]float64, x, y float64) (float64, float64) {

@@ -32,14 +32,23 @@ See GOAL.md for the original long-form project rationale and background. See PLA
 - ONNX Runtime shared library (CPU or CUDA)
 - Pre‑trained ONNX models placed under `models/` (see below)
 
-Install ONNX Runtime and environment via scripts:
+Install ONNX Runtime and set up environment:
 
-```
+```bash
+# Install ONNX Runtime
 ./scripts/setup-onnxruntime.sh
+
+# Enable automatic environment loading (one-time setup)
+direnv allow
+```
+
+The project uses direnv to automatically configure environment variables (`CGO_CFLAGS`, `CGO_LDFLAGS`, `LD_LIBRARY_PATH`) when entering the directory. Alternatively, you can source the environment manually:
+
+```bash
 source scripts/setup-env.sh
 ```
 
-The setup prints and exports the required variables such as `CGO_CFLAGS`, `CGO_LDFLAGS`, and `LD_LIBRARY_PATH` (or `DYLD_LIBRARY_PATH`). Locally, the repo also includes `onnxruntime/` with a Linux x64 distribution wired up.
+Locally, the repo includes `onnxruntime/` with a Linux x64 distribution.
 
 ## Models
 
@@ -100,6 +109,7 @@ Common flags:
 - Textline orientation: `--detect-textline`, `--textline-threshold <0..1>`
 - Rectification (experimental): `--rectify`, `--rectify-model`, `--rectify-mask-threshold`, `--rectify-height`, `--rectify-debug-dir <dir>`
 - Output: `--format text|json|csv`, `--output <file>`, `--overlay-dir <dir>`
+- Logging: `--log-level debug|info|warn|error`, `--verbose` (equivalent to `--log-level=debug`)
 
 Examples:
 

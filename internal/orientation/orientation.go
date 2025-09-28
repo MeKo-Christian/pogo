@@ -99,52 +99,118 @@ func NewClassifier(cfg Config) (*Classifier, error) {
 
 // tryCreateONNXClassifier encapsulates the ONNX initialization path to reduce nesting in NewClassifier.
 func tryCreateONNXClassifier(cfg Config) (*Classifier, error) {
-	if cfg.ModelPath == "" {
-		return nil, errors.New("empty model path")
-	}
-	if _, err := os.Stat(cfg.ModelPath); err != nil {
+	if err := validateModelPath(cfg.ModelPath); err != nil {
 		return nil, err
 	}
-	if err := setONNXLibraryPath(); err != nil {
-		return nil, fmt.Errorf("onnx lib path: %w", err)
+
+	if err := initializeONNXEnvironment(); err != nil {
+		return nil, err
 	}
-	if !onnxrt.IsInitialized() {
-		if err := onnxrt.InitializeEnvironment(); err != nil {
-			return nil, fmt.Errorf("init onnx: %w", err)
-		}
-	}
-	inputs, outputs, err := onnxrt.GetInputOutputInfo(cfg.ModelPath)
+
+	inputs, outputs, err := getModelIOInfo(cfg.ModelPath)
 	if err != nil {
-		return nil, fmt.Errorf("io info: %w", err)
+		return nil, err
 	}
-	if len(inputs) != 1 || len(outputs) != 1 {
-		return nil, fmt.Errorf("unexpected io (in:%d out:%d)", len(inputs), len(outputs))
-	}
-	in := inputs[0]
-	out := outputs[0]
-	if len(in.Dimensions) != 4 {
-		return nil, fmt.Errorf("expected 4D input, got %dD", len(in.Dimensions))
-	}
-	opts, err := onnxrt.NewSessionOptions()
+
+	in, out, err := validateModelIO(inputs, outputs)
 	if err != nil {
-		return nil, fmt.Errorf("session opts: %w", err)
+		return nil, err
+	}
+
+	opts, err := createSessionOptions(cfg)
+	if err != nil {
+		return nil, err
 	}
 	defer func() {
 		if err := opts.Destroy(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error destroying session options: %v\n", err)
 		}
 	}()
+
+	sess, err := createONNXSession(cfg.ModelPath, in, out, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return buildClassifier(cfg, sess, in, out), nil
+}
+
+func validateModelPath(modelPath string) error {
+	if modelPath == "" {
+		return errors.New("empty model path")
+	}
+	if _, err := os.Stat(modelPath); err != nil {
+		return err
+	}
+	return nil
+}
+
+func initializeONNXEnvironment() error {
+	if err := setONNXLibraryPath(); err != nil {
+		return fmt.Errorf("onnx lib path: %w", err)
+	}
+	if !onnxrt.IsInitialized() {
+		if err := onnxrt.InitializeEnvironment(); err != nil {
+			return fmt.Errorf("init onnx: %w", err)
+		}
+	}
+	return nil
+}
+
+func getModelIOInfo(modelPath string) ([]onnxrt.InputOutputInfo, []onnxrt.InputOutputInfo, error) {
+	inputs, outputs, err := onnxrt.GetInputOutputInfo(modelPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("io info: %w", err)
+	}
+	return inputs, outputs, nil
+}
+
+func validateModelIO(inputs, outputs []onnxrt.InputOutputInfo) (onnxrt.InputOutputInfo, onnxrt.InputOutputInfo, error) {
+	if len(inputs) != 1 || len(outputs) != 1 {
+		return onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{},
+			fmt.Errorf("unexpected io (in:%d out:%d)", len(inputs), len(outputs))
+	}
+
+	in := inputs[0]
+	out := outputs[0]
+
+	if len(in.Dimensions) != 4 {
+		return onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{},
+			fmt.Errorf("expected 4D input, got %dD", len(in.Dimensions))
+	}
+
+	return in, out, nil
+}
+
+func createSessionOptions(cfg Config) (*onnxrt.SessionOptions, error) {
+	opts, err := onnxrt.NewSessionOptions()
+	if err != nil {
+		return nil, fmt.Errorf("session opts: %w", err)
+	}
+
 	if err := onnx.ConfigureSessionForGPU(opts, cfg.GPU); err != nil {
 		return nil, fmt.Errorf("failed to configure GPU: %w", err)
 	}
+
 	if cfg.NumThreads > 0 {
 		_ = opts.SetIntraOpNumThreads(cfg.NumThreads)
 	}
-	sess, err := onnxrt.NewDynamicAdvancedSession(cfg.ModelPath, []string{in.Name}, []string{out.Name}, opts)
+
+	return opts, nil
+}
+
+func createONNXSession(modelPath string, in, out onnxrt.InputOutputInfo,
+	opts *onnxrt.SessionOptions) (*onnxrt.DynamicAdvancedSession, error) {
+	sess, err := onnxrt.NewDynamicAdvancedSession(modelPath, []string{in.Name}, []string{out.Name}, opts)
 	if err != nil {
 		return nil, fmt.Errorf("session: %w", err)
 	}
+	return sess, nil
+}
+
+func buildClassifier(cfg Config, sess *onnxrt.DynamicAdvancedSession, in, out onnxrt.InputOutputInfo) *Classifier {
 	c := &Classifier{cfg: cfg, session: sess, inputInfo: in, outputInfo: out}
+
 	if len(in.Dimensions) == 4 {
 		if h := in.Dimensions[2]; h > 0 {
 			c.inH = int(h)
@@ -153,7 +219,8 @@ func tryCreateONNXClassifier(cfg Config) (*Classifier, error) {
 			c.inW = int(w)
 		}
 	}
-	return c, nil
+
+	return c
 }
 
 // Close releases resources.
@@ -353,6 +420,39 @@ func heuristicOrientation(img image.Image) (angle int, confidence float64) {
 	return 0, base
 }
 
+// findProjectRoot finds the project root directory by looking for go.mod.
+func findProjectRoot() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	root := cwd
+	for {
+		if _, err := os.Stat(filepath.Join(root, "go.mod")); err == nil {
+			return root, nil
+		}
+		parent := filepath.Dir(root)
+		if parent == root {
+			return "", errors.New("could not find project root")
+		}
+		root = parent
+	}
+}
+
+// getONNXLibName returns the appropriate library filename for the current OS.
+func getONNXLibName() (string, error) {
+	switch runtime.GOOS {
+	case "linux":
+		return "libonnxruntime.so", nil
+	case "darwin":
+		return "libonnxruntime.dylib", nil
+	case "windows":
+		return "onnxruntime.dll", nil
+	default:
+		return "", fmt.Errorf("unsupported OS: %s", runtime.GOOS)
+	}
+}
+
 // setONNXLibraryPath attempts to locate the ONNX Runtime shared library similar to detector.
 func setONNXLibraryPath() error {
 	// Common system paths
@@ -367,33 +467,18 @@ func setONNXLibraryPath() error {
 			return nil
 		}
 	}
+
 	// Project-relative
-	cwd, err := os.Getwd()
+	root, err := findProjectRoot()
 	if err != nil {
 		return err
 	}
-	root := cwd
-	for {
-		if _, err := os.Stat(filepath.Join(root, "go.mod")); err == nil {
-			break
-		}
-		parent := filepath.Dir(root)
-		if parent == root {
-			return errors.New("could not find project root")
-		}
-		root = parent
+
+	libName, err := getONNXLibName()
+	if err != nil {
+		return err
 	}
-	var libName string
-	switch runtime.GOOS {
-	case "linux":
-		libName = "libonnxruntime.so"
-	case "darwin":
-		libName = "libonnxruntime.dylib"
-	case "windows":
-		libName = "onnxruntime.dll"
-	default:
-		return fmt.Errorf("unsupported OS: %s", runtime.GOOS)
-	}
+
 	p := filepath.Join(root, "onnxruntime", "lib", libName)
 	if _, err := os.Stat(p); err != nil {
 		return fmt.Errorf("ONNX Runtime library not found at %s", p)

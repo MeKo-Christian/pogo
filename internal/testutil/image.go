@@ -270,7 +270,8 @@ func addNoise(img *image.RGBA, noiseLevel float64) *image.RGBA {
 				}
 			}
 
-			noisy.Set(x, y, color.RGBA64{uint16(r), uint16(g), uint16(b), uint16(a)}) //nolint:gosec // G115: Safe conversion for image noise generation
+			//nolint:gosec // G115: Safe conversion for image noise generation
+			noisy.Set(x, y, color.RGBA64{uint16(r), uint16(g), uint16(b), uint16(a)})
 		}
 	}
 
