@@ -70,6 +70,42 @@ func (l *Loader) Load() (*Config, error) {
 	return &config, nil
 }
 
+// LoadWithoutValidation loads configuration from files, environment variables, and sets defaults.
+// It returns the loaded configuration without validation.
+func (l *Loader) LoadWithoutValidation() (*Config, error) {
+	// Set configuration file details
+	l.v.SetConfigName(ConfigFileName)
+	l.v.SetConfigType("yaml") // Primary format, but viper supports multiple formats
+
+	// Add configuration search paths
+	l.addConfigPaths()
+
+	// Set environment variable handling
+	l.setupEnvironmentVariables()
+
+	// Set defaults
+	l.setDefaults()
+
+	// Try to read configuration file
+	if err := l.v.ReadInConfig(); err != nil {
+		// It's okay if config file doesn't exist, we'll use defaults and env vars
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFoundError) {
+			// Only return error if it's NOT a "config file not found" error
+			return nil, fmt.Errorf("error reading config file: %w", err)
+		}
+		// Config file not found is OK, continue with defaults and env vars
+	}
+
+	// Unmarshal into our config struct
+	var config Config
+	if err := l.v.Unmarshal(&config); err != nil {
+		return nil, fmt.Errorf("error unmarshaling config: %w", err)
+	}
+
+	return &config, nil
+}
+
 // LoadWithFile loads configuration from a specific file path.
 func (l *Loader) LoadWithFile(configFile string) (*Config, error) {
 	if configFile == "" {
@@ -104,6 +140,40 @@ func (l *Loader) LoadWithFile(configFile string) (*Config, error) {
 	// Validate the configuration
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
+	return &config, nil
+}
+
+// LoadWithFileWithoutValidation loads configuration from a specific file path without validation.
+func (l *Loader) LoadWithFileWithoutValidation(configFile string) (*Config, error) {
+	if configFile == "" {
+		return l.LoadWithoutValidation()
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return nil, fmt.Errorf("config file does not exist: %s", configFile)
+	}
+
+	// Set the specific config file
+	l.v.SetConfigFile(configFile)
+
+	// Set environment variable handling
+	l.setupEnvironmentVariables()
+
+	// Set defaults
+	l.setDefaults()
+
+	// Read the config file
+	if err := l.v.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("error reading config file %s: %w", configFile, err)
+	}
+
+	// Unmarshal into our config struct
+	var config Config
+	if err := l.v.Unmarshal(&config); err != nil {
+		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
 
 	return &config, nil

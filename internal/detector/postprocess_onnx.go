@@ -12,6 +12,17 @@ func (d *Detector) DetectRegions(img image.Image) ([]DetectedRegion, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Apply morphological operations to the probability map if configured
+	probMap := res.ProbabilityMap
+	if d.config.Morphology.Operation != MorphNone {
+		slog.Debug("Applying morphological operations",
+			"operation", d.config.Morphology.Operation,
+			"kernel_size", d.config.Morphology.KernelSize,
+			"iterations", d.config.Morphology.Iterations)
+		probMap = ApplyMorphologicalOperation(probMap, res.Width, res.Height, d.config.Morphology)
+	}
+
 	var regs []DetectedRegion
 	opts := PostProcessOptions{UseMinAreaRect: d.config.PolygonMode != "contour"}
 	if d.config.UseNMS {
@@ -22,7 +33,7 @@ func (d *Detector) DetectRegions(img image.Image) ([]DetectedRegion, error) {
 				"method", d.config.NMSMethod,
 				"iou_threshold", d.config.NMSThreshold,
 				"sigma", d.config.SoftNMSSigma)
-			regs = PostProcessDBWithOptions(res.ProbabilityMap, res.Width, res.Height,
+			regs = PostProcessDBWithOptions(probMap, res.Width, res.Height,
 				d.config.DbThresh, d.config.DbBoxThresh, opts)
 			// Apply Soft-NMS on the results
 			regs = SoftNonMaxSuppression(regs, d.config.NMSMethod, d.config.NMSThreshold,
@@ -34,7 +45,7 @@ func (d *Detector) DetectRegions(img image.Image) ([]DetectedRegion, error) {
 				slog.Debug("Using Adaptive NMS for region filtering",
 					"base_threshold", d.config.NMSThreshold,
 					"scale_factor", d.config.AdaptiveNMSScale)
-				regs = PostProcessDBWithOptions(res.ProbabilityMap, res.Width, res.Height,
+				regs = PostProcessDBWithOptions(probMap, res.Width, res.Height,
 					d.config.DbThresh, d.config.DbBoxThresh, opts)
 				regs = AdaptiveNonMaxSuppression(regs, d.config.NMSThreshold, d.config.AdaptiveNMSScale)
 			case d.config.SizeAwareNMS:
@@ -43,20 +54,20 @@ func (d *Detector) DetectRegions(img image.Image) ([]DetectedRegion, error) {
 					"size_scale_factor", d.config.SizeNMSScaleFactor,
 					"min_size", d.config.MinRegionSize,
 					"max_size", d.config.MaxRegionSize)
-				regs = PostProcessDBWithOptions(res.ProbabilityMap, res.Width, res.Height,
+				regs = PostProcessDBWithOptions(probMap, res.Width, res.Height,
 					d.config.DbThresh, d.config.DbBoxThresh, opts)
 				regs = SizeAwareNonMaxSuppression(regs, d.config.NMSThreshold, d.config.SizeNMSScaleFactor,
 					d.config.MinRegionSize, d.config.MaxRegionSize)
 			default:
 				slog.Debug("Using Hard-NMS for region filtering", "iou_threshold", d.config.NMSThreshold)
 				// Hard NMS as before
-				regs = PostProcessDBWithNMSOptions(res.ProbabilityMap, res.Width, res.Height,
+				regs = PostProcessDBWithNMSOptions(probMap, res.Width, res.Height,
 					d.config.DbThresh, d.config.DbBoxThresh, d.config.NMSThreshold, opts)
 			}
 		}
 	} else {
 		slog.Debug("NMS disabled, using DB post-processing only")
-		regs = PostProcessDBWithOptions(res.ProbabilityMap, res.Width, res.Height,
+		regs = PostProcessDBWithOptions(probMap, res.Width, res.Height,
 			d.config.DbThresh, d.config.DbBoxThresh, opts)
 	}
 	regs = ScaleRegionsToOriginal(regs, res.Width, res.Height, res.OriginalWidth, res.OriginalHeight)

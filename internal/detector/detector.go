@@ -39,6 +39,9 @@ type Config struct {
 	MinRegionSize      int     // Minimum region size for size-aware NMS (default: 32)
 	MaxRegionSize      int     // Maximum region size for size-aware NMS (default: 1024)
 	SizeNMSScaleFactor float64 // Scale factor for size-based IoU adjustment (default: 0.1)
+
+	// Morphological operations configuration
+	Morphology MorphConfig // Morphological operations on probability map
 }
 
 // DefaultConfig returns a default detector configuration.
@@ -65,6 +68,9 @@ func DefaultConfig() Config {
 		MinRegionSize:      32,
 		MaxRegionSize:      1024,
 		SizeNMSScaleFactor: 0.1,
+
+		// Morphological operations defaults
+		Morphology: DefaultMorphConfig(),
 	}
 }
 

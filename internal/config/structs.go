@@ -65,6 +65,9 @@ type DetectorConfig struct {
 	MinRegionSize      int     `mapstructure:"min_region_size" yaml:"min_region_size" json:"min_region_size"`
 	MaxRegionSize      int     `mapstructure:"max_region_size" yaml:"max_region_size" json:"max_region_size"`
 	SizeNMSScaleFactor float64 `mapstructure:"size_nms_scale_factor" yaml:"size_nms_scale_factor" json:"size_nms_scale_factor"`
+
+	// Morphological operations
+	Morphology MorphologyConfig `mapstructure:"morphology" yaml:"morphology" json:"morphology"`
 }
 
 // RecognizerConfig contains text recognition settings.
@@ -144,4 +147,11 @@ type GPUConfig struct {
 	Enabled     bool   `mapstructure:"enabled" yaml:"enabled" json:"enabled"`
 	Device      int    `mapstructure:"device" yaml:"device" json:"device"`
 	MemoryLimit string `mapstructure:"memory_limit" yaml:"memory_limit" json:"memory_limit"`
+}
+
+// MorphologyConfig contains morphological operations settings.
+type MorphologyConfig struct {
+	Operation  string `mapstructure:"operation" yaml:"operation" json:"operation"`
+	KernelSize int    `mapstructure:"kernel_size" yaml:"kernel_size" json:"kernel_size"`
+	Iterations int    `mapstructure:"iterations" yaml:"iterations" json:"iterations"`
 }

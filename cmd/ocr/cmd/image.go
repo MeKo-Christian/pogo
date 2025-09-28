@@ -399,6 +399,11 @@ func addImageFlags(cmd *cobra.Command) {
 
 	// Detection polygon mode: minrect (default) or contour
 	cmd.Flags().String("det-polygon-mode", "minrect", "detector polygon mode: minrect or contour")
+
+	// Morphological operations flags
+	cmd.Flags().String("morph-op", "none", "morphological operation: none, dilate, erode, opening, closing, smooth")
+	cmd.Flags().Int("morph-kernel-size", 3, "morphological operation kernel size (e.g., 3 for 3x3)")
+	cmd.Flags().Int("morph-iterations", 1, "number of morphological operation iterations")
 }
 
 // bindImageFlags binds all flags to viper configuration keys.
@@ -431,6 +436,9 @@ func bindImageFlags(cmd *cobra.Command) {
 		{"gpu.device", "gpu-device"},
 		{"gpu.memory_limit", "gpu-mem-limit"},
 		{"pipeline.detector.polygon_mode", "det-polygon-mode"},
+		{"pipeline.detector.morphology.operation", "morph-op"},
+		{"pipeline.detector.morphology.kernel_size", "morph-kernel-size"},
+		{"pipeline.detector.morphology.iterations", "morph-iterations"},
 	}
 
 	for _, binding := range flagBindings {

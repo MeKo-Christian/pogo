@@ -82,6 +82,13 @@ func defaultDetectorConfig() DetectorConfig {
 		MinRegionSize:      cfg.MinRegionSize,
 		MaxRegionSize:      cfg.MaxRegionSize,
 		SizeNMSScaleFactor: cfg.SizeNMSScaleFactor,
+
+		// Morphological operations defaults
+		Morphology: MorphologyConfig{
+			Operation:  "none",
+			KernelSize: cfg.Morphology.KernelSize,
+			Iterations: cfg.Morphology.Iterations,
+		},
 	}
 }
 
@@ -317,6 +324,9 @@ func (c *Config) toDetectorConfig() detector.Config {
 	cfg.MaxRegionSize = c.Pipeline.Detector.MaxRegionSize
 	cfg.SizeNMSScaleFactor = c.Pipeline.Detector.SizeNMSScaleFactor
 
+	// Morphological operations
+	cfg.Morphology = parseMorphologyConfig(c.Pipeline.Detector.Morphology)
+
 	return cfg
 }
 
@@ -392,4 +402,29 @@ func validateMemoryLimit(limit string) error {
 	}
 
 	return nil
+}
+
+// parseMorphologyConfig converts MorphologyConfig to detector.MorphConfig.
+func parseMorphologyConfig(config MorphologyConfig) detector.MorphConfig {
+	morphConfig := detector.DefaultMorphConfig()
+	morphConfig.KernelSize = config.KernelSize
+	morphConfig.Iterations = config.Iterations
+
+	// Parse operation string to MorphologicalOp
+	switch strings.ToLower(config.Operation) {
+	case "dilate":
+		morphConfig.Operation = detector.MorphDilate
+	case "erode":
+		morphConfig.Operation = detector.MorphErode
+	case "opening":
+		morphConfig.Operation = detector.MorphOpening
+	case "closing":
+		morphConfig.Operation = detector.MorphClosing
+	case "smooth":
+		morphConfig.Operation = detector.MorphSmooth
+	default:
+		morphConfig.Operation = detector.MorphNone
+	}
+
+	return morphConfig
 }

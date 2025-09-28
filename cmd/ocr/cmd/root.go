@@ -68,22 +68,17 @@ func GetRootCommand() *cobra.Command {
 	return rootCmd
 }
 
-// setupLogging configures the logging based on the global configuration.
-func setupLogging(cmd *cobra.Command, args []string) {
-	// Initialize configuration if not already done
-	if globalConfig == nil {
-		initConfig()
-	}
-
+// setupLogging configures the global logger based on the provided configuration.
+func setupLogging(cfg *config.Config) {
 	// Determine log level from config
 	var logLevel slog.Level
 
 	// Check verbose flag first for backward compatibility
-	if globalConfig.Verbose {
+	if cfg.Verbose {
 		logLevel = slog.LevelDebug
 	} else {
 		// Parse log-level from config
-		switch globalConfig.LogLevel {
+		switch cfg.LogLevel {
 		case "debug":
 			logLevel = slog.LevelDebug
 		case "info":
@@ -136,32 +131,34 @@ func init() {
 		panic(fmt.Sprintf("failed to bind flag: %v", err))
 	}
 
-	rootCmd.PersistentPreRun = setupLogging
+	rootCmd.PersistentPreRun = nil
 }
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
 	configLoader = config.NewLoader()
 
-	var err error
-	if cfgFile != "" {
-		// Use config file from the flag
-		globalConfig, err = configLoader.LoadWithFile(cfgFile)
-	} else {
-		// Search for config in default locations
-		globalConfig, err = configLoader.Load()
-	}
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
-		os.Exit(1)
-	}
+	// Just set up the viper instance without loading/validating config
+	// Validation will happen in individual commands as needed
 }
 
 // GetConfig returns the global configuration.
 func GetConfig() *config.Config {
 	if globalConfig == nil {
-		initConfig()
+		loader := GetConfigLoader()
+		var err error
+		if cfgFile != "" {
+			// Use config file from the flag
+			globalConfig, err = loader.LoadWithFileWithoutValidation(cfgFile)
+		} else {
+			// Search for config in default locations
+			globalConfig, err = loader.LoadWithoutValidation()
+		}
+
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Reload configuration to ensure CLI flags are included
@@ -172,6 +169,9 @@ func GetConfig() *config.Config {
 		fmt.Fprintf(os.Stderr, "Error unmarshaling updated configuration: %v\n", err)
 		return globalConfig // Return the original config if unmarshal fails
 	}
+
+	// Set up logging now that we have the final merged config
+	setupLogging(&cfg)
 
 	return &cfg
 }
