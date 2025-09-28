@@ -3,104 +3,27 @@ package benchmark
 import (
 	"context"
 	"fmt"
-	"math"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/MeKo-Tech/pogo/internal/common"
 	"github.com/MeKo-Tech/pogo/internal/pipeline"
 	"github.com/MeKo-Tech/pogo/internal/testutil"
 )
 
-// Timer provides simple timing utilities for benchmarking.
-type Timer struct {
-	start    time.Time
-	name     string
-	duration time.Duration
-}
-
-// NewTimer creates a new timer with the given name.
-func NewTimer(name string) *Timer {
-	return &Timer{
-		name:  name,
-		start: time.Now(),
-	}
-}
-
-// Stop stops the timer and returns the elapsed duration.
-func (t *Timer) Stop() time.Duration {
-	t.duration = time.Since(t.start)
-	return t.duration
-}
-
-// Duration returns the recorded duration (only valid after Stop()).
-func (t *Timer) Duration() time.Duration {
-	return t.duration
-}
-
-// String returns a formatted string representation of the timer.
-func (t *Timer) String() string {
-	return fmt.Sprintf("%s: %v", t.name, t.duration)
-}
-
 // MemoryStats holds memory usage statistics.
-type MemoryStats struct {
-	AllocBytes      uint64  // Currently allocated bytes
-	TotalAllocBytes uint64  // Total allocated bytes (cumulative)
-	SysBytes        uint64  // Total bytes from system
-	NumGC           uint32  // Number of GC runs
-	GCCPUFraction   float64 // Fraction of CPU time spent in GC
-}
+type MemoryStats = common.MemoryStats
 
 // GetMemoryStats returns current memory statistics.
 func GetMemoryStats() MemoryStats {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	return MemoryStats{
-		AllocBytes:      m.Alloc,
-		TotalAllocBytes: m.TotalAlloc,
-		SysBytes:        m.Sys,
-		NumGC:           m.NumGC,
-		GCCPUFraction:   m.GCCPUFraction,
-	}
-}
-
-// String returns a formatted string representation of memory stats.
-func (m MemoryStats) String() string {
-	return fmt.Sprintf("Alloc: %d KB, Total: %d KB, Sys: %d KB, GC: %d (%.2f%% CPU)",
-		m.AllocBytes/1024,
-		m.TotalAllocBytes/1024,
-		m.SysBytes/1024,
-		m.NumGC,
-		m.GCCPUFraction*100)
+	return common.GetMemoryStats()
 }
 
 // BenchmarkResult holds the result of a benchmark run.
-type BenchmarkResult struct {
-	Name         string
-	Duration     time.Duration
-	MemoryBefore MemoryStats
-	MemoryAfter  MemoryStats
-	Iterations   int
-	Error        error
-}
-
-// String returns a formatted string representation of the benchmark result.
-func (br BenchmarkResult) String() string {
-	if br.Error != nil {
-		return fmt.Sprintf("%s: ERROR - %v", br.Name, br.Error)
-	}
-
-	memDiff := br.MemoryAfter.AllocBytes - br.MemoryBefore.AllocBytes
-	avgDuration := br.Duration / time.Duration(br.Iterations)
-
-	return fmt.Sprintf("%s: %d iterations, avg: %v, total: %v, mem: +%d KB",
-		br.Name, br.Iterations, avgDuration, br.Duration,
-		int64(memDiff)/1024) //nolint:gosec // G115: Safe conversion for memory display
-}
+type BenchmarkResult = common.BenchmarkResult
 
 // Benchmark represents a benchmark function.
 type Benchmark struct {
@@ -174,7 +97,7 @@ func (bs *BenchmarkSuite) runBenchmark(benchmark Benchmark, iterations int) Benc
 	runtime.GC()
 	memBefore := GetMemoryStats()
 
-	timer := NewTimer(benchmark.Name)
+	timer := common.NewNamedTimer(benchmark.Name)
 	var err error
 
 	for range iterations {
@@ -372,17 +295,9 @@ func (b *GPUVSCPUBenchmark) benchmarkImage(img TestImage, iterations int) (GPUVS
 	// Calculate performance metrics
 	if result.GPUAvailable {
 		result.SpeedupFactor = float64(cpuResult.Duration.Nanoseconds()) / float64(gpuResult.Duration.Nanoseconds())
-		cpuDiff := cpuResult.MemoryAfter.AllocBytes - cpuResult.MemoryBefore.AllocBytes
-		gpuDiff := gpuResult.MemoryAfter.AllocBytes - gpuResult.MemoryBefore.AllocBytes
-		cpuMemDiff := int64(cpuDiff)
-		if cpuDiff > math.MaxInt64 {
-			cpuMemDiff = math.MaxInt64
-		}
-		gpuMemDiff := int64(gpuDiff)
-		if gpuDiff > math.MaxInt64 {
-			gpuMemDiff = math.MaxInt64
-		}
-		result.MemoryDiff = (gpuMemDiff - cpuMemDiff) / 1024 // Convert to KB
+		cpuDiff := cpuResult.MemoryAfter.Alloc - cpuResult.MemoryBefore.Alloc
+		gpuDiff := gpuResult.MemoryAfter.Alloc - gpuResult.MemoryBefore.Alloc
+		result.MemoryDiff = int64(gpuDiff-cpuDiff) / 1024 // Convert to KB
 	}
 
 	return result, nil
