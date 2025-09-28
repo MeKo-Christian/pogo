@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Custom TestPipeline for these tests that matches the real Pipeline behavior more closely
+// Custom TestPipeline for these tests that matches the real Pipeline behavior more closely.
 type ProcessImagesTestPipeline struct {
 	cfg        Config
 	detector   DetectorInterface
@@ -50,7 +50,9 @@ func (p *ProcessImagesTestPipeline) ProcessImageContext(ctx context.Context, img
 	}, nil
 }
 
-func (p *ProcessImagesTestPipeline) ProcessImagesContext(ctx context.Context, images []image.Image) ([]*OCRImageResult, error) {
+func (p *ProcessImagesTestPipeline) ProcessImagesContext(
+	ctx context.Context, images []image.Image,
+) ([]*OCRImageResult, error) {
 	if len(images) == 0 {
 		return nil, errors.New("no images provided")
 	}
@@ -68,7 +70,7 @@ func (p *ProcessImagesTestPipeline) ProcessImagesContext(ctx context.Context, im
 	return results, nil
 }
 
-// Test helper to create a test pipeline using our custom implementation
+// Test helper to create a test pipeline using our custom implementation.
 func createWorkingTestPipeline() *ProcessImagesTestPipeline {
 	return &ProcessImagesTestPipeline{
 		cfg:        Config{},
@@ -77,7 +79,7 @@ func createWorkingTestPipeline() *ProcessImagesTestPipeline {
 	}
 }
 
-// Test helper to create a test pipeline with failing detector
+// Test helper to create a test pipeline with failing detector.
 func createFailingDetectorTestPipeline() *ProcessImagesTestPipeline {
 	return &ProcessImagesTestPipeline{
 		cfg:        Config{},
@@ -86,7 +88,7 @@ func createFailingDetectorTestPipeline() *ProcessImagesTestPipeline {
 	}
 }
 
-// Test helper to create a test pipeline with failing recognizer
+// Test helper to create a test pipeline with failing recognizer.
 func createFailingRecognizerTestPipeline() *ProcessImagesTestPipeline {
 	return &ProcessImagesTestPipeline{
 		cfg:        Config{},
@@ -97,18 +99,20 @@ func createFailingRecognizerTestPipeline() *ProcessImagesTestPipeline {
 
 // Additional mock types for specific test scenarios
 
-// Mock detector that returns error
+// Mock detector that returns error.
 type mockDetectorWithError struct{}
 
 func (m *mockDetectorWithError) DetectRegions(img image.Image) ([]detector.DetectedRegion, error) {
 	return nil, errors.New("mock detector failure")
 }
 
-func (m *mockDetectorWithError) Close() error                         { return nil }
-func (m *mockDetectorWithError) GetModelInfo() map[string]interface{} { return map[string]interface{}{} }
-func (m *mockDetectorWithError) Warmup(iterations int) error          { return nil }
+func (m *mockDetectorWithError) Close() error { return nil }
+func (m *mockDetectorWithError) GetModelInfo() map[string]interface{} {
+	return map[string]interface{}{}
+}
+func (m *mockDetectorWithError) Warmup(iterations int) error { return nil }
 
-// Mock detector that can selectively fail
+// Mock detector that can selectively fail.
 type mockSelectiveFailureDetector struct {
 	failOnCall int
 	callCount  *int
@@ -123,25 +127,11 @@ func (m *mockSelectiveFailureDetector) DetectRegions(img image.Image) ([]detecto
 	return []detector.DetectedRegion{}, nil
 }
 
-func (m *mockSelectiveFailureDetector) Close() error                         { return nil }
-func (m *mockSelectiveFailureDetector) GetModelInfo() map[string]interface{} { return map[string]interface{}{} }
-func (m *mockSelectiveFailureDetector) Warmup(iterations int) error          { return nil }
-
-// Mock detector that tracks calls for cancellation testing
-type mockDetectorWithCallTracking struct {
-	onCall func()
+func (m *mockSelectiveFailureDetector) Close() error { return nil }
+func (m *mockSelectiveFailureDetector) GetModelInfo() map[string]interface{} {
+	return map[string]interface{}{}
 }
-
-func (m *mockDetectorWithCallTracking) DetectRegions(img image.Image) ([]detector.DetectedRegion, error) {
-	if m.onCall != nil {
-		m.onCall()
-	}
-	return []detector.DetectedRegion{}, nil
-}
-
-func (m *mockDetectorWithCallTracking) Close() error                         { return nil }
-func (m *mockDetectorWithCallTracking) GetModelInfo() map[string]interface{} { return map[string]interface{}{} }
-func (m *mockDetectorWithCallTracking) Warmup(iterations int) error          { return nil }
+func (m *mockSelectiveFailureDetector) Warmup(iterations int) error { return nil }
 
 // Basic Functionality Tests
 
@@ -230,7 +220,7 @@ func TestProcessImagesContext_CancelBeforeProcessing(t *testing.T) {
 	results, err := p.ProcessImagesContext(ctx, images)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, context.Canceled)
 	assert.Nil(t, results)
 }
 
@@ -258,7 +248,7 @@ func TestProcessImagesContext_CancelDuringProcessing(t *testing.T) {
 	results, err := p.ProcessImagesContext(ctx, images)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, context.Canceled)
 	assert.Nil(t, results)
 }
 
@@ -278,7 +268,7 @@ func TestProcessImagesContext_CancelAfterFirstImage(t *testing.T) {
 	results, err := p.ProcessImagesContext(ctx, images)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, context.Canceled)
 	assert.Nil(t, results)
 }
 
@@ -441,7 +431,7 @@ func BenchmarkProcessImagesContext_SingleImage(b *testing.B) {
 	ctx := context.Background()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := p.ProcessImagesContext(ctx, images)
 		if err != nil {
 			b.Fatal(err)
@@ -461,7 +451,7 @@ func BenchmarkProcessImagesContext_MultipleImages(b *testing.B) {
 	ctx := context.Background()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := p.ProcessImagesContext(ctx, images)
 		if err != nil {
 			b.Fatal(err)

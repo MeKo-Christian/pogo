@@ -65,7 +65,36 @@ func configToBatchConfig(cfg *config.Config, cmd *cobra.Command) *batch.Config {
 		}
 	}
 
-	// Core OCR settings
+	// Apply core OCR settings
+	setCoreOCRSettings(cfg, batchConfig, setFloat64WithFlag, setStringWithFlag, setIntWithFlag)
+
+	// Apply output settings
+	setOutputSettings(cfg, batchConfig, setStringWithFlag)
+
+	// Apply feature settings
+	setFeatureSettings(cfg, batchConfig, setBoolWithFlag, setStringWithFlag, setFloat64WithFlag, setIntWithFlag)
+
+	// Apply parallel processing settings
+	setParallelProcessingSettings(cfg, batchConfig, setIntWithFlag)
+
+	// Apply CLI-only settings
+	setCLIOnlySettings(cmd, batchConfig)
+
+	return batchConfig
+}
+
+// Helper function types for configuration mapping.
+type (
+	setFloat64Func func(float64, string, *float64)
+	setStringFunc  func(string, string, *string)
+	setIntFunc     func(int, string, *int)
+	setBoolFunc    func(bool, string, *bool)
+)
+
+// setCoreOCRSettings configures core OCR parameters.
+func setCoreOCRSettings(cfg *config.Config, batchConfig *batch.Config, setFloat64WithFlag setFloat64Func,
+	setStringWithFlag setStringFunc, setIntWithFlag setIntFunc,
+) {
 	setFloat64WithFlag(float64(cfg.Pipeline.Detector.DbBoxThresh), "confidence", &batchConfig.Confidence)
 	setStringWithFlag(cfg.ModelsDir, "", &batchConfig.ModelsDir)
 	setStringWithFlag(cfg.Pipeline.Detector.ModelPath, "det-model", &batchConfig.DetModel)
@@ -75,12 +104,19 @@ func configToBatchConfig(cfg *config.Config, cmd *cobra.Command) *batch.Config {
 	setStringWithFlag(cfg.Pipeline.Recognizer.DictLangs, "dict-langs", &batchConfig.DictLangs)
 	setIntWithFlag(cfg.Pipeline.Recognizer.ImageHeight, "rec-height", &batchConfig.RecHeight)
 	setFloat64WithFlag(cfg.Pipeline.Recognizer.MinConfidence, "min-rec-conf", &batchConfig.MinRecConf)
+}
 
-	// Output settings
+// setOutputSettings configures output-related parameters.
+func setOutputSettings(cfg *config.Config, batchConfig *batch.Config, setStringWithFlag func(string, string, *string)) {
 	setStringWithFlag(cfg.Output.OverlayDir, "overlay-dir", &batchConfig.OverlayDir)
 	setStringWithFlag(cfg.Output.Format, "format", &batchConfig.Format)
 	setStringWithFlag(cfg.Output.File, "output", &batchConfig.OutputFile)
+}
 
+// setFeatureSettings configures feature flags and related parameters.
+func setFeatureSettings(cfg *config.Config, batchConfig *batch.Config, setBoolWithFlag setBoolFunc,
+	setStringWithFlag setStringFunc, setFloat64WithFlag setFloat64Func, setIntWithFlag setIntFunc,
+) {
 	// Rectification settings
 	setBoolWithFlag(cfg.Features.RectificationEnabled, "rectify", &batchConfig.Rectify)
 	setStringWithFlag(cfg.Features.RectificationModelPath, "rectify-model", &batchConfig.RectifyModel)
@@ -93,13 +129,19 @@ func configToBatchConfig(cfg *config.Config, cmd *cobra.Command) *batch.Config {
 	setFloat64WithFlag(cfg.Features.OrientationThreshold, "orientation-threshold", &batchConfig.OrientThresh)
 	setBoolWithFlag(cfg.Features.TextlineEnabled, "detect-textline", &batchConfig.DetectTextline)
 	setFloat64WithFlag(cfg.Features.TextlineThreshold, "textline-threshold", &batchConfig.TextlineThresh)
+}
 
-	// Parallel processing settings
+// setParallelProcessingSettings configures parallel processing parameters.
+func setParallelProcessingSettings(cfg *config.Config, batchConfig *batch.Config,
+	setIntWithFlag setIntFunc,
+) {
 	setIntWithFlag(cfg.Batch.Workers, "workers", &batchConfig.Workers)
 	setIntWithFlag(cfg.Pipeline.Parallel.BatchSize, "batch-size", &batchConfig.BatchSize)
 	setIntWithFlag(cfg.Pipeline.Resource.MaxGoroutines, "max-goroutines", &batchConfig.MaxGoroutines)
+}
 
-	// CLI-only settings (no config equivalent)
+// setCLIOnlySettings configures CLI-only parameters that have no config file equivalent.
+func setCLIOnlySettings(cmd *cobra.Command, batchConfig *batch.Config) {
 	batchConfig.MemoryLimitStr, _ = cmd.Flags().GetString("memory-limit")
 	batchConfig.MemoryThreshold, _ = cmd.Flags().GetFloat64("memory-threshold")
 	batchConfig.Recursive, _ = cmd.Flags().GetBool("recursive")
@@ -111,8 +153,6 @@ func configToBatchConfig(cfg *config.Config, cmd *cobra.Command) *batch.Config {
 	batchConfig.ProgressInterval, _ = cmd.Flags().GetDuration("progress-interval")
 	batchConfig.AdaptiveScaling, _ = cmd.Flags().GetBool("adaptive-scaling")
 	batchConfig.Backpressure, _ = cmd.Flags().GetBool("backpressure")
-
-	return batchConfig
 }
 
 func runBatchCommand(cmd *cobra.Command, args []string) error {

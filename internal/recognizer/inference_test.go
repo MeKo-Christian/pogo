@@ -547,18 +547,18 @@ func TestRecognizeBatch_ValidMultipleRegions(t *testing.T) {
 	// Create multiple regions
 	regions := []detector.DetectedRegion{
 		{
-			Polygon: []utils.Point{{X: 20, Y: 20}, {X: 120, Y: 20}, {X: 120, Y: 60}, {X: 20, Y: 60}},
-			Box:     utils.NewBox(20, 20, 120, 60),
+			Polygon:    []utils.Point{{X: 20, Y: 20}, {X: 120, Y: 20}, {X: 120, Y: 60}, {X: 20, Y: 60}},
+			Box:        utils.NewBox(20, 20, 120, 60),
 			Confidence: 0.9,
 		},
 		{
-			Polygon: []utils.Point{{X: 140, Y: 20}, {X: 240, Y: 20}, {X: 240, Y: 60}, {X: 140, Y: 60}},
-			Box:     utils.NewBox(140, 20, 240, 60),
+			Polygon:    []utils.Point{{X: 140, Y: 20}, {X: 240, Y: 20}, {X: 240, Y: 60}, {X: 140, Y: 60}},
+			Box:        utils.NewBox(140, 20, 240, 60),
 			Confidence: 0.8,
 		},
 		{
-			Polygon: []utils.Point{{X: 20, Y: 80}, {X: 120, Y: 80}, {X: 120, Y: 120}, {X: 20, Y: 120}},
-			Box:     utils.NewBox(20, 80, 120, 120),
+			Polygon:    []utils.Point{{X: 20, Y: 80}, {X: 120, Y: 80}, {X: 120, Y: 120}, {X: 20, Y: 120}},
+			Box:        utils.NewBox(20, 80, 120, 120),
 			Confidence: 0.85,
 		},
 	}
@@ -602,8 +602,8 @@ func TestRecognizeBatch_SingleRegion(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 200, 100))
 	regions := []detector.DetectedRegion{
 		{
-			Polygon: []utils.Point{{X: 10, Y: 10}, {X: 190, Y: 10}, {X: 190, Y: 90}, {X: 10, Y: 90}},
-			Box:     utils.NewBox(10, 10, 190, 90),
+			Polygon:    []utils.Point{{X: 10, Y: 10}, {X: 190, Y: 10}, {X: 190, Y: 90}, {X: 10, Y: 90}},
+			Box:        utils.NewBox(10, 10, 190, 90),
 			Confidence: 0.95,
 		},
 	}
@@ -670,7 +670,7 @@ func TestBuildBatchResults(t *testing.T) {
 	require.Len(t, results, len(prepped))
 
 	// Validate first result
-	assert.Equal(t, "ELLO", results[0].Text) // chars at indices 1,2,3,3,4 = E,L,L,O
+	assert.Equal(t, "ELLO", results[0].Text)             // chars at indices 1,2,3,3,4 = E,L,L,O
 	assert.InDelta(t, 0.85, results[0].Confidence, 0.05) // Should be average of probabilities
 	assert.Len(t, results[0].CharConfidences, 5)
 	assert.Len(t, results[0].Indices, 5)
@@ -723,7 +723,7 @@ func TestBuildBatchResults_MismatchedLengths(t *testing.T) {
 	// Remaining results should be empty/default
 	for i := 1; i < len(results); i++ {
 		assert.Empty(t, results[i].Text, "Result %d should be empty", i)
-		assert.Equal(t, 0.0, results[i].Confidence, "Result %d should have zero confidence", i)
+		assert.InEpsilon(t, 0.0, results[i].Confidence, 1e-9, "Result %d should have zero confidence", i)
 		assert.Equal(t, prepped[i].w, results[i].Width, "Result %d should preserve width", i)
 		assert.Equal(t, prepped[i].h, results[i].Height, "Result %d should preserve height", i)
 	}
@@ -768,7 +768,7 @@ func TestRecognizeBatch_Integration(t *testing.T) {
 				{X: float64(b.Dx()/2 - 10), Y: float64(b.Dy()/2 - 10)},
 				{X: 20, Y: float64(b.Dy()/2 - 10)},
 			},
-			Box: utils.NewBox(20, 20, float64(b.Dx()/2-10), float64(b.Dy()/2-10)),
+			Box:        utils.NewBox(20, 20, float64(b.Dx()/2-10), float64(b.Dy()/2-10)),
 			Confidence: 0.9,
 		},
 		{
@@ -778,7 +778,7 @@ func TestRecognizeBatch_Integration(t *testing.T) {
 				{X: float64(b.Dx() - 20), Y: float64(b.Dy()/2 - 10)},
 				{X: float64(b.Dx()/2 + 10), Y: float64(b.Dy()/2 - 10)},
 			},
-			Box: utils.NewBox(float64(b.Dx()/2+10), 20, float64(b.Dx()-20), float64(b.Dy()/2-10)),
+			Box:        utils.NewBox(float64(b.Dx()/2+10), 20, float64(b.Dx()-20), float64(b.Dy()/2-10)),
 			Confidence: 0.85,
 		},
 	}

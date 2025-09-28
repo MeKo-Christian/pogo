@@ -608,7 +608,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
       - [ ] ProcessPDFContext (10%) - PDF processing pipeline
       - [ ] applyOrientationDetection (21%) - document orientation
       - [ ] applyRectification (20%) - document rectification
-    - [ ] Builder pattern: WithDetectorModelPath, WithRecognizerModelPath (0%)
+    - [x] Builder pattern: WithDetectorModelPath, WithRecognizerModelPath
     - [ ] Configuration: orientation setup (14-17%), validation (66%)
   - [x] **Image processing utilities** (92.3% ✅ TARGET ACHIEVED)
 - [x] Create mock ONNX Runtime for testing

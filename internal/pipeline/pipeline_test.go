@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,77 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const (
+	customDetectorPath   = "/custom/detector.onnx"
+	customRecognizerPath = "/custom/recognizer.onnx"
+)
+
+// testModelPathSetter is a helper function to test model path setter methods.
+func testModelPathSetter(t *testing.T, setter func(*Builder, string) *Builder, getter func(Config) string,
+	methodName string,
+) {
+	t.Helper()
+	tests := []struct {
+		name         string
+		path         string
+		expectedPath string
+	}{
+		{
+			name:         fmt.Sprintf("sets %s model path", methodName),
+			path:         fmt.Sprintf("/custom/%s.onnx", methodName),
+			expectedPath: fmt.Sprintf("/custom/%s.onnx", methodName),
+		},
+		{
+			name:         "ignores empty path",
+			path:         "",
+			expectedPath: "", // Should remain default
+		},
+		{
+			name:         "sets relative path",
+			path:         fmt.Sprintf("./models/custom_%s.onnx", methodName),
+			expectedPath: fmt.Sprintf("./models/custom_%s.onnx", methodName),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := NewBuilder()
+			originalPath := getter(b.Config())
+
+			// Apply the method
+			result := setter(b, tt.path)
+
+			// Should return the same builder for chaining
+			assert.Equal(t, b, result)
+
+			// Check the configuration
+			cfg := b.Config()
+			if tt.path == "" {
+				// Empty path should not change the original path
+				assert.Equal(t, originalPath, getter(cfg))
+			} else {
+				assert.Equal(t, tt.expectedPath, getter(cfg))
+			}
+		})
+	}
+}
+
+func TestBuilder_WithDetectorModelPath(t *testing.T) {
+	testModelPathSetter(t,
+		func(b *Builder, path string) *Builder { return b.WithDetectorModelPath(path) },
+		func(cfg Config) string { return cfg.Detector.ModelPath },
+		"detector",
+	)
+}
+
+func TestBuilder_WithRecognizerModelPath(t *testing.T) {
+	testModelPathSetter(t,
+		func(b *Builder, path string) *Builder { return b.WithRecognizerModelPath(path) },
+		func(cfg Config) string { return cfg.Recognizer.ModelPath },
+		"recognizer",
+	)
+}
 
 func TestBuilder_Validate_MissingModels(t *testing.T) {
 	b := NewBuilder().WithModelsDir("/nonexistent/path")
@@ -70,103 +142,10 @@ func TestBuilder_Build_SkipIfNoONNXOrNoRealModels(t *testing.T) {
 	}
 }
 
-func TestBuilder_WithDetectorModelPath(t *testing.T) {
-	tests := []struct {
-		name         string
-		path         string
-		expectedPath string
-	}{
-		{
-			name:         "sets detector model path",
-			path:         "/custom/detector.onnx",
-			expectedPath: "/custom/detector.onnx",
-		},
-		{
-			name:         "ignores empty path",
-			path:         "",
-			expectedPath: "", // Should remain default
-		},
-		{
-			name:         "sets relative path",
-			path:         "./models/custom_detector.onnx",
-			expectedPath: "./models/custom_detector.onnx",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			b := NewBuilder()
-			originalPath := b.Config().Detector.ModelPath
-
-			// Apply the method
-			result := b.WithDetectorModelPath(tt.path)
-
-			// Should return the same builder for chaining
-			assert.Equal(t, b, result)
-
-			// Check the configuration
-			cfg := b.Config()
-			if tt.path == "" {
-				// Empty path should not change the original path
-				assert.Equal(t, originalPath, cfg.Detector.ModelPath)
-			} else {
-				assert.Equal(t, tt.expectedPath, cfg.Detector.ModelPath)
-			}
-		})
-	}
-}
-
-func TestBuilder_WithRecognizerModelPath(t *testing.T) {
-	tests := []struct {
-		name         string
-		path         string
-		expectedPath string
-	}{
-		{
-			name:         "sets recognizer model path",
-			path:         "/custom/recognizer.onnx",
-			expectedPath: "/custom/recognizer.onnx",
-		},
-		{
-			name:         "ignores empty path",
-			path:         "",
-			expectedPath: "", // Should remain default
-		},
-		{
-			name:         "sets relative path",
-			path:         "./models/custom_recognizer.onnx",
-			expectedPath: "./models/custom_recognizer.onnx",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			b := NewBuilder()
-			originalPath := b.Config().Recognizer.ModelPath
-
-			// Apply the method
-			result := b.WithRecognizerModelPath(tt.path)
-
-			// Should return the same builder for chaining
-			assert.Equal(t, b, result)
-
-			// Check the configuration
-			cfg := b.Config()
-			if tt.path == "" {
-				// Empty path should not change the original path
-				assert.Equal(t, originalPath, cfg.Recognizer.ModelPath)
-			} else {
-				assert.Equal(t, tt.expectedPath, cfg.Recognizer.ModelPath)
-			}
-		})
-	}
-}
-
 func TestBuilder_WithDetectorModelPath_Integration(t *testing.T) {
 	// Test that the detector model path override works with other builder methods
 	// Note: WithModelsDir will override explicit model paths due to UpdateModelPath call
 	b := NewBuilder()
-	customDetectorPath := "/custom/detector.onnx"
 
 	// Set a custom detector path and then apply other configurations (avoiding WithModelsDir)
 	b.WithDetectorModelPath(customDetectorPath).
@@ -185,7 +164,6 @@ func TestBuilder_WithRecognizerModelPath_Integration(t *testing.T) {
 	// Test that the recognizer model path override works with other builder methods
 	// Note: WithModelsDir will override explicit model paths due to UpdateModelPath call
 	b := NewBuilder()
-	customRecognizerPath := "/custom/recognizer.onnx"
 
 	// Set a custom recognizer path and then apply other configurations (avoiding WithModelsDir)
 	b.WithRecognizerModelPath(customRecognizerPath).
@@ -203,8 +181,6 @@ func TestBuilder_WithRecognizerModelPath_Integration(t *testing.T) {
 func TestBuilder_ModelPathPrecedence(t *testing.T) {
 	// Test that explicit model paths take precedence over WithModelsDir
 	b := NewBuilder()
-	customDetectorPath := "/custom/detector.onnx"
-	customRecognizerPath := "/custom/recognizer.onnx"
 
 	// First set models dir, then override with explicit paths
 	b.WithModelsDir("/models/dir").
@@ -230,9 +206,6 @@ func TestBuilder_ModelPathOverrideAfterModelsDir(t *testing.T) {
 	originalRecognizerPath := b.Config().Recognizer.ModelPath
 
 	// Now override with explicit paths
-	customDetectorPath := "/custom/detector.onnx"
-	customRecognizerPath := "/custom/recognizer.onnx"
-
 	b.WithDetectorModelPath(customDetectorPath).
 		WithRecognizerModelPath(customRecognizerPath)
 
@@ -248,8 +221,6 @@ func TestBuilder_ModelPathOverrideAfterModelsDir(t *testing.T) {
 func TestBuilder_WithModelsDirOverridesExplicitPaths(t *testing.T) {
 	// Test that WithModelsDir overrides explicitly set model paths due to UpdateModelPath call
 	b := NewBuilder()
-	customDetectorPath := "/custom/detector.onnx"
-	customRecognizerPath := "/custom/recognizer.onnx"
 
 	// First set explicit paths
 	b.WithDetectorModelPath(customDetectorPath).

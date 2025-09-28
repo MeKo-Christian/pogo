@@ -63,7 +63,8 @@ type AdaptiveThresholdStats struct {
 
 // CalculateAdaptiveThresholds analyzes a probability map and calculates optimal thresholds.
 func CalculateAdaptiveThresholds(probMap []float32, width, height int,
-	config AdaptiveThresholdConfig) AdaptiveThresholds {
+	config AdaptiveThresholdConfig,
+) AdaptiveThresholds {
 	if !config.Enabled || len(probMap) != width*height || len(probMap) == 0 {
 		return AdaptiveThresholds{
 			DbThresh:   0.3, // Default values
