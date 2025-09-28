@@ -583,11 +583,40 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 9.1 Unit Testing Suite
 
-- [ ] Achieve >90% code coverage for core components:
-  - [ ] Image processing utilities
-  - [ ] Detection post-processing algorithms
-  - [ ] Recognition decoding logic
-  - [ ] Pipeline orchestration
+- [ ] Achieve >90% code coverage for core components (1/4 complete):
+  - [~] **Detection post-processing algorithms** (84.6% - closest to target)
+    - [x] NMS algorithms (93.3%+ coverage): NonMaxSuppression, AdaptiveNMS, SoftNMS
+    - [x] Contour tracing (92.9%+ coverage): Moore-neighbor algorithm, boundary detection
+    - [x] Morphology operations (93.8%+ coverage): dilate, erode, smooth functions
+    - [x] Adaptive thresholding (94%+ coverage): Otsu, bimodality, dynamic thresholds
+    - [ ] Fix failing adaptive threshold tests (3 test failures blocking progress)
+    - [ ] Model management: UpdateModelPath (0%), DetectRegions (0%)
+    - [ ] Post-processing variants: PostProcessDBWithNMS (0%)
+  - [ ] **Recognition decoding logic** (54.5% - major inference gaps)
+    - [x] CTC decoding (90%+ coverage): CTCCollapse, argmax, softmax computation
+    - [x] Charset management (87%+ coverage): dictionary loading, character mapping
+    - [x] Text processing (88%+ coverage): normalization, cleaning, validation
+    - [ ] **CRITICAL (0% coverage)**: Core inference pipeline in inference.go
+      - [ ] RecognizeRegion() - single region text recognition
+      - [ ] RecognizeBatch() - batch processing capabilities
+      - [ ] preprocessRegion() - region image preprocessing
+      - [ ] runInference() - ONNX model execution
+      - [ ] decodeOutput() - output tensor to text conversion
+    - [ ] Region preprocessing: CropRegionImage (50%), orientation handling
+    - [ ] Model lifecycle: warmup, configuration getters (0-27% coverage)
+  - [ ] **Pipeline orchestration** (54.3% - core processing missing)
+    - [x] Progress tracking (100% coverage): console, log, multi callbacks
+    - [x] Resource management (85%+ coverage): memory monitoring, goroutine limits
+    - [x] Result formatting (66-90% coverage): JSON, CSV, plain text output
+    - [ ] **CRITICAL (0-25% coverage)**: Core processing functions
+      - [ ] ProcessImagesParallelContext (25%) - parallel image processing
+      - [ ] ProcessImagesContext (18%) - context-aware processing
+      - [ ] ProcessPDFContext (10%) - PDF processing pipeline
+      - [ ] applyOrientationDetection (21%) - document orientation
+      - [ ] applyRectification (20%) - document rectification
+    - [ ] Builder pattern: WithDetectorModelPath, WithRecognizerModelPath (0%)
+    - [ ] Configuration: orientation setup (14-17%), validation (66%)
+  - [x] **Image processing utilities** (92.3%)
 - [x] Create mock ONNX Runtime for testing
 - [ ] Implement property-based testing for algorithms
 - [ ] Add edge case testing

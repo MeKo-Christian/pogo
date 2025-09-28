@@ -162,3 +162,221 @@ func TestDrawRectAndPolygon(t *testing.T) {
 		t.Fatalf("expected polygon pixel colored")
 	}
 }
+
+// Test BatchLoadImages function.
+func TestBatchLoadImages(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create test images with unique names
+	path1 := filepath.Join(dir, "test1.png")
+	path2 := filepath.Join(dir, "test2.png")
+	invalidPath := filepath.Join(dir, "nonexistent.png")
+
+	// Write first image
+	img1 := image.NewRGBA(image.Rect(0, 0, 10, 15))
+	f1, err := os.Create(path1)
+	require.NoError(t, err)
+	require.NoError(t, png.Encode(f1, img1))
+	require.NoError(t, f1.Close())
+
+	// Write second image
+	img2 := image.NewRGBA(image.Rect(0, 0, 20, 25))
+	f2, err := os.Create(path2)
+	require.NoError(t, err)
+	require.NoError(t, png.Encode(f2, img2))
+	require.NoError(t, f2.Close())
+
+	paths := []string{path1, path2, invalidPath}
+	results := BatchLoadImages(paths)
+
+	require.Len(t, results, 3)
+
+	// Check first valid image
+	require.Equal(t, path1, results[0].Path)
+	require.NotNil(t, results[0].Img)
+	require.NoError(t, results[0].Err)
+	require.Equal(t, 10, results[0].Meta.Width)
+	require.Equal(t, 15, results[0].Meta.Height)
+
+	// Check second valid image
+	require.Equal(t, path2, results[1].Path)
+	require.NotNil(t, results[1].Img)
+	require.NoError(t, results[1].Err)
+	require.Equal(t, 20, results[1].Meta.Width)
+	require.Equal(t, 25, results[1].Meta.Height)
+
+	// Check invalid image
+	require.Equal(t, invalidPath, results[2].Path)
+	require.Nil(t, results[2].Img)
+	require.Error(t, results[2].Err)
+}
+
+func TestBatchLoadImages_EmptySlice(t *testing.T) {
+	results := BatchLoadImages([]string{})
+	require.Empty(t, results)
+}
+
+// Test Box geometric operations.
+func TestNewBox(t *testing.T) {
+	tests := []struct {
+		name           string
+		x1, y1, x2, y2 float64
+		expectedBox    Box
+	}{
+		{
+			name: "normal coordinates",
+			x1:   1, y1: 2, x2: 5, y2: 8,
+			expectedBox: Box{MinX: 1, MinY: 2, MaxX: 5, MaxY: 8},
+		},
+		{
+			name: "swapped x coordinates",
+			x1:   5, y1: 2, x2: 1, y2: 8,
+			expectedBox: Box{MinX: 1, MinY: 2, MaxX: 5, MaxY: 8},
+		},
+		{
+			name: "swapped y coordinates",
+			x1:   1, y1: 8, x2: 5, y2: 2,
+			expectedBox: Box{MinX: 1, MinY: 2, MaxX: 5, MaxY: 8},
+		},
+		{
+			name: "all swapped",
+			x1:   5, y1: 8, x2: 1, y2: 2,
+			expectedBox: Box{MinX: 1, MinY: 2, MaxX: 5, MaxY: 8},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			box := NewBox(tt.x1, tt.y1, tt.x2, tt.y2)
+			require.Equal(t, tt.expectedBox, box)
+		})
+	}
+}
+
+func TestBox_Width(t *testing.T) {
+	box := Box{MinX: 2, MinY: 3, MaxX: 7, MaxY: 10}
+	require.Equal(t, 5.0, box.Width())
+}
+
+func TestBox_Height(t *testing.T) {
+	box := Box{MinX: 2, MinY: 3, MaxX: 7, MaxY: 10}
+	require.Equal(t, 7.0, box.Height())
+}
+
+func TestBox_ToRect(t *testing.T) {
+	bounds := image.Rect(0, 0, 100, 100)
+
+	tests := []struct {
+		name     string
+		box      Box
+		expected image.Rectangle
+	}{
+		{
+			name:     "normal box within bounds",
+			box:      Box{MinX: 10.3, MinY: 20.7, MaxX: 30.1, MaxY: 40.9},
+			expected: image.Rect(10, 20, 31, 41),
+		},
+		{
+			name:     "box exceeding bounds",
+			box:      Box{MinX: -5, MinY: -10, MaxX: 150, MaxY: 200},
+			expected: image.Rect(0, 0, 100, 100),
+		},
+		{
+			name:     "valid box coordinates",
+			box:      Box{MinX: 20, MinY: 30, MaxX: 50, MaxY: 60},
+			expected: image.Rect(20, 30, 50, 60),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.box.ToRect(bounds)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestClampInt(t *testing.T) {
+	tests := []struct {
+		name      string
+		v, lo, hi int
+		expected  int
+	}{
+		{"within range", 5, 1, 10, 5},
+		{"below range", -2, 1, 10, 1},
+		{"above range", 15, 1, 10, 10},
+		{"at lower bound", 1, 1, 10, 1},
+		{"at upper bound", 10, 1, 10, 10},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := clampInt(tt.v, tt.lo, tt.hi)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestOffsetPoint(t *testing.T) {
+	point := Point{X: 10, Y: 20}
+	result := OffsetPoint(point, 5, -3)
+	expected := Point{X: 15, Y: 17}
+	require.Equal(t, expected, result)
+}
+
+func TestOffsetPoints(t *testing.T) {
+	points := []Point{{X: 1, Y: 2}, {X: 3, Y: 4}, {X: 5, Y: 6}}
+	result := OffsetPoints(points, 10, -5)
+	expected := []Point{{X: 11, Y: -3}, {X: 13, Y: -1}, {X: 15, Y: 1}}
+	require.Equal(t, expected, result)
+}
+
+func TestCropImageBox(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 10, 8))
+
+	// Fill with test pattern
+	for y := range 8 {
+		for x := range 10 {
+			img.Set(x, y, color.RGBA{R: uint8(x * 25), G: uint8(y * 30), A: 255})
+		}
+	}
+
+	box := Box{MinX: 2, MinY: 1, MaxX: 6, MaxY: 5}
+	cropped := CropImageBox(img, box)
+
+	bounds := cropped.Bounds()
+	require.Equal(t, 4, bounds.Dx()) // 6-2 = 4
+	require.Equal(t, 4, bounds.Dy()) // 5-1 = 4
+
+	// Verify that cropping worked by checking bounds
+	require.Equal(t, 0, bounds.Min.X)
+	require.Equal(t, 0, bounds.Min.Y)
+	require.NotNil(t, cropped)
+}
+
+func TestRotate180(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 3, 2))
+	img.Set(0, 0, color.RGBA{R: 255, A: 255}) // top-left red
+	img.Set(2, 1, color.RGBA{B: 255, A: 255}) // bottom-right blue
+
+	rotated := Rotate180(img)
+
+	// Verify dimensions remain the same
+	bounds := rotated.Bounds()
+	require.Equal(t, 3, bounds.Dx())
+	require.Equal(t, 2, bounds.Dy())
+	require.NotNil(t, rotated)
+}
+
+func TestRotate270(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 4, 2))
+	img.Set(0, 0, color.RGBA{R: 255, A: 255}) // top-left red
+
+	rotated := Rotate270(img)
+
+	// Original 4x2 becomes 2x4 after 270° rotation
+	bounds := rotated.Bounds()
+	require.Equal(t, 2, bounds.Dx())
+	require.Equal(t, 4, bounds.Dy())
+	require.NotNil(t, rotated)
+}

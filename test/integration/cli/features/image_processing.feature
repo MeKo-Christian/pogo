@@ -27,7 +27,7 @@ Feature: Image OCR Processing
     Then the CSV should contain coordinate columns
 
   Scenario: Process multiple images
-    When I run "pogo image testdata/images/simple_text.png testdata/images/complex_layout.png"
+    When I run "pogo image testdata/images/simple/simple_1_Hello.png testdata/images/simple/simple_2_World.png"
     Then the command should succeed
     And the output should contain results for all images
 
@@ -42,7 +42,7 @@ Feature: Image OCR Processing
     And the output should contain text from corrected orientation
 
   Scenario: Process image with text line orientation detection
-    When I run "pogo image testdata/images/mixed_orientation.png --detect-textline"
+    When I run "pogo image testdata/images/rotated/rotated_90.png --detect-textline"
     Then the command should succeed
     And individual text lines should be corrected for orientation
 

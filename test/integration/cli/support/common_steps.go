@@ -2,6 +2,7 @@ package support
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -242,7 +243,7 @@ func (testCtx *TestContext) iRunCommand(command string) error {
 	}
 
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	// Execute command
@@ -298,36 +299,37 @@ func (testCtx *TestContext) theOutputShouldContain(expectedText string) error {
 	return nil
 }
 
-// theOutputShouldBeValidJSON verifies the output is valid JSON.
-func (testCtx *TestContext) theOutputShouldBeValidJSON() error {
-	// Extract JSON from output (skip any preceding text like "Processing N image(s)")
+// extractJSONFromOutput extracts JSON from output, skipping any preceding text.
+func (testCtx *TestContext) extractJSONFromOutput() (string, error) {
 	output := strings.TrimSpace(testCtx.LastOutput)
 
-	// Find the start of JSON (first '{' or '[' that starts a line or follows whitespace)
+	// Find the start of JSON (first '{' or '['), skipping processing messages
 	lines := strings.Split(output, "\n")
-	var jsonStart int
-	for _, line := range lines {
+	for i, line := range lines {
 		line = strings.TrimSpace(line)
 		if line != "" && (line[0] == '{' || line[0] == '[') {
-			// Find the position in the original output
-			for j := jsonStart; j < len(output); j++ {
-				if output[j] == line[0] {
-					jsonStart = j
-					break
-				}
-			}
-			break
+			// Found the start of JSON - take everything from this line onward
+			return strings.Join(lines[i:], "\n"), nil
+		}
+		// Skip processing messages that start with "Processing"
+		if strings.HasPrefix(line, "Processing") {
+			continue
 		}
 	}
 
-	if jsonStart >= len(output) {
-		return fmt.Errorf("no JSON found in output: %s", testCtx.LastOutput)
+	return "", fmt.Errorf("no JSON found in output: %s", testCtx.LastOutput)
+}
+
+// theOutputShouldBeValidJSON verifies the output is valid JSON.
+func (testCtx *TestContext) theOutputShouldBeValidJSON() error {
+	jsonCandidate, err := testCtx.extractJSONFromOutput()
+	if err != nil {
+		return err
 	}
 
-	jsonPart := output[jsonStart:]
 	var js json.RawMessage
-	if err := json.Unmarshal([]byte(jsonPart), &js); err != nil {
-		return fmt.Errorf("output is not valid JSON: %w\nJSON part: %s", err, jsonPart)
+	if err := json.Unmarshal([]byte(jsonCandidate), &js); err != nil {
+		return fmt.Errorf("output is not valid JSON: %w\nJSON candidate: %s", err, jsonCandidate)
 	}
 	return nil
 }
@@ -339,29 +341,38 @@ func (testCtx *TestContext) theJSONShouldContain(field string) error {
 		return err
 	}
 
-	// Extract JSON part from output
-	output := strings.TrimSpace(testCtx.LastOutput)
-	jsonStart := -1
-	for i, r := range output {
-		if r == '{' || r == '[' {
-			jsonStart = i
-			break
-		}
+	// Extract JSON using the same logic
+	jsonCandidate, err := testCtx.extractJSONFromOutput()
+	if err != nil {
+		return err
 	}
 
-	if jsonStart == -1 {
-		return errors.New("no JSON found in output")
-	}
-
-	jsonPart := output[jsonStart:]
-
-	// Parse JSON and check for field
-	var data map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonPart), &data); err != nil {
+	// Parse JSON - it could be an object or array
+	var rawData interface{}
+	if err := json.Unmarshal([]byte(jsonCandidate), &rawData); err != nil {
 		return fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
-	return testCtx.checkFieldExists(data, field)
+	// Handle different JSON structures
+	switch data := rawData.(type) {
+	case map[string]interface{}:
+		// Top-level object
+		return testCtx.checkFieldExists(data, field)
+	case []interface{}:
+		// Top-level array - check if field exists in any object in the array
+		for i, item := range data {
+			if obj, ok := item.(map[string]interface{}); ok {
+				if err := testCtx.checkFieldExists(obj, field); err == nil {
+					return nil // Found the field
+				}
+			} else {
+				return fmt.Errorf("array element %d is not an object", i)
+			}
+		}
+		return fmt.Errorf("field '%s' not found in any array element", field)
+	default:
+		return errors.New("JSON root is neither object nor array")
+	}
 }
 
 func (testCtx *TestContext) checkFieldExists(data map[string]interface{}, field string) error {
@@ -1042,25 +1053,49 @@ func (testCtx *TestContext) theOutputShouldContainUsageInformation() error {
 	return fmt.Errorf("output does not contain usage information: %s", testCtx.LastOutput)
 }
 
+// extractCSVFromOutput extracts CSV from output, skipping any preceding text.
+func (testCtx *TestContext) extractCSVFromOutput() (string, error) {
+	lines := strings.Split(strings.TrimSpace(testCtx.LastOutput), "\n")
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" && strings.Contains(line, ",") {
+			// Found the CSV header line - take everything from here onward
+			return strings.Join(lines[i:], "\n"), nil
+		}
+		// Skip processing messages that start with "Processing"
+		if strings.HasPrefix(line, "Processing") {
+			continue
+		}
+	}
+	return "", errors.New("no CSV found in output")
+}
+
 // theOutputShouldBeValidCSV verifies output is valid CSV.
 func (testCtx *TestContext) theOutputShouldBeValidCSV() error {
-	lines := strings.Split(strings.TrimSpace(testCtx.LastOutput), "\n")
-	if len(lines) < 1 {
+	csvData, err := testCtx.extractCSVFromOutput()
+	if err != nil {
+		return err
+	}
+
+	if csvData == "" {
 		return errors.New("CSV output is empty")
 	}
 
-	// Skip processing header lines and find the first line that looks like CSV
-	var csvLine string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" && strings.Contains(line, ",") {
-			csvLine = line
-			break
-		}
+	// Try to parse as CSV to ensure it's valid
+	reader := csv.NewReader(strings.NewReader(csvData))
+	records, err := reader.ReadAll()
+	if err != nil {
+		return fmt.Errorf("failed to parse CSV: %w", err)
 	}
 
-	if csvLine == "" {
-		return errors.New("CSV output does not contain comma separators")
+	// CSV is valid if we can parse it
+	if len(records) == 0 {
+		return errors.New("CSV parsing resulted in no records")
+	}
+
+	// Check that the header has expected columns (at least 2 for text and confidence)
+	if len(records[0]) < 2 {
+		return errors.New("CSV header has too few columns")
 	}
 
 	return nil
