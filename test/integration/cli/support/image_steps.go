@@ -43,7 +43,7 @@ func (testCtx *TestContext) theCSVShouldContainCoordinateColumns() error {
 	}
 
 	// Find the CSV header line (first line with commas)
-	var csvStart = -1
+	csvStart := -1
 	for i, line := range lines {
 		line = strings.TrimSpace(line)
 		if line != "" && strings.Contains(line, ",") {
