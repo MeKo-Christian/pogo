@@ -9,54 +9,11 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
-	"github.com/MeKo-Tech/pogo/internal/models"
 	"github.com/MeKo-Tech/pogo/internal/utils"
 	onnxrt "github.com/yalue/onnxruntime_go"
 )
-
-// Config controls document rectification behavior using a UV mapping model.
-type Config struct {
-	Enabled       bool
-	ModelPath     string
-	MaskThreshold float64 // 0..1, fraction of mask to consider valid
-	OutputHeight  int     // target output height for rectified page (advisory)
-	NumThreads    int
-	// Quality gating
-	MinMaskCoverage  float64 // min fraction of pixels above MaskThreshold to consider rectification
-	MinRectAreaRatio float64 // min rect area as fraction of image area in resized space
-	MinRectAspect    float64 // min acceptable aspect ratio (width/height)
-	MaxRectAspect    float64 // max acceptable aspect ratio (width/height)
-	// Debug dumping
-	DebugDir string // if non-empty, writes mask and overlay PNGs here
-}
-
-// DefaultConfig returns sensible defaults for rectification.
-func DefaultConfig() Config {
-	return Config{
-		Enabled:          false,
-		ModelPath:        models.GetLayoutModelPath("", models.LayoutUVDoc),
-		MaskThreshold:    0.5,
-		OutputHeight:     1024,
-		NumThreads:       0,
-		MinMaskCoverage:  0.05,
-		MinRectAreaRatio: 0.20,
-		MinRectAspect:    0.20,
-		MaxRectAspect:    8.0,
-		DebugDir:         "",
-	}
-}
-
-// UpdateModelPath relocates the model under the provided models directory.
-func (c *Config) UpdateModelPath(modelsDir string) {
-	filename := filepath.Base(c.ModelPath)
-	if filename == "." || filename == "" || filename == "/" {
-		filename = models.LayoutUVDoc
-	}
-	c.ModelPath = models.GetLayoutModelPath(modelsDir, filename)
-}
 
 // Rectifier runs the UVDoc model and prepares data for perspective correction.
 // Minimal CPU-only version: runs the model and currently returns the original image.
@@ -94,53 +51,6 @@ func validateModelFile(modelPath string) error {
 		return fmt.Errorf("rectify model not found: %s", modelPath)
 	}
 	return nil
-}
-
-func createONNXSession(cfg Config) (
-	*onnxrt.DynamicAdvancedSession,
-	onnxrt.InputOutputInfo,
-	onnxrt.InputOutputInfo,
-	error,
-) {
-	if err := setONNXLibraryPath(); err != nil {
-		return nil, onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{}, err
-	}
-
-	if !onnxrt.IsInitialized() {
-		if err := onnxrt.InitializeEnvironment(); err != nil {
-			return nil, onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{}, fmt.Errorf("init onnx: %w", err)
-		}
-	}
-
-	inputs, outputs, err := onnxrt.GetInputOutputInfo(cfg.ModelPath)
-	if err != nil {
-		return nil, onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{}, fmt.Errorf("io info: %w", err)
-	}
-
-	if len(inputs) != 1 || len(outputs) != 1 {
-		return nil, onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{},
-			fmt.Errorf("unexpected io (in:%d out:%d)", len(inputs), len(outputs))
-	}
-
-	in := inputs[0]
-	out := outputs[0]
-
-	opts, err := onnxrt.NewSessionOptions()
-	if err != nil {
-		return nil, onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{}, fmt.Errorf("session opts: %w", err)
-	}
-	defer func() { _ = opts.Destroy() }()
-
-	if cfg.NumThreads > 0 {
-		_ = opts.SetIntraOpNumThreads(cfg.NumThreads)
-	}
-
-	sess, err := onnxrt.NewDynamicAdvancedSession(cfg.ModelPath, []string{in.Name}, []string{out.Name}, opts)
-	if err != nil {
-		return nil, onnxrt.InputOutputInfo{}, onnxrt.InputOutputInfo{}, fmt.Errorf("session: %w", err)
-	}
-
-	return sess, in, out, nil
 }
 
 // Close releases ONNX resources.
@@ -369,86 +279,6 @@ func (r *Rectifier) transformAndWarpImage(img, resized image.Image, rect []utils
 	}
 
 	return dst, nil
-}
-
-// setONNXLibraryPath mirrors orientation’s helper to prefer the project-local runtime.
-func setONNXLibraryPath() error {
-	// Try system paths first
-	if path := findSystemONNXLibrary(); path != "" {
-		onnxrt.SetSharedLibraryPath(path)
-		return nil
-	}
-
-	// Try project-relative path
-	projectLib, err := findProjectONNXLibrary()
-	if err != nil {
-		return err
-	}
-	onnxrt.SetSharedLibraryPath(projectLib)
-	return nil
-}
-
-func findSystemONNXLibrary() string {
-	systemPaths := []string{
-		"/usr/local/lib/libonnxruntime.so",
-		"/usr/lib/libonnxruntime.so",
-		"/opt/onnxruntime/cpu/lib/libonnxruntime.so",
-	}
-	for _, path := range systemPaths {
-		if _, err := os.Stat(path); err == nil {
-			return path
-		}
-	}
-	return ""
-}
-
-func findProjectONNXLibrary() (string, error) {
-	root, err := findProjectRoot()
-	if err != nil {
-		return "", err
-	}
-
-	libName, err := getONNXLibraryName()
-	if err != nil {
-		return "", err
-	}
-
-	libPath := filepath.Join(root, "onnxruntime", "lib", libName)
-	if _, err := os.Stat(libPath); err != nil {
-		return "", fmt.Errorf("ONNX Runtime library not found at %s", libPath)
-	}
-	return libPath, nil
-}
-
-func findProjectRoot() (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	root := cwd
-	for {
-		if _, err := os.Stat(filepath.Join(root, "go.mod")); err == nil {
-			return root, nil
-		}
-		parent := filepath.Dir(root)
-		if parent == root {
-			return "", errors.New("could not find project root")
-		}
-		root = parent
-	}
-}
-
-func getONNXLibraryName() (string, error) {
-	switch runtime.GOOS {
-	case "linux":
-		return "libonnxruntime.so", nil
-	case "darwin":
-		return "libonnxruntime.dylib", nil
-	case "windows":
-		return "onnxruntime.dll", nil
-	default:
-		return "", fmt.Errorf("unsupported OS: %s", runtime.GOOS)
-	}
 }
 
 // hypot returns Euclidean distance between points a and b.

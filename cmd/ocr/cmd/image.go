@@ -15,6 +15,7 @@ import (
 	"github.com/MeKo-Tech/pogo/internal/pipeline"
 	"github.com/MeKo-Tech/pogo/internal/utils"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 const (
@@ -46,31 +47,35 @@ Examples:
 			return errors.New("no input files provided")
 		}
 
-		confFlag, _ := cmd.Flags().GetFloat64("confidence")
-		modelsDir, _ := cmd.InheritedFlags().GetString("models-dir")
-		detModel, _ := cmd.Flags().GetString("det-model")
-		recModel, _ := cmd.Flags().GetString("rec-model")
-		polyMode, _ := cmd.Flags().GetString("det-polygon-mode")
-		lang, _ := cmd.Flags().GetString("language")
-		dictCSV, _ := cmd.Flags().GetString("dict")
-		dictLangs, _ := cmd.Flags().GetString("dict-langs")
-		recH, _ := cmd.Flags().GetInt("rec-height")
-		minRecConf, _ := cmd.Flags().GetFloat64("min-rec-conf")
-		overlayDir, _ := cmd.Flags().GetString("overlay-dir")
-		format, _ := cmd.Flags().GetString("format")
-		outputFile, _ := cmd.Flags().GetString("output")
-		detectOrientation, _ := cmd.Flags().GetBool("detect-orientation")
-		orientThresh, _ := cmd.Flags().GetFloat64("orientation-threshold")
-		detectTextline, _ := cmd.Flags().GetBool("detect-textline")
-		textlineThresh, _ := cmd.Flags().GetFloat64("textline-threshold")
-		rectify, _ := cmd.Flags().GetBool("rectify")
-		rectifyModel, _ := cmd.Flags().GetString("rectify-model")
-		rectifyMask, _ := cmd.Flags().GetFloat64("rectify-mask-threshold")
-		rectifyHeight, _ := cmd.Flags().GetInt("rectify-height")
-		rectifyDebugDir, _ := cmd.Flags().GetString("rectify-debug-dir")
-		useGPU, _ := cmd.Flags().GetBool("gpu")
-		gpuDevice, _ := cmd.Flags().GetInt("gpu-device")
-		gpuMemLimit, _ := cmd.Flags().GetString("gpu-mem-limit")
+		// Get configuration (includes CLI flags, config file, env vars, and defaults)
+		cfg := GetConfig()
+
+		// Extract values from configuration for backwards compatibility
+		confFlag := float64(cfg.Pipeline.Detector.DbBoxThresh)
+		modelsDir := cfg.ModelsDir
+		detModel := cfg.Pipeline.Detector.ModelPath
+		recModel := cfg.Pipeline.Recognizer.ModelPath
+		polyMode := cfg.Pipeline.Detector.PolygonMode
+		lang := cfg.Pipeline.Recognizer.Language
+		dictCSV := cfg.Pipeline.Recognizer.DictPath
+		dictLangs := cfg.Pipeline.Recognizer.DictLangs
+		recH := cfg.Pipeline.Recognizer.ImageHeight
+		minRecConf := cfg.Pipeline.Recognizer.MinConfidence
+		overlayDir := cfg.Output.OverlayDir
+		format := cfg.Output.Format
+		outputFile := cfg.Output.File
+		detectOrientation := cfg.Features.OrientationEnabled
+		orientThresh := cfg.Features.OrientationThreshold
+		detectTextline := cfg.Features.TextlineEnabled
+		textlineThresh := cfg.Features.TextlineThreshold
+		rectify := cfg.Features.RectificationEnabled
+		rectifyModel := cfg.Features.RectificationModelPath
+		rectifyMask := cfg.Features.RectificationThreshold
+		rectifyHeight := cfg.Features.RectificationHeight
+		rectifyDebugDir := cfg.Features.RectificationDebugDir
+		useGPU := cfg.GPU.Enabled
+		gpuDevice := cfg.GPU.Device
+		gpuMemLimit := cfg.GPU.MemoryLimit
 
 		// Validate confidence threshold
 		if confFlag < 0 || confFlag > 1 {
@@ -396,6 +401,32 @@ func init() {
 
 	// Detection polygon mode: minrect (default) or contour
 	imageCmd.Flags().String("det-polygon-mode", "minrect", "detector polygon mode: minrect or contour")
+
+	// Bind flags to viper configuration keys
+	viper.BindPFlag("output.format", imageCmd.Flags().Lookup("format"))
+	viper.BindPFlag("output.file", imageCmd.Flags().Lookup("output"))
+	viper.BindPFlag("pipeline.detector.db_box_thresh", imageCmd.Flags().Lookup("confidence"))
+	viper.BindPFlag("features.orientation_enabled", imageCmd.Flags().Lookup("detect-orientation"))
+	viper.BindPFlag("features.orientation_threshold", imageCmd.Flags().Lookup("orientation-threshold"))
+	viper.BindPFlag("pipeline.recognizer.language", imageCmd.Flags().Lookup("language"))
+	viper.BindPFlag("pipeline.recognizer.dict_path", imageCmd.Flags().Lookup("dict"))
+	viper.BindPFlag("pipeline.recognizer.dict_langs", imageCmd.Flags().Lookup("dict-langs"))
+	viper.BindPFlag("pipeline.recognizer.image_height", imageCmd.Flags().Lookup("rec-height"))
+	viper.BindPFlag("pipeline.recognizer.min_confidence", imageCmd.Flags().Lookup("min-rec-conf"))
+	viper.BindPFlag("output.overlay_dir", imageCmd.Flags().Lookup("overlay-dir"))
+	viper.BindPFlag("pipeline.detector.model_path", imageCmd.Flags().Lookup("det-model"))
+	viper.BindPFlag("pipeline.recognizer.model_path", imageCmd.Flags().Lookup("rec-model"))
+	viper.BindPFlag("features.textline_enabled", imageCmd.Flags().Lookup("detect-textline"))
+	viper.BindPFlag("features.textline_threshold", imageCmd.Flags().Lookup("textline-threshold"))
+	viper.BindPFlag("features.rectification_enabled", imageCmd.Flags().Lookup("rectify"))
+	viper.BindPFlag("features.rectification_model_path", imageCmd.Flags().Lookup("rectify-model"))
+	viper.BindPFlag("features.rectification_threshold", imageCmd.Flags().Lookup("rectify-mask-threshold"))
+	viper.BindPFlag("features.rectification_height", imageCmd.Flags().Lookup("rectify-height"))
+	viper.BindPFlag("features.rectification_debug_dir", imageCmd.Flags().Lookup("rectify-debug-dir"))
+	viper.BindPFlag("gpu.enabled", imageCmd.Flags().Lookup("gpu"))
+	viper.BindPFlag("gpu.device", imageCmd.Flags().Lookup("gpu-device"))
+	viper.BindPFlag("gpu.memory_limit", imageCmd.Flags().Lookup("gpu-mem-limit"))
+	viper.BindPFlag("pipeline.detector.polygon_mode", imageCmd.Flags().Lookup("det-polygon-mode"))
 
 	// Ensure subcommand help prints expected sections when executed directly in tests
 	imageCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {

@@ -5,8 +5,19 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/MeKo-Tech/pogo/internal/config"
 	"github.com/MeKo-Tech/pogo/internal/models"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+var (
+	// Global configuration loader
+	configLoader *config.Loader
+	// Global configuration
+	globalConfig *config.Config
+	// Configuration file path
+	cfgFile string
 )
 
 // rootCmd represents the base command when called without any subcommands.
@@ -58,8 +69,11 @@ func GetRootCommand() *cobra.Command {
 }
 
 func init() {
+	// Initialize configuration loader
+	cobra.OnInitialize(initConfig)
+
 	// Global flags that apply to all commands
-	rootCmd.PersistentFlags().StringP("config", "c", "", "config file (default is $HOME/.pogo.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is search in ., $HOME, $HOME/.config/pogo, /etc/pogo)")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output (equivalent to --log-level=debug)")
 	rootCmd.PersistentFlags().String("log-level", "info", "log level (debug, info, warn, error)")
 
@@ -73,18 +87,27 @@ func init() {
 
 	// Version flag for tests and usability
 	rootCmd.PersistentFlags().Bool("version", false, "print version information and exit")
+
+	// Bind flags to viper
+	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
+	viper.BindPFlag("log_level", rootCmd.PersistentFlags().Lookup("log-level"))
+	viper.BindPFlag("models_dir", rootCmd.PersistentFlags().Lookup("models-dir"))
+
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		// Determine log level
+		// Initialize configuration if not already done
+		if globalConfig == nil {
+			initConfig()
+		}
+
+		// Determine log level from config
 		var logLevel slog.Level
 
 		// Check verbose flag first for backward compatibility
-		verbose, _ := cmd.Flags().GetBool("verbose")
-		if verbose {
+		if globalConfig.Verbose {
 			logLevel = slog.LevelDebug
 		} else {
-			// Parse log-level flag
-			logLevelStr, _ := cmd.Flags().GetString("log-level")
-			switch logLevelStr {
+			// Parse log-level from config
+			switch globalConfig.LogLevel {
 			case "debug":
 				logLevel = slog.LevelDebug
 			case "info":
@@ -104,4 +127,39 @@ func init() {
 		}))
 		slog.SetDefault(logger)
 	}
+}
+
+// initConfig reads in config file and ENV variables if set.
+func initConfig() {
+	configLoader = config.NewLoader()
+
+	var err error
+	if cfgFile != "" {
+		// Use config file from the flag
+		globalConfig, err = configLoader.LoadWithFile(cfgFile)
+	} else {
+		// Search for config in default locations
+		globalConfig, err = configLoader.Load()
+	}
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// GetConfig returns the global configuration.
+func GetConfig() *config.Config {
+	if globalConfig == nil {
+		initConfig()
+	}
+	return globalConfig
+}
+
+// GetConfigLoader returns the global configuration loader.
+func GetConfigLoader() *config.Loader {
+	if configLoader == nil {
+		configLoader = config.NewLoader()
+	}
+	return configLoader
 }
