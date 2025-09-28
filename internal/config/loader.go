@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,8 +25,8 @@ type Loader struct {
 
 // NewLoader creates a new configuration loader.
 func NewLoader() *Loader {
-	v := viper.New()
-	return &Loader{v: v}
+	// Use the global viper instance to ensure flag bindings work
+	return &Loader{v: viper.GetViper()}
 }
 
 // Load loads configuration from files, environment variables, and sets defaults.
@@ -47,9 +48,12 @@ func (l *Loader) Load() (*Config, error) {
 	// Try to read configuration file
 	if err := l.v.ReadInConfig(); err != nil {
 		// It's okay if config file doesn't exist, we'll use defaults and env vars
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFoundError) {
+			// Only return error if it's NOT a "config file not found" error
 			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
+		// Config file not found is OK, continue with defaults and env vars
 	}
 
 	// Unmarshal into our config struct

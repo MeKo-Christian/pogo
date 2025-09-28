@@ -1,6 +1,7 @@
 package rectify
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -118,7 +119,7 @@ func findProjectRoot() (string, error) {
 		}
 		parent := filepath.Dir(root)
 		if parent == root {
-			return "", fmt.Errorf("could not find project root")
+			return "", errors.New("could not find project root")
 		}
 		root = parent
 	}

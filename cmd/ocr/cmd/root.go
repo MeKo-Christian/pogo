@@ -12,11 +12,11 @@ import (
 )
 
 var (
-	// Global configuration loader
+	// Global configuration loader.
 	configLoader *config.Loader
-	// Global configuration
+	// Global configuration.
 	globalConfig *config.Config
-	// Configuration file path
+	// Configuration file path.
 	cfgFile string
 )
 
@@ -153,7 +153,17 @@ func GetConfig() *config.Config {
 	if globalConfig == nil {
 		initConfig()
 	}
-	return globalConfig
+
+	// Reload configuration to ensure CLI flags are included
+	// This is necessary because flag binding happens after initial config loading
+	loader := GetConfigLoader()
+	var cfg config.Config
+	if err := loader.GetViper().Unmarshal(&cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Error unmarshaling updated configuration: %v\n", err)
+		return globalConfig // Return the original config if unmarshal fails
+	}
+
+	return &cfg
 }
 
 // GetConfigLoader returns the global configuration loader.

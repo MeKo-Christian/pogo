@@ -33,6 +33,12 @@ func GetFloat32(n int) []float32 {
 	if !ok {
 		buf = make([]float32, cls)
 	}
+	// Ensure buffer has adequate capacity and reset length to full capacity
+	if cap(buf) < cls {
+		buf = make([]float32, cls)
+	} else {
+		buf = buf[:cap(buf)]
+	}
 	return buf[:n]
 }
 

@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// configCmd represents the config command
+// configCmd represents the config command.
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Configuration management commands",
@@ -23,7 +23,7 @@ This command provides subcommands to:
 - Display configuration information`,
 }
 
-// configInitCmd generates a default configuration file
+// configInitCmd generates a default configuration file.
 var configInitCmd = &cobra.Command{
 	Use:   "init [filename]",
 	Short: "Generate a default configuration file",
@@ -85,7 +85,7 @@ Examples:
 	},
 }
 
-// configValidateCmd validates the configuration
+// configValidateCmd validates the configuration.
 var configValidateCmd = &cobra.Command{
 	Use:   "validate [config-file]",
 	Short: "Validate configuration file and settings",
@@ -132,7 +132,7 @@ Examples:
 	},
 }
 
-// configShowCmd displays the resolved configuration
+// configShowCmd displays the resolved configuration.
 var configShowCmd = &cobra.Command{
 	Use:   "show",
 	Short: "Show resolved configuration from all sources",
@@ -176,7 +176,7 @@ This shows exactly what configuration will be used when running commands.`,
 	},
 }
 
-// configInfoCmd shows configuration system information
+// configInfoCmd shows configuration system information.
 var configInfoCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Show configuration system information",

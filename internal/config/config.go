@@ -61,27 +61,27 @@ type PipelineConfig struct {
 
 // DetectorConfig contains text detection settings.
 type DetectorConfig struct {
-	ModelPath      string  `mapstructure:"model_path" yaml:"model_path" json:"model_path"`
-	DbThresh       float32 `mapstructure:"db_thresh" yaml:"db_thresh" json:"db_thresh"`
-	DbBoxThresh    float32 `mapstructure:"db_box_thresh" yaml:"db_box_thresh" json:"db_box_thresh"`
-	PolygonMode    string  `mapstructure:"polygon_mode" yaml:"polygon_mode" json:"polygon_mode"`
-	UseNMS         bool    `mapstructure:"use_nms" yaml:"use_nms" json:"use_nms"`
-	NMSThreshold   float64 `mapstructure:"nms_threshold" yaml:"nms_threshold" json:"nms_threshold"`
-	NumThreads     int     `mapstructure:"num_threads" yaml:"num_threads" json:"num_threads"`
-	MaxImageSize   int     `mapstructure:"max_image_size" yaml:"max_image_size" json:"max_image_size"`
+	ModelPath    string  `mapstructure:"model_path" yaml:"model_path" json:"model_path"`
+	DbThresh     float32 `mapstructure:"db_thresh" yaml:"db_thresh" json:"db_thresh"`
+	DbBoxThresh  float32 `mapstructure:"db_box_thresh" yaml:"db_box_thresh" json:"db_box_thresh"`
+	PolygonMode  string  `mapstructure:"polygon_mode" yaml:"polygon_mode" json:"polygon_mode"`
+	UseNMS       bool    `mapstructure:"use_nms" yaml:"use_nms" json:"use_nms"`
+	NMSThreshold float64 `mapstructure:"nms_threshold" yaml:"nms_threshold" json:"nms_threshold"`
+	NumThreads   int     `mapstructure:"num_threads" yaml:"num_threads" json:"num_threads"`
+	MaxImageSize int     `mapstructure:"max_image_size" yaml:"max_image_size" json:"max_image_size"`
 }
 
 // RecognizerConfig contains text recognition settings.
 type RecognizerConfig struct {
-	ModelPath          string  `mapstructure:"model_path" yaml:"model_path" json:"model_path"`
-	DictPath           string  `mapstructure:"dict_path" yaml:"dict_path" json:"dict_path"`
-	DictLangs          string  `mapstructure:"dict_langs" yaml:"dict_langs" json:"dict_langs"`
-	Language           string  `mapstructure:"language" yaml:"language" json:"language"`
-	ImageHeight        int     `mapstructure:"image_height" yaml:"image_height" json:"image_height"`
-	MaxWidth           int     `mapstructure:"max_width" yaml:"max_width" json:"max_width"`
-	PadWidthMultiple   int     `mapstructure:"pad_width_multiple" yaml:"pad_width_multiple" json:"pad_width_multiple"`
-	MinConfidence      float64 `mapstructure:"min_confidence" yaml:"min_confidence" json:"min_confidence"`
-	NumThreads         int     `mapstructure:"num_threads" yaml:"num_threads" json:"num_threads"`
+	ModelPath        string  `mapstructure:"model_path" yaml:"model_path" json:"model_path"`
+	DictPath         string  `mapstructure:"dict_path" yaml:"dict_path" json:"dict_path"`
+	DictLangs        string  `mapstructure:"dict_langs" yaml:"dict_langs" json:"dict_langs"`
+	Language         string  `mapstructure:"language" yaml:"language" json:"language"`
+	ImageHeight      int     `mapstructure:"image_height" yaml:"image_height" json:"image_height"`
+	MaxWidth         int     `mapstructure:"max_width" yaml:"max_width" json:"max_width"`
+	PadWidthMultiple int     `mapstructure:"pad_width_multiple" yaml:"pad_width_multiple" json:"pad_width_multiple"`
+	MinConfidence    float64 `mapstructure:"min_confidence" yaml:"min_confidence" json:"min_confidence"`
+	NumThreads       int     `mapstructure:"num_threads" yaml:"num_threads" json:"num_threads"`
 }
 
 // ParallelConfig contains parallel processing settings.
@@ -97,12 +97,12 @@ type ResourceConfig struct {
 
 // OutputConfig contains output formatting settings.
 type OutputConfig struct {
-	Format             string  `mapstructure:"format" yaml:"format" json:"format"`
-	File               string  `mapstructure:"file" yaml:"file" json:"file"`
+	Format              string `mapstructure:"format" yaml:"format" json:"format"`
+	File                string `mapstructure:"file" yaml:"file" json:"file"`
 	ConfidencePrecision int    `mapstructure:"confidence_precision" yaml:"confidence_precision" json:"confidence_precision"`
-	OverlayDir         string  `mapstructure:"overlay_dir" yaml:"overlay_dir" json:"overlay_dir"`
-	OverlayBoxColor    string  `mapstructure:"overlay_box_color" yaml:"overlay_box_color" json:"overlay_box_color"`
-	OverlayPolyColor   string  `mapstructure:"overlay_poly_color" yaml:"overlay_poly_color" json:"overlay_poly_color"`
+	OverlayDir          string `mapstructure:"overlay_dir" yaml:"overlay_dir" json:"overlay_dir"`
+	OverlayBoxColor     string `mapstructure:"overlay_box_color" yaml:"overlay_box_color" json:"overlay_box_color"`
+	OverlayPolyColor    string `mapstructure:"overlay_poly_color" yaml:"overlay_poly_color" json:"overlay_poly_color"`
 }
 
 // ServerConfig contains HTTP server settings.
@@ -118,9 +118,9 @@ type ServerConfig struct {
 
 // BatchConfig contains batch processing settings.
 type BatchConfig struct {
-	Workers       int    `mapstructure:"workers" yaml:"workers" json:"workers"`
-	OutputDir     string `mapstructure:"output_dir" yaml:"output_dir" json:"output_dir"`
-	ContinueOnError bool `mapstructure:"continue_on_error" yaml:"continue_on_error" json:"continue_on_error"`
+	Workers         int    `mapstructure:"workers" yaml:"workers" json:"workers"`
+	OutputDir       string `mapstructure:"output_dir" yaml:"output_dir" json:"output_dir"`
+	ContinueOnError bool   `mapstructure:"continue_on_error" yaml:"continue_on_error" json:"continue_on_error"`
 }
 
 // FeatureConfig contains feature toggle settings.
@@ -136,17 +136,17 @@ type FeatureConfig struct {
 	TextlineModelPath string  `mapstructure:"textline_model_path" yaml:"textline_model_path" json:"textline_model_path"`
 
 	// Document rectification
-	RectificationEnabled    bool    `mapstructure:"rectification_enabled" yaml:"rectification_enabled" json:"rectification_enabled"`
-	RectificationModelPath  string  `mapstructure:"rectification_model_path" yaml:"rectification_model_path" json:"rectification_model_path"`
-	RectificationThreshold  float64 `mapstructure:"rectification_threshold" yaml:"rectification_threshold" json:"rectification_threshold"`
-	RectificationHeight     int     `mapstructure:"rectification_height" yaml:"rectification_height" json:"rectification_height"`
-	RectificationDebugDir   string  `mapstructure:"rectification_debug_dir" yaml:"rectification_debug_dir" json:"rectification_debug_dir"`
+	RectificationEnabled   bool    `mapstructure:"rectification_enabled" yaml:"rectification_enabled" json:"rectification_enabled"`
+	RectificationModelPath string  `mapstructure:"rectification_model_path" yaml:"rectification_model_path" json:"rectification_model_path"`
+	RectificationThreshold float64 `mapstructure:"rectification_threshold" yaml:"rectification_threshold" json:"rectification_threshold"`
+	RectificationHeight    int     `mapstructure:"rectification_height" yaml:"rectification_height" json:"rectification_height"`
+	RectificationDebugDir  string  `mapstructure:"rectification_debug_dir" yaml:"rectification_debug_dir" json:"rectification_debug_dir"`
 }
 
 // GPUConfig contains GPU acceleration settings.
 type GPUConfig struct {
-	Enabled    bool   `mapstructure:"enabled" yaml:"enabled" json:"enabled"`
-	Device     int    `mapstructure:"device" yaml:"device" json:"device"`
+	Enabled     bool   `mapstructure:"enabled" yaml:"enabled" json:"enabled"`
+	Device      int    `mapstructure:"device" yaml:"device" json:"device"`
 	MemoryLimit string `mapstructure:"memory_limit" yaml:"memory_limit" json:"memory_limit"`
 }
 
@@ -183,13 +183,13 @@ func DefaultConfig() Config {
 			ContinueOnError: false,
 		},
 		Features: FeatureConfig{
-			OrientationEnabled:   false,
-			OrientationThreshold: 0.7,
-			TextlineEnabled:      false,
-			TextlineThreshold:    0.6,
-			RectificationEnabled: false,
+			OrientationEnabled:     false,
+			OrientationThreshold:   0.7,
+			TextlineEnabled:        false,
+			TextlineThreshold:      0.6,
+			RectificationEnabled:   false,
 			RectificationThreshold: 0.5,
-			RectificationHeight: 1024,
+			RectificationHeight:    1024,
 		},
 		GPU: GPUConfig{
 			Enabled:     false,
@@ -306,7 +306,7 @@ func (c *Config) Validate() error {
 	// Validate GPU memory limit format
 	if c.GPU.MemoryLimit != "auto" && c.GPU.MemoryLimit != "" {
 		if err := validateMemoryLimit(c.GPU.MemoryLimit); err != nil {
-			return fmt.Errorf("invalid GPU memory limit: %v", err)
+			return fmt.Errorf("invalid GPU memory limit: %w", err)
 		}
 	}
 
