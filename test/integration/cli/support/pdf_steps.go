@@ -256,7 +256,10 @@ func (testCtx *TestContext) onlyPagesShouldBeProcessed(pages string) error {
 		if len(data) == 0 {
 			return errors.New("JSON output contains no PDF results")
 		}
-		pdfResult := data[0].(map[string]interface{})
+		pdfResult, ok := data[0].(map[string]interface{})
+		if !ok {
+			return errors.New("first PDF result is not a valid object")
+		}
 		pagesField, exists := pdfResult["pages"]
 		if !exists {
 			return errors.New("PDF result does not contain pages field")

@@ -34,7 +34,7 @@ func NonMaxSuppression(regions []DetectedRegion, iouThreshold float64) []Detecte
 	// Sort regions by confidence (descending)
 	indices := sortRegionsByConfidence(regions)
 	suppressed := make([]bool, len(regions))
-	var kept []DetectedRegion
+	kept := make([]DetectedRegion, 0, len(regions))
 
 	for _, a := range indices {
 		if suppressed[a] {
@@ -65,7 +65,7 @@ func AdaptiveNonMaxSuppression(regions []DetectedRegion, baseThreshold, scaleFac
 	// Sort regions by confidence (descending)
 	sortRegionsByConfidenceDesc(regions)
 	suppressed := make([]bool, len(regions))
-	var kept []DetectedRegion
+	kept := make([]DetectedRegion, 0, len(regions))
 
 	for a := range regions {
 		if suppressed[a] {
@@ -100,7 +100,7 @@ func SizeAwareNonMaxSuppression(regions []DetectedRegion, baseThreshold, sizeSca
 	// Sort regions by confidence (descending)
 	sortRegionsByConfidenceDesc(regions)
 	suppressed := make([]bool, len(regions))
-	var kept []DetectedRegion
+	kept := make([]DetectedRegion, 0, len(regions))
 
 	for a := range regions {
 		if suppressed[a] {
@@ -135,14 +135,14 @@ func SoftNonMaxSuppression(regions []DetectedRegion, method string,
 	}
 
 	// Handle edge cases
-	if handled := handleEdgeCases(regions, n, scoreThresh); handled != nil {
+	if handled := handleEdgeCases(regions, scoreThresh); handled != nil {
 		return handled
 	}
 
 	// Create working copy and apply Soft-NMS
 	regs := make([]DetectedRegion, n)
 	copy(regs, regions)
-	applySoftNMS(&regs, iouThreshold, sigma, method, scoreThresh)
+	applySoftNMS(&regs, iouThreshold, sigma, method)
 
 	// Filter and sort results
 	return filterAndSortResults(regs, scoreThresh)
@@ -220,7 +220,7 @@ func calculateSoftNMSWeight(iou, iouThreshold, sigma float64, method string) flo
 }
 
 // handleEdgeCases handles edge cases for Soft-NMS.
-func handleEdgeCases(regions []DetectedRegion, n int, scoreThresh float64) []DetectedRegion {
+func handleEdgeCases(regions []DetectedRegion, scoreThresh float64) []DetectedRegion {
 	// Filter regions that already meet the score threshold
 	var validRegions []DetectedRegion
 	for _, r := range regions {
@@ -235,7 +235,7 @@ func handleEdgeCases(regions []DetectedRegion, n int, scoreThresh float64) []Det
 }
 
 // applySoftNMS applies the Soft-NMS algorithm to regions.
-func applySoftNMS(regs *[]DetectedRegion, iouThreshold, sigma float64, method string, scoreThresh float64) {
+func applySoftNMS(regs *[]DetectedRegion, iouThreshold, sigma float64, method string) {
 	n := len(*regs)
 	for i := range n {
 		// Find the region with highest confidence in remaining regions

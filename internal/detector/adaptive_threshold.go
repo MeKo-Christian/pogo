@@ -62,7 +62,8 @@ type AdaptiveThresholdStats struct {
 }
 
 // CalculateAdaptiveThresholds analyzes a probability map and calculates optimal thresholds.
-func CalculateAdaptiveThresholds(probMap []float32, width, height int, config AdaptiveThresholdConfig) AdaptiveThresholds {
+func CalculateAdaptiveThresholds(probMap []float32, width, height int,
+	config AdaptiveThresholdConfig) AdaptiveThresholds {
 	if !config.Enabled || len(probMap) != width*height || len(probMap) == 0 {
 		return AdaptiveThresholds{
 			DbThresh:   0.3, // Default values
@@ -85,10 +86,10 @@ func CalculateAdaptiveThresholds(probMap []float32, width, height int, config Ad
 		boxThresh = dbThresh + 0.2 // Box threshold slightly higher than db threshold
 		methodName = "otsu"
 	case AdaptiveMethodHistogram:
-		dbThresh, boxThresh, confidence = calculateHistogramBasedThresholds(probMap, stats, config)
+		dbThresh, boxThresh, confidence = calculateHistogramBasedThresholds(stats)
 		methodName = "histogram"
 	case AdaptiveMethodDynamic:
-		dbThresh, boxThresh, confidence = calculateDynamicThresholds(probMap, stats, config)
+		dbThresh, boxThresh, confidence = calculateDynamicThresholds(probMap, stats)
 		methodName = "dynamic"
 	default:
 		dbThresh, boxThresh = 0.3, 0.5
@@ -132,8 +133,8 @@ func calculateProbabilityMapStats(probMap []float32) AdaptiveThresholdStats {
 
 	// Basic statistics
 	var sum float32
-	min := sortedProbs[0]
-	max := sortedProbs[len(sortedProbs)-1]
+	minVal := sortedProbs[0]
+	maxVal := sortedProbs[len(sortedProbs)-1]
 	median := sortedProbs[len(sortedProbs)/2]
 
 	var highProbCount int
@@ -163,9 +164,9 @@ func calculateProbabilityMapStats(probMap []float32) AdaptiveThresholdStats {
 		Mean:            mean,
 		StdDev:          stdDev,
 		Median:          median,
-		Min:             min,
-		Max:             max,
-		DynamicRange:    max - min,
+		Min:             minVal,
+		Max:             maxVal,
+		DynamicRange:    maxVal - minVal,
 		HighProbRatio:   highProbRatio,
 		BimodalityIndex: bimodality,
 	}
@@ -267,7 +268,7 @@ func calculateOtsuThreshold(probMap []float32, config AdaptiveThresholdConfig) (
 }
 
 // calculateHistogramBasedThresholds uses histogram analysis to find optimal thresholds.
-func calculateHistogramBasedThresholds(probMap []float32, stats AdaptiveThresholdStats, config AdaptiveThresholdConfig) (float32, float32, float32) {
+func calculateHistogramBasedThresholds(stats AdaptiveThresholdStats) (float32, float32, float32) {
 	// For histogram-based method, we use the mean and standard deviation to set thresholds
 
 	// Base thresholds on statistical properties
@@ -303,7 +304,7 @@ func calculateHistogramBasedThresholds(probMap []float32, stats AdaptiveThreshol
 }
 
 // calculateDynamicThresholds uses dynamic range analysis for threshold calculation.
-func calculateDynamicThresholds(probMap []float32, stats AdaptiveThresholdStats, config AdaptiveThresholdConfig) (float32, float32, float32) {
+func calculateDynamicThresholds(probMap []float32, stats AdaptiveThresholdStats) (float32, float32, float32) {
 	// Dynamic method adapts to the specific characteristics of the probability map
 
 	// Use percentiles for robust threshold estimation
@@ -345,12 +346,12 @@ func calculateDynamicThresholds(probMap []float32, stats AdaptiveThresholdStats,
 }
 
 // clampFloat32 clamps a float32 value between min and max.
-func clampFloat32(value, min, max float32) float32 {
-	if value < min {
-		return min
+func clampFloat32(value, minVal, maxVal float32) float32 {
+	if value < minVal {
+		return minVal
 	}
-	if value > max {
-		return max
+	if value > maxVal {
+		return maxVal
 	}
 	return value
 }

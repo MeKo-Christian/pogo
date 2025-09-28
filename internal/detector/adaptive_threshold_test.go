@@ -28,6 +28,8 @@ func TestDefaultAdaptiveThresholdConfig(t *testing.T) {
 	}
 }
 
+const disabledMethod = "disabled"
+
 func TestCalculateAdaptiveThresholds_Disabled(t *testing.T) {
 	config := DefaultAdaptiveThresholdConfig()
 	config.Enabled = false
@@ -36,8 +38,8 @@ func TestCalculateAdaptiveThresholds_Disabled(t *testing.T) {
 
 	result := CalculateAdaptiveThresholds(probMap, 5, 1, config)
 
-	if result.Method != "disabled" {
-		t.Errorf("Expected method to be 'disabled', got %s", result.Method)
+	if result.Method != disabledMethod {
+		t.Errorf("Expected method to be '%s', got %s", disabledMethod, result.Method)
 	}
 	if result.DbThresh != 0.3 {
 		t.Errorf("Expected default DbThresh 0.3, got %f", result.DbThresh)
@@ -53,14 +55,14 @@ func TestCalculateAdaptiveThresholds_InvalidInput(t *testing.T) {
 
 	// Empty probability map
 	result := CalculateAdaptiveThresholds([]float32{}, 0, 0, config)
-	if result.Method != "disabled" {
-		t.Errorf("Expected method to be 'disabled' for empty input, got %s", result.Method)
+	if result.Method != disabledMethod {
+		t.Errorf("Expected method to be '%s' for empty input, got %s", disabledMethod, result.Method)
 	}
 
 	// Mismatched dimensions
 	result = CalculateAdaptiveThresholds([]float32{0.1, 0.2}, 3, 1, config)
-	if result.Method != "disabled" {
-		t.Errorf("Expected method to be 'disabled' for mismatched dimensions, got %s", result.Method)
+	if result.Method != disabledMethod {
+		t.Errorf("Expected method to be '%s' for mismatched dimensions, got %s", disabledMethod, result.Method)
 	}
 }
 
@@ -89,9 +91,8 @@ func TestCalculateProbabilityMapStats(t *testing.T) {
 	}
 
 	// Check high probability ratio (values > 0.5)
-	expectedHighProbRatio := float32(2.0 / 6.0) // 0.6, 0.8, 1.0 are > 0.5, but 0.6 is not > 0.5
 	// Actually: 0.6, 0.8, 1.0 are > 0.5, so ratio should be 3/6 = 0.5
-	expectedHighProbRatio = float32(3.0 / 6.0)
+	expectedHighProbRatio := float32(3.0 / 6.0)
 	if math.Abs(float64(stats.HighProbRatio-expectedHighProbRatio)) > 0.01 {
 		t.Errorf("Expected high prob ratio ~%f, got %f", expectedHighProbRatio, stats.HighProbRatio)
 	}
@@ -173,8 +174,6 @@ func TestCalculateOtsuThreshold_EmptyInput(t *testing.T) {
 }
 
 func TestCalculateHistogramBasedThresholds(t *testing.T) {
-	config := DefaultAdaptiveThresholdConfig()
-
 	// Create test statistics
 	stats := AdaptiveThresholdStats{
 		Mean:            0.5,
@@ -184,9 +183,7 @@ func TestCalculateHistogramBasedThresholds(t *testing.T) {
 		HighProbRatio:   0.3,
 	}
 
-	probMap := []float32{0.1, 0.3, 0.5, 0.7, 0.9}
-
-	dbThresh, boxThresh, confidence := calculateHistogramBasedThresholds(probMap, stats, config)
+	dbThresh, boxThresh, confidence := calculateHistogramBasedThresholds(stats)
 
 	// DbThresh should be lower than BoxThresh
 	if dbThresh >= boxThresh {
@@ -208,8 +205,6 @@ func TestCalculateHistogramBasedThresholds(t *testing.T) {
 }
 
 func TestCalculateDynamicThresholds(t *testing.T) {
-	config := DefaultAdaptiveThresholdConfig()
-
 	// Create test statistics with high dynamic range
 	stats := AdaptiveThresholdStats{
 		Mean:          0.5,
@@ -222,7 +217,7 @@ func TestCalculateDynamicThresholds(t *testing.T) {
 	// Create sorted probability map for percentile calculation
 	probMap := []float32{0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9}
 
-	dbThresh, boxThresh, confidence := calculateDynamicThresholds(probMap, stats, config)
+	dbThresh, boxThresh, confidence := calculateDynamicThresholds(probMap, stats)
 
 	// DbThresh should be lower than BoxThresh
 	if dbThresh >= boxThresh {

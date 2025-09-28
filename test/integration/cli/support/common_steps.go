@@ -312,7 +312,7 @@ func (testCtx *TestContext) extractJSONFromOutput() (string, error) {
 			return strings.Join(lines[i:], "\n"), nil
 		}
 		// Skip processing messages that start with "Processing"
-		if strings.HasPrefix(line, "Processing") {
+		if strings.HasPrefix(line, "Processing") { //nolint:staticcheck // Return value is used in condition
 			continue
 		}
 	}
@@ -1063,7 +1063,7 @@ func (testCtx *TestContext) extractCSVFromOutput() (string, error) {
 			return strings.Join(lines[i:], "\n"), nil
 		}
 		// Skip processing messages that start with "Processing"
-		if strings.HasPrefix(line, "Processing") {
+		if strings.HasPrefix(line, "Processing") { //nolint:staticcheck // Return value is used in condition
 			continue
 		}
 	}
