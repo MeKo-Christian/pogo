@@ -154,7 +154,7 @@ func TestProcessImagesContextEmptyInput(t *testing.T) {
 	ctx := context.Background()
 	results, err := p.ProcessImagesContext(ctx, []image.Image{})
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no images provided")
 	assert.Nil(t, results)
 }
@@ -208,8 +208,8 @@ func TestApplyOrientationDetectionContextCancelled(t *testing.T) {
 
 	resultImg, angle, conf, err := p.applyOrientationDetection(ctx, img)
 
-	assert.Error(t, err)
-	assert.ErrorIs(t, err, context.Canceled)
+	require.Error(t, err)
+	require.ErrorIs(t, err, context.Canceled)
 	assert.Nil(t, resultImg)
 	assert.Equal(t, 0, angle)
 	assert.InEpsilon(t, 0.0, conf, 1e-6)
@@ -244,8 +244,8 @@ func TestApplyRectificationContextCancelled(t *testing.T) {
 
 	resultImg, err := p.applyRectification(ctx, img)
 
-	assert.Error(t, err)
-	assert.ErrorIs(t, err, context.Canceled)
+	require.Error(t, err)
+	require.ErrorIs(t, err, context.Canceled)
 	assert.Nil(t, resultImg)
 }
 

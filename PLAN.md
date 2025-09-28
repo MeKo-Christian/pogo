@@ -589,7 +589,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
     - [x] Contour tracing (92.9%+ coverage): Moore-neighbor algorithm, boundary detection
     - [x] Morphology operations (93.8%+ coverage): dilate, erode, smooth functions
     - [x] Adaptive thresholding (94%+ coverage): Otsu, bimodality, dynamic thresholds
-    - [ ] Fix failing adaptive threshold tests (3 test failures blocking progress)
+    - [x] Fix failing adaptive threshold tests (3 test failures blocking progress)
     - [ ] Model management: UpdateModelPath (0%), DetectRegions (0%)
     - [ ] Post-processing variants: PostProcessDBWithNMS (0%)
   - [ ] **Recognition decoding logic** (54.5% - major inference gaps)

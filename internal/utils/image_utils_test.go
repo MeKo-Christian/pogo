@@ -255,12 +255,12 @@ func TestNewBox(t *testing.T) {
 
 func TestBox_Width(t *testing.T) {
 	box := Box{MinX: 2, MinY: 3, MaxX: 7, MaxY: 10}
-	require.Equal(t, 5.0, box.Width())
+	require.InEpsilon(t, 5.0, box.Width(), 1e-6)
 }
 
 func TestBox_Height(t *testing.T) {
 	box := Box{MinX: 2, MinY: 3, MaxX: 7, MaxY: 10}
-	require.Equal(t, 7.0, box.Height())
+	require.InEpsilon(t, 7.0, box.Height(), 1e-6)
 }
 
 func TestBox_ToRect(t *testing.T) {
