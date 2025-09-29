@@ -1,0 +1,92 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Go build artifacts
+bin/
+*.out
+coverage.html
+coverage.out
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment and configuration
+.env
+.env.local
+.env.*.local
+*.env
+
+# Logs
+*.log
+logs/
+
+# Test data and temporary files
+testdata/images/*
+testdata/fixtures/*
+testdata/synthetic/*
+tmp/
+temp/
+
+# Documentation (we want to keep essential docs)
+docs/
+*.md
+!README.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+
+# Local ONNX Runtime (will be downloaded in container)
+onnxruntime/
+
+# Docker files (avoid recursion)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Scripts that are not needed in container
+scripts/
+justfile
+.just/
+
+# Development tools config
+.golangci.toml
+treefmt.toml
+.envrc
+.direnv/
+
+# Package manager files (except go.mod/go.sum which we need)
+package.json
+package-lock.json
+yarn.lock
+Cargo.toml
+Cargo.lock
+
+# Backup and temporary files
+*.bak
+*.backup
+*.tmp
+*~
+
+# IDE specific files
+*.iml
+.project
+.classpath
+.settings/

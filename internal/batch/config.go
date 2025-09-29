@@ -99,7 +99,7 @@ func (r *Result) PrintStats(quiet bool) {
 	if !quiet {
 		stats := pipeline.CalculateParallelStats(nil, r.Results, r.Duration, r.WorkerCount)
 		_, _ = fmt.Fprintf(os.Stdout, "\nProcessing Statistics:\n")
-		_, _ = fmt.Fprintf(os.Stdout, "  Total images: %d\n", stats.TotalImages)
+		_, _ = fmt.Fprintf(os.Stdout, "  Total images: %d\n", len(r.ImagePaths))
 		_, _ = fmt.Fprintf(os.Stdout, "  Processed: %d\n", stats.ProcessedImages)
 		_, _ = fmt.Fprintf(os.Stdout, "  Failed: %d\n", stats.FailedImages)
 		_, _ = fmt.Fprintf(os.Stdout, "  Workers: %d\n", stats.WorkerCount)

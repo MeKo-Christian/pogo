@@ -116,6 +116,13 @@ type ServerConfig struct {
 	TimeoutSec      int    `mapstructure:"timeout_sec" yaml:"timeout_sec" json:"timeout_sec"`
 	ShutdownTimeout int    `mapstructure:"shutdown_timeout" yaml:"shutdown_timeout" json:"shutdown_timeout"`
 	OverlayEnabled  bool   `mapstructure:"overlay_enabled" yaml:"overlay_enabled" json:"overlay_enabled"`
+
+	// Rate limiting configuration
+	RateLimitEnabled  bool  `mapstructure:"rate_limit_enabled" yaml:"rate_limit_enabled" json:"rate_limit_enabled"`
+	RequestsPerMinute int   `mapstructure:"requests_per_minute" yaml:"requests_per_minute" json:"requests_per_minute"`
+	RequestsPerHour   int   `mapstructure:"requests_per_hour" yaml:"requests_per_hour" json:"requests_per_hour"`
+	MaxRequestsPerDay int   `mapstructure:"max_requests_per_day" yaml:"max_requests_per_day" json:"max_requests_per_day"`
+	MaxDataPerDay     int64 `mapstructure:"max_data_per_day" yaml:"max_data_per_day" json:"max_data_per_day"`
 }
 
 // BatchConfig contains batch processing settings.

@@ -106,7 +106,7 @@ func parseMemoryLimitOrDefault(limitStr string) uint64 {
 
 // parseMemoryLimit parses a memory limit string (e.g., "1GB", "512MB") into bytes.
 func parseMemoryLimit(limit string) (uint64, error) {
-	limit = strings.TrimSpace(strings.ToUpper(limit))
+	limit = strings.TrimSpace(strings.ToUpper(strings.ReplaceAll(limit, " ", "")))
 
 	multipliers := map[string]uint64{
 		"B":  1,

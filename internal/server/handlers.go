@@ -1,23 +1,14 @@
 package server
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"image"
-	"image/color"
-	_ "image/jpeg"
-	"image/png"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/MeKo-Tech/pogo/internal/models"
-	"github.com/MeKo-Tech/pogo/internal/pipeline"
-	_ "golang.org/x/image/bmp"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -72,323 +63,6 @@ func (s *Server) modelsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ocrImageHandler processes image OCR requests.
-func (s *Server) ocrImageHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Parse and validate request
-	img, err := s.parseImageRequest(w, r)
-	if err != nil {
-		return // error already written
-	}
-
-	// Check if pipeline is available
-	if s.pipeline == nil {
-		s.writeErrorResponse(w, "OCR pipeline not initialized", http.StatusServiceUnavailable)
-		return
-	}
-
-	// Run full OCR pipeline
-	res, err := s.pipeline.ProcessImage(img)
-	if err != nil {
-		s.writeErrorResponse(w, fmt.Sprintf("OCR processing failed: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Format and send response
-	s.writeImageResponse(w, r, img, res)
-}
-
-func (s *Server) parseImageRequest(w http.ResponseWriter, r *http.Request) (image.Image, error) {
-	// Set content length limit
-	r.Body = http.MaxBytesReader(w, r.Body, s.maxUploadMB*1024*1024)
-
-	// Parse multipart form
-	err := r.ParseMultipartForm(s.maxUploadMB * 1024 * 1024)
-	if err != nil {
-		s.writeErrorResponse(w, "Failed to parse form data", http.StatusBadRequest)
-		return nil, err
-	}
-
-	// Get uploaded file
-	file, header, err := r.FormFile("image")
-	if err != nil {
-		s.writeErrorResponse(w, "No image file provided", http.StatusBadRequest)
-		return nil, err
-	}
-	defer func() { _ = file.Close() }()
-
-	// Validate file size
-	if header.Size > s.maxUploadMB*1024*1024 {
-		s.writeErrorResponse(w, "File too large", http.StatusRequestEntityTooLarge)
-		return nil, err
-	}
-
-	// Read file content
-	imageData, err := io.ReadAll(file)
-	if err != nil {
-		s.writeErrorResponse(w, "Failed to read image data", http.StatusInternalServerError)
-		return nil, err
-	}
-
-	// Decode image
-	img, _, err := image.Decode(bytes.NewReader(imageData))
-	if err != nil {
-		s.writeErrorResponse(w, "Invalid image format", http.StatusBadRequest)
-		return nil, err
-	}
-
-	return img, nil
-}
-
-func (s *Server) writeImageResponse(
-	w http.ResponseWriter,
-	r *http.Request,
-	img image.Image,
-	res *pipeline.OCRImageResult,
-) {
-	// Determine output format: default json; allow 'format' in query or form
-	format := r.FormValue("format")
-	if format == "" {
-		format = r.URL.Query().Get("format")
-	}
-
-	switch format {
-	case "csv":
-		s.writeCSVResponse(w, res)
-	case formatText:
-		s.writeTextResponse(w, res)
-	case "overlay":
-		s.handleOverlayOutput(w, r, img, res)
-	default:
-		// Check for overlay parameter
-		if r.FormValue("overlay") == "1" {
-			s.handleOverlayOutput(w, r, img, res)
-		} else {
-			s.writeJSONResponse(w, res)
-		}
-	}
-}
-
-func (s *Server) writeCSVResponse(w http.ResponseWriter, res *pipeline.OCRImageResult) {
-	w.Header().Set("Content-Type", "text/csv")
-	csvStr, err := pipeline.ToCSVImage(res)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("formatting failed: %v", err), http.StatusInternalServerError)
-		return
-	}
-	_, _ = w.Write([]byte(csvStr))
-}
-
-func (s *Server) writeTextResponse(w http.ResponseWriter, res *pipeline.OCRImageResult) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	textStr, err := pipeline.ToPlainTextImage(res)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("formatting failed: %v", err), http.StatusInternalServerError)
-		return
-	}
-	_, _ = w.Write([]byte(textStr))
-}
-
-func (s *Server) writeJSONResponse(w http.ResponseWriter, res *pipeline.OCRImageResult) {
-	w.Header().Set("Content-Type", "application/json")
-	obj := struct {
-		OCR *pipeline.OCRImageResult `json:"ocr"`
-	}{OCR: res}
-	if err := json.NewEncoder(w).Encode(obj); err != nil {
-		fmt.Fprintf(os.Stderr, "Error encoding OCR image response: %v\n", err)
-	}
-}
-
-// handleOverlayOutput handles overlay image output for OCR results.
-func (s *Server) handleOverlayOutput(
-	w http.ResponseWriter,
-	r *http.Request,
-	img image.Image,
-	res *pipeline.OCRImageResult,
-) {
-	if !s.overlayEnabled {
-		http.Error(w, "overlay output disabled", http.StatusForbidden)
-		return
-	}
-
-	boxCol := parseHexColor(r.FormValue("box"))
-	if boxCol == nil {
-		boxCol = parseHexColor(s.overlayBoxColor)
-	}
-	if boxCol == nil {
-		boxCol = color.RGBA{255, 0, 0, 255}
-	}
-
-	polyCol := parseHexColor(r.FormValue("poly"))
-	if polyCol == nil {
-		polyCol = parseHexColor(s.overlayPolyColor)
-	}
-	if polyCol == nil {
-		polyCol = color.RGBA{0, 255, 0, 255}
-	}
-
-	ov := pipeline.RenderOverlay(img, res, boxCol, polyCol)
-	if ov == nil {
-		http.Error(w, "overlay failed", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "image/png")
-	_ = png.Encode(w, ov)
-}
-
-// ocrPdfHandler processes PDF OCR requests.
-func (s *Server) ocrPdfHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Parse and validate request
-	file, header, pageRange, err := s.parsePdfRequest(w, r)
-	if err != nil {
-		return // error already written
-	}
-	defer func() { _ = file.Close() }()
-
-	// Check if pipeline is available
-	if s.pipeline == nil {
-		s.writeErrorResponse(w, "OCR pipeline not initialized", http.StatusInternalServerError)
-		return
-	}
-
-	// Run full OCR pipeline on PDF
-	res, err := s.pipeline.ProcessPDF(header.Filename, pageRange)
-	if err != nil {
-		s.writeErrorResponse(w, fmt.Sprintf("OCR processing failed: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Format and send response
-	s.writePdfResponse(w, r, res)
-}
-
-func (s *Server) parsePdfRequest(
-	w http.ResponseWriter,
-	r *http.Request,
-) (multipart.File, *multipart.FileHeader, string, error) {
-	// Set content length limit
-	r.Body = http.MaxBytesReader(w, r.Body, s.maxUploadMB*1024*1024)
-
-	// Parse multipart form
-	err := r.ParseMultipartForm(s.maxUploadMB * 1024 * 1024)
-	if err != nil {
-		s.handleFormParseError(w, err)
-		return nil, nil, "", err
-	}
-
-	// Get uploaded file
-	file, header, err := r.FormFile("pdf")
-	if err != nil {
-		s.writeErrorResponse(w, "No PDF file provided", http.StatusBadRequest)
-		return nil, nil, "", err
-	}
-
-	// Validate file size
-	if header.Size > s.maxUploadMB*1024*1024 {
-		s.writeErrorResponse(w, "File too large", http.StatusRequestEntityTooLarge)
-		return nil, nil, "", err
-	}
-
-	// Get page range parameter
-	pageRange := r.FormValue("pages")
-
-	return file, header, pageRange, nil
-}
-
-func (s *Server) handleFormParseError(w http.ResponseWriter, err error) {
-	// Distinguish body-too-large from generic parse error
-	if strings.Contains(strings.ToLower(err.Error()), "body too large") ||
-		strings.Contains(strings.ToLower(err.Error()), "request body too large") {
-		s.writeErrorResponse(w, "File too large", http.StatusRequestEntityTooLarge)
-	} else {
-		s.writeErrorResponse(w, "Failed to parse form data", http.StatusBadRequest)
-	}
-}
-
-func (s *Server) writePdfResponse(w http.ResponseWriter, r *http.Request, res *pipeline.OCRPDFResult) {
-	// Determine output format: default json; allow 'format' in query or form
-	format := r.FormValue("format")
-	if format == "" {
-		format = r.URL.Query().Get("format")
-	}
-
-	if format == formatText {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		s.writePDFTextResponse(w, res)
-		return
-	}
-
-	// default: json
-	w.Header().Set("Content-Type", "application/json")
-	obj := struct {
-		OCR *pipeline.OCRPDFResult `json:"ocr"`
-	}{OCR: res}
-	if err := json.NewEncoder(w).Encode(obj); err != nil {
-		fmt.Fprintf(os.Stderr, "Error encoding OCR PDF response: %v\n", err)
-	}
-}
-
-// writePDFTextResponse writes a plain text representation of PDF OCR results.
-func (s *Server) writePDFTextResponse(w http.ResponseWriter, result *pipeline.OCRPDFResult) {
-	var output strings.Builder
-
-	output.WriteString(fmt.Sprintf("File: %s\n", result.Filename))
-	output.WriteString(fmt.Sprintf("Total Pages: %d\n", result.TotalPages))
-	output.WriteString(fmt.Sprintf("Processing Time: %dns\n\n", result.Processing.TotalNs))
-
-	for _, page := range result.Pages {
-		output.WriteString(fmt.Sprintf("Page %d (%dx%d):\n", page.PageNumber, page.Width, page.Height))
-
-		for _, img := range page.Images {
-			output.WriteString(fmt.Sprintf("  Image %d (%dx%d): %d region(s), confidence: %.3f\n",
-				img.ImageIndex, img.Width, img.Height, len(img.Regions), img.Confidence))
-
-			for i, region := range img.Regions {
-				output.WriteString(fmt.Sprintf("    #%d box=(%d,%d %dx%d) conf=%.3f text='%s'\n",
-					i+1,
-					region.Box.X, region.Box.Y, region.Box.W, region.Box.H,
-					region.RecConfidence, region.Text))
-			}
-		}
-		output.WriteString("\n")
-	}
-
-	if _, err := w.Write([]byte(output.String())); err != nil {
-		// Log error, but can't send another response
-		fmt.Fprintf(os.Stderr, "Error writing response: %v\n", err)
-	}
-}
-
-// parseHexColor parses colors like "#RRGGBB" or "RRGGBB".
-func parseHexColor(s string) color.Color {
-	if s == "" {
-		return nil
-	}
-	if s[0] == '#' {
-		s = s[1:]
-	}
-	if len(s) != 6 {
-		return nil
-	}
-	var r, g, b uint8
-	var rv, gv, bv int
-	if _, err := fmt.Sscanf(s, "%02x%02x%02x", &rv, &gv, &bv); err != nil {
-		return nil
-	}
-	r, g, b = uint8(rv), uint8(gv), uint8(bv) //nolint:gosec // G115: Safe conversion for RGB color values
-	return color.RGBA{r, g, b, 255}
-}
-
 // writeErrorResponse writes a JSON error response.
 func (s *Server) writeErrorResponse(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
@@ -403,4 +77,15 @@ func (s *Server) writeErrorResponse(w http.ResponseWriter, message string, statu
 		// Log error, but can't send another response
 		fmt.Fprintf(os.Stderr, "Error writing error response: %v\n", err)
 	}
+}
+
+// metricsHandler exposes Prometheus metrics.
+func (s *Server) metricsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Import promhttp inline to avoid import issues
+	promhttp.Handler().ServeHTTP(w, r)
 }

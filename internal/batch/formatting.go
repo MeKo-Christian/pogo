@@ -99,13 +99,13 @@ func formatCSV(results []*pipeline.OCRImageResult, imagePaths []string) (string,
 func formatText(results []*pipeline.OCRImageResult, imagePaths []string) (string, error) {
 	var output strings.Builder
 	for i, res := range results {
-		if res == nil {
-			continue
-		}
 		if i > 0 {
 			output.WriteString("\n")
 		}
 		output.WriteString(fmt.Sprintf("# %s\n", imagePaths[i]))
+		if res == nil {
+			continue
+		}
 		pipeline.SortRegionsTopLeft(res)
 		text, err := pipeline.ToPlainTextImage(res)
 		if err != nil {

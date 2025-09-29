@@ -1,6 +1,6 @@
 # POGO - Blazing Fast OCR Engine
 
-**Production-ready OCR pipeline engineered in Go. Extract text from images and PDFs at lightning speed.**
+**OCR pipeline engineered in Go. Extract text from images and PDFs at lightning speed.**
 
 ![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)
 ![ONNX](https://img.shields.io/badge/ONNX-Runtime-005CED?style=flat&logo=onnx)
@@ -9,7 +9,7 @@
 
 ## Why POGO?
 
-**POGO delivers enterprise-grade OCR performance with minimal overhead.** Built from the ground up in Go, it combines the accuracy of PaddleOCR models with the speed of ONNX Runtime inference.
+**POGO delivers high-quality OCR performance with minimal overhead.** Built from the ground up in Go, it combines the accuracy of PaddleOCR models with the speed of ONNX Runtime inference.
 
 ### Core Capabilities
 
@@ -49,7 +49,7 @@
 - **Quality Gates**: Smart rectification with automatic quality validation
 - **Configurable**: Fine-tune models, thresholds, and processing parameters
 
-> **Deep Dive**: Check out `GOAL.md` for project vision and `PLAN.md` for development roadmap (Phase 6.3 rectification complete!)
+> **Deep Dive**: Check out `GOAL.md` for project vision and `PLAN.md` for development roadmap
 
 ## Quick Start
 
@@ -85,7 +85,7 @@ source scripts/setup-env.sh
 
 **Organized model hierarchy under `models/`:**
 
-```
+```plain
 models/
 ├── detection/
 │   ├── mobile/     → PP-OCRv5_mobile_det.onnx    (fast, efficient)
@@ -263,6 +263,99 @@ curl -s -F pdf=@scan.pdf -F pages=1-3 http://localhost:8080/ocr/pdf | jq
 # PDF OCR → Plain Text
 curl -s -F pdf=@scan.pdf -F format=text http://localhost:8080/ocr/pdf
 ```
+
+## Docker Deployment - Container Ready
+
+### Quick Start with Docker
+
+**Single Command Deployment:**
+
+```bash
+# Build and run with docker-compose
+cd deployment/
+docker-compose up --build
+
+# Access your OCR service
+curl -s -F image=@../testdata/images/simple_text.png http://localhost:8080/ocr/image | jq
+```
+
+### Docker Configuration
+
+**Basic Usage:**
+
+```bash
+# Build the image
+docker build -t pogo-ocr -f deployment/Dockerfile .
+
+# Run the container
+docker run -p 8080:8080 pogo-ocr serve --host 0.0.0.0
+```
+
+**Production Deployment:**
+
+All deployment files are organized in the `deployment/` directory:
+
+```
+deployment/
+├── Dockerfile          # Multi-stage Docker build
+├── docker-compose.yml  # Production configuration
+├── nginx.conf          # Reverse proxy setup
+└── README.md           # Deployment guide
+```
+
+```yaml
+# deployment/docker-compose.yml excerpt
+services:
+  pogo-ocr:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - POGO_SERVER_HOST=0.0.0.0
+      - POGO_MODELS_DIR=/usr/share/pogo/models
+      - POGO_LOG_LEVEL=info
+    volumes:
+      # Optional: Custom models
+      - ../custom-models:/usr/share/pogo/models:ro
+    restart: unless-stopped
+```
+
+**Environment Variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POGO_SERVER_HOST` | `0.0.0.0` | Server bind address |
+| `POGO_SERVER_PORT` | `8080` | Server port |
+| `POGO_MODELS_DIR` | `/usr/share/pogo/models` | Models directory |
+| `POGO_LOG_LEVEL` | `info` | Logging level |
+| `POGO_PIPELINE_RECOGNIZER_LANGUAGE` | `en` | Recognition language |
+
+**Custom Models:**
+Mount your custom models directory to override the built-in models:
+
+```bash
+docker run -p 8080:8080 \
+  -v ./my-models:/usr/share/pogo/models:ro \
+  pogo-ocr serve --host 0.0.0.0
+```
+
+**Health & Monitoring:**
+Built-in health checks and resource management ensure production reliability:
+
+```bash
+# Check container health
+docker ps  # Look for "healthy" status
+
+# View logs (from deployment/ directory)
+docker-compose logs pogo-ocr
+
+# Scale for high availability
+docker-compose up --scale pogo-ocr=3
+```
+
+> **Pro Tip**: Use the included nginx profile (`docker-compose --profile proxy up`) for load balancing and SSL termination!
 
 ## Project Status - Battle-Tested & Ready
 

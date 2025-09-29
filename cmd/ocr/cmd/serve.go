@@ -82,6 +82,32 @@ Examples:
 			overlayPoly, _ = cmd.Flags().GetString("overlay-poly-color")
 		}
 
+		// Extract rate limiting configuration
+		rateLimitEnabled := cfg.Server.RateLimitEnabled
+		if cmd.Flags().Changed("rate-limit-enabled") {
+			rateLimitEnabled, _ = cmd.Flags().GetBool("rate-limit-enabled")
+		}
+
+		requestsPerMinute := cfg.Server.RequestsPerMinute
+		if cmd.Flags().Changed("requests-per-minute") {
+			requestsPerMinute, _ = cmd.Flags().GetInt("requests-per-minute")
+		}
+
+		requestsPerHour := cfg.Server.RequestsPerHour
+		if cmd.Flags().Changed("requests-per-hour") {
+			requestsPerHour, _ = cmd.Flags().GetInt("requests-per-hour")
+		}
+
+		maxRequestsPerDay := cfg.Server.MaxRequestsPerDay
+		if cmd.Flags().Changed("max-requests-per-day") {
+			maxRequestsPerDay, _ = cmd.Flags().GetInt("max-requests-per-day")
+		}
+
+		maxDataPerDay := cfg.Server.MaxDataPerDay
+		if cmd.Flags().Changed("max-data-per-day") {
+			maxDataPerDay, _ = cmd.Flags().GetInt64("max-data-per-day")
+		}
+
 		// Extract pipeline configuration with CLI flag overrides
 		language := cfg.Pipeline.Recognizer.Language
 		if cmd.Flags().Changed("language") {
@@ -190,6 +216,13 @@ Examples:
 			OverlayEnabled:   overlayEnable,
 			OverlayBoxColor:  overlayBox,
 			OverlayPolyColor: overlayPoly,
+			RateLimit: server.RateLimitConfig{
+				Enabled:           rateLimitEnabled,
+				RequestsPerMinute: requestsPerMinute,
+				RequestsPerHour:   requestsPerHour,
+				MaxRequestsPerDay: maxRequestsPerDay,
+				MaxDataPerDay:     maxDataPerDay,
+			},
 		}
 
 		// Initialize server
@@ -279,4 +312,10 @@ func init() {
 	serveCmd.Flags().String("overlay-poly-color", "#00FF00", "overlay polygon color (hex)")
 	// Detection polygon mode flag
 	serveCmd.Flags().String("det-polygon-mode", "minrect", "detector polygon mode: minrect or contour")
+	// Rate limiting flags
+	serveCmd.Flags().Bool("rate-limit-enabled", false, "enable rate limiting")
+	serveCmd.Flags().Int("requests-per-minute", 60, "maximum requests per minute per client")
+	serveCmd.Flags().Int("requests-per-hour", 1000, "maximum requests per hour per client")
+	serveCmd.Flags().Int("max-requests-per-day", 5000, "maximum requests per day per client")
+	serveCmd.Flags().Int64("max-data-per-day", 100*1024*1024, "maximum data processed per day per client (bytes)")
 }
