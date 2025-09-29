@@ -73,5 +73,92 @@ func (r *Rectifier) validateRectangle(rect []utils.Point, oh, ow int) bool {
 	return true
 }
 
+// processDocTROutput processes DocTR model output to extract document corners.
+// DocTR typically outputs corner coordinates directly rather than a mask.
+func (r *Rectifier) processDocTROutput(outData []float32, oh, ow int) ([]utils.Point, bool) {
+	// DocTR models typically output 8 values representing 4 corner coordinates (x1,y1,x2,y2,x3,y3,x4,y4)
+	// The exact format may vary depending on the specific DocTR model implementation
+	if len(outData) < 8 {
+		return nil, false
+	}
+
+	// Extract corner coordinates from the first 8 values
+	// Assuming output format: [x1, y1, x2, y2, x3, y3, x4, y4]
+	corners := make([]utils.Point, 4)
+	for i := 0; i < 4; i++ {
+		x := float64(outData[i*2])
+		y := float64(outData[i*2+1])
+
+		// Normalize coordinates if they are in [0,1] range
+		if x >= 0 && x <= 1 && y >= 0 && y <= 1 {
+			x *= float64(ow)
+			y *= float64(oh)
+		}
+
+		// Clamp to image bounds
+		if x < 0 {
+			x = 0
+		}
+		if x >= float64(ow) {
+			x = float64(ow - 1)
+		}
+		if y < 0 {
+			y = 0
+		}
+		if y >= float64(oh) {
+			y = float64(oh - 1)
+		}
+
+		corners[i] = utils.Point{X: x, Y: y}
+	}
+
+	// Validate that we have a reasonable quadrilateral
+	if !r.validateDocTRCorners(corners, oh, ow) {
+		return nil, false
+	}
+
+	return corners, true
+}
+
+// validateDocTRCorners validates that the predicted corners form a reasonable document quadrilateral.
+func (r *Rectifier) validateDocTRCorners(corners []utils.Point, oh, ow int) bool {
+	if len(corners) != 4 {
+		return false
+	}
+
+	// Check that points are not too close together (degenerate quadrilateral)
+	minDist := float64(ow) * 0.05 // Minimum 5% of image width between points
+	for i := 0; i < 4; i++ {
+		for j := i + 1; j < 4; j++ {
+			dist := hypot(corners[i], corners[j])
+			if dist < minDist {
+				return false
+			}
+		}
+	}
+
+	// Check aspect ratio (similar to UVDoc validation)
+	// Calculate approximate width and height
+	width := (hypot(corners[0], corners[1]) + hypot(corners[2], corners[3])) * 0.5
+	height := (hypot(corners[0], corners[3]) + hypot(corners[1], corners[2])) * 0.5
+
+	if width <= 1 || height <= 1 {
+		return false
+	}
+
+	area := width * height
+	imgArea := float64(ow * oh)
+	if area/imgArea < r.cfg.MinRectAreaRatio {
+		return false
+	}
+
+	ar := width / height
+	if ar < r.cfg.MinRectAspect || ar > r.cfg.MaxRectAspect {
+		return false
+	}
+
+	return true
+}
+
 // hypot returns Euclidean distance between points a and b.
 func hypot(a, b utils.Point) float64 { return math.Hypot(a.X-b.X, a.Y-b.Y) }

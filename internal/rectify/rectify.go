@@ -57,8 +57,7 @@ func (r *Rectifier) Close() {
 	r.session = nil
 }
 
-// Apply runs rectification. Minimal version returns the original image while
-// exercising the model to validate the path and future integration hooks.
+// Apply runs rectification. Supports both UVDoc and DocTR methods.
 func (r *Rectifier) Apply(img image.Image) (image.Image, error) {
 	if r == nil || !r.cfg.Enabled || r.session == nil {
 		return img, nil
@@ -67,6 +66,18 @@ func (r *Rectifier) Apply(img image.Image) (image.Image, error) {
 		return nil, errors.New("nil image")
 	}
 
+	switch r.cfg.Method {
+	case RectificationDocTR:
+		return r.applyDocTR(img)
+	case RectificationUVDoc:
+		return r.applyUVDoc(img)
+	default:
+		return r.applyUVDoc(img) // fallback to UVDoc
+	}
+}
+
+// applyUVDoc runs UVDoc rectification (mask-based approach).
+func (r *Rectifier) applyUVDoc(img image.Image) (image.Image, error) {
 	// Prepare input image
 	resized, err := utils.ResizeImage(img, utils.DefaultImageConstraints())
 	if err != nil {
@@ -81,6 +92,30 @@ func (r *Rectifier) Apply(img image.Image) (image.Image, error) {
 
 	// Process mask and find rectangle
 	rect, valid := r.processMaskAndFindRectangle(outData, oh, ow)
+	if !valid {
+		return img, nil
+	}
+
+	// Transform and warp
+	return r.transformAndWarpImage(img, resized, rect)
+}
+
+// applyDocTR runs DocTR rectification (corner prediction approach).
+func (r *Rectifier) applyDocTR(img image.Image) (image.Image, error) {
+	// Prepare input image
+	resized, err := utils.ResizeImage(img, utils.DefaultImageConstraints())
+	if err != nil {
+		return img, err
+	}
+
+	// Run model inference
+	outData, oh, ow, err := r.runModelInference(resized)
+	if err != nil {
+		return img, err
+	}
+
+	// Process DocTR output and find document corners
+	rect, valid := r.processDocTROutput(outData, oh, ow)
 	if !valid {
 		return img, nil
 	}

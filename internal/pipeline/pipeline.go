@@ -219,10 +219,25 @@ func (b *Builder) WithRectification(enabled bool) *Builder {
 	return b
 }
 
-// WithRectifyModelPath overrides the rectification model path.
+// WithRectifyModelPath overrides the rectification model path directly.
 func (b *Builder) WithRectifyModelPath(path string) *Builder {
 	if path != "" {
 		b.cfg.Rectification.ModelPath = path
+	}
+	return b
+}
+
+// WithRectifyMethod sets the rectification method (uvdoc or doctr).
+func (b *Builder) WithRectifyMethod(method string) *Builder {
+	switch method {
+	case "doctr":
+		b.cfg.Rectification.Method = rectify.RectificationDocTR
+		b.cfg.Rectification.ModelPath = models.GetDocTRModelPath(b.cfg.ModelsDir)
+	case "uvdoc":
+		b.cfg.Rectification.Method = rectify.RectificationUVDoc
+		b.cfg.Rectification.ModelPath = models.GetLayoutModelPath(b.cfg.ModelsDir, models.LayoutUVDoc)
+	default:
+		// Keep existing method
 	}
 	return b
 }
@@ -607,6 +622,7 @@ func (p *Pipeline) Info() map[string]interface{} {
 	// Rectification info
 	info["rectification"] = map[string]interface{}{
 		"enabled":    p.cfg.Rectification.Enabled,
+		"method":     string(p.cfg.Rectification.Method),
 		"model_path": p.cfg.Rectification.ModelPath,
 	}
 	// Text line orientation config exposure

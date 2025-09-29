@@ -22,6 +22,7 @@ const (
 	LayoutPPLCNetX10Doc       = "pplcnet_x1_0_doc_ori.onnx"
 	LayoutPPLCNetX10Textline  = "pplcnet_x1_0_textline_ori.onnx"
 	LayoutUVDoc               = "uvdoc.onnx"
+	LayoutDocTR               = "doctr.onnx"
 
 	// Dictionary files.
 	DictionaryPPOCRKeysV1 = "ppocr_keys_v1.txt"
@@ -169,6 +170,11 @@ func GetLayoutModelPath(modelsDir, filename string) string {
 	return ResolveModelPath(modelsDir, TypeLayout, "", filename)
 }
 
+// GetDocTRModelPath returns the path for the DocTR rectification model.
+func GetDocTRModelPath(modelsDir string) string {
+	return GetLayoutModelPath(modelsDir, LayoutDocTR)
+}
+
 // ValidateModelExists checks if a model file exists at the given path.
 func ValidateModelExists(modelPath string) error {
 	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
@@ -235,6 +241,13 @@ func ListAvailableModels() []ModelInfo {
 			Variant:     "",
 			Description: "UVDoc layout model",
 			Filename:    LayoutUVDoc,
+		},
+		{
+			Name:        "doctr",
+			Type:        TypeLayout,
+			Variant:     "",
+			Description: "DocTR document rectification model",
+			Filename:    LayoutDocTR,
 		},
 		{
 			Name:        "ppocr-keys-v1",

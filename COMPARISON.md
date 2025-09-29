@@ -117,7 +117,7 @@ examples/          # Usage examples
 |-------|------|---------|
 | **Document Orientation** | ✅ PPLCNet models | ✅ PPLCNet models |
 | **Text Line Orientation** | ✅ Text line classification | ✅ Text line classification |
-| **Document Rectification** | ✅ UVDoc rectification | ✅ UVDoc + DocTR rectification |
+| **Document Rectification** | ✅ UVDoc + DocTR rectification | ✅ UVDoc + DocTR rectification |
 | **Layout Analysis** | ❌ Not implemented | ✅ Advanced layout analysis |
 | **Image Preprocessing** | Basic utilities | Advanced transform pipelines |
 
@@ -222,7 +222,7 @@ pub struct ParallelPolicy {
 | **Detection Models** | PP-OCRv5 mobile/server | PP-OCRv4/v5 mobile/server |
 | **Recognition Models** | PP-OCRv5 mobile/server | PP-OCRv4/v5 + language-specific |
 | **Orientation Models** | PPLCNet variants | PPLCNet variants |
-| **Rectification Models** | UVDoc | UVDoc + DocTR |
+| **Rectification Models** | UVDoc + DocTR | UVDoc + DocTR |
 | **Model Discovery** | Automatic path resolution | Configurable model paths |
 | **Default Models** | Predefined model constants | Rich model ecosystem |
 
