@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -17,13 +18,86 @@ import (
 	"github.com/MeKo-Tech/pogo/internal/pipeline"
 )
 
-// RequestConfig holds per-request configuration overrides
+// RequestConfig holds per-request configuration overrides.
 type RequestConfig struct {
 	Language  string
 	DictLangs []string
 	DictPath  string
 	DetModel  string
 	RecModel  string
+
+	// PDF enhancement options
+	UserPassword     string  `json:"user_password,omitempty"`
+	OwnerPassword    string  `json:"owner_password,omitempty"`
+	EnableVectorText bool    `json:"enable_vector_text,omitempty"`
+	EnableHybrid     bool    `json:"enable_hybrid,omitempty"`
+	QualityThreshold float64 `json:"quality_threshold,omitempty"`
+}
+
+// Validate validates the request configuration parameters.
+func (c *RequestConfig) Validate() error {
+	// Validate language code
+	if c.Language != "" {
+		if len(c.Language) > 10 {
+			return fmt.Errorf("language code too long: %s", c.Language)
+		}
+		// Basic validation - should be letters (case insensitive), optionally with numbers/hyphens/underscores
+		for _, r := range strings.ToLower(c.Language) {
+			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
+				return fmt.Errorf("invalid language code format: %s", c.Language)
+			}
+		}
+	}
+
+	// Validate dict-langs
+	for _, lang := range c.DictLangs {
+		if lang == "" {
+			continue
+		}
+		if len(lang) > 10 {
+			return fmt.Errorf("dictionary language code too long: %s", lang)
+		}
+		// Basic validation - should be letters (case insensitive), optionally with numbers/hyphens/underscores
+		for _, r := range strings.ToLower(lang) {
+			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
+				return fmt.Errorf("invalid dictionary language code format: %s", lang)
+			}
+		}
+	}
+
+	// Validate model paths - basic sanity checks
+	if c.DetModel != "" {
+		if len(c.DetModel) > 500 {
+			return errors.New("detector model path too long")
+		}
+		// Check for obviously dangerous characters
+		if strings.Contains(c.DetModel, "..") || strings.Contains(c.DetModel, "\n") || strings.Contains(c.DetModel, "\r") {
+			return errors.New("invalid detector model path")
+		}
+	}
+
+	if c.RecModel != "" {
+		if len(c.RecModel) > 500 {
+			return errors.New("recognizer model path too long")
+		}
+		// Check for obviously dangerous characters
+		if strings.Contains(c.RecModel, "..") || strings.Contains(c.RecModel, "\n") || strings.Contains(c.RecModel, "\r") {
+			return errors.New("invalid recognizer model path")
+		}
+	}
+
+	// Validate dict path
+	if c.DictPath != "" {
+		if len(c.DictPath) > 500 {
+			return errors.New("dictionary path too long")
+		}
+		// Check for obviously dangerous characters
+		if strings.Contains(c.DictPath, "..") || strings.Contains(c.DictPath, "\n") || strings.Contains(c.DictPath, "\r") {
+			return errors.New("invalid dictionary path")
+		}
+	}
+
+	return nil
 }
 
 // ocrImageHandler processes image OCR requests.
@@ -131,6 +205,12 @@ func (s *Server) parseImageRequest(w http.ResponseWriter, r *http.Request) (imag
 		for i, lang := range reqConfig.DictLangs {
 			reqConfig.DictLangs[i] = strings.TrimSpace(lang)
 		}
+	}
+
+	// Validate request configuration
+	if err := reqConfig.Validate(); err != nil {
+		s.writeErrorResponse(w, fmt.Sprintf("Invalid request parameters: %v", err), http.StatusBadRequest)
+		return nil, nil, err
 	}
 
 	return img, reqConfig, nil

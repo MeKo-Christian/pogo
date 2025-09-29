@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	// HTTP request metrics
+	// HTTP request metrics.
 	httpRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "pogo_http_requests_total",
@@ -24,7 +24,7 @@ var (
 		[]string{"method", "endpoint"},
 	)
 
-	// OCR processing metrics
+	// OCR processing metrics.
 	ocrRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "pogo_ocr_requests_total",
@@ -60,7 +60,7 @@ var (
 		[]string{"type"},
 	)
 
-	// Rate limiting metrics
+	// Rate limiting metrics.
 	rateLimitHits = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "pogo_rate_limit_hits_total",
@@ -69,7 +69,7 @@ var (
 		[]string{"type"}, // type: requests_per_minute, requests_per_hour, max_requests_per_day, max_data_per_day
 	)
 
-	// File upload metrics
+	// File upload metrics.
 	uploadSizeBytes = promauto.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "pogo_upload_size_bytes",
@@ -78,7 +78,7 @@ var (
 		},
 	)
 
-	// WebSocket metrics
+	// WebSocket metrics.
 	websocketConnections = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "pogo_websocket_active_connections",

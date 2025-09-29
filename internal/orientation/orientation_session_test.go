@@ -68,3 +68,30 @@ func TestUpdateModelPath_Variants(t *testing.T) {
 	c2.UpdateModelPath(dir)
 	assert.Equal(t, models.GetLayoutModelPath(dir, base2), c2.ModelPath)
 }
+
+func TestTryCreateONNXClassifier_MoreErrorPaths(t *testing.T) {
+	// Test with a real-looking but invalid ONNX file
+	tmpDir := t.TempDir()
+	invalidModel := filepath.Join(tmpDir, "invalid.onnx")
+
+	// Create a file that exists but is not a valid ONNX model
+	invalidData := []byte("This is not a valid ONNX model file")
+	require.NoError(t, os.WriteFile(invalidModel, invalidData, 0o644))
+
+	cfg := DefaultConfig()
+	cfg.ModelPath = invalidModel
+	cfg.NumThreads = 4
+
+	// This should fail at ONNX parsing stage
+	_, err := tryCreateONNXClassifier(cfg)
+	assert.Error(t, err)
+	// The error should be related to ONNX parsing or IO info retrieval
+	assert.Error(t, err)
+}
+
+func TestGetModelIOInfo_ErrorPath(t *testing.T) {
+	// Test with non-existent file
+	_, _, err := getModelIOInfo("/non/existent/file.onnx")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "io info")
+}

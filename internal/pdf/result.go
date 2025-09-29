@@ -5,13 +5,16 @@ import (
 	"github.com/MeKo-Tech/pogo/internal/utils"
 )
 
-// PageResult represents OCR results for a single PDF page.
+// PageResult represents enhanced OCR results for a single PDF page.
 type PageResult struct {
-	PageNumber int            `json:"page_number"`
-	Width      int            `json:"width"`
-	Height     int            `json:"height"`
-	Images     []ImageResult  `json:"images"`
-	Processing ProcessingInfo `json:"processing"`
+	PageNumber       int                `json:"page_number"`
+	Width            int                `json:"width"`
+	Height           int                `json:"height"`
+	Images           []ImageResult      `json:"images"`
+	Processing       ProcessingInfo     `json:"processing"`
+	Strategy         ProcessingStrategy `json:"strategy,omitempty"`          // Processing strategy used
+	VectorExtraction *TextExtraction    `json:"vector_extraction,omitempty"` // Vector text extraction results
+	HybridResult     *HybridResult      `json:"hybrid_result,omitempty"`     // Hybrid processing results
 }
 
 // ImageResult represents OCR results for a single image extracted from a PDF page.
@@ -38,6 +41,7 @@ type DocumentResult struct {
 type ProcessingInfo struct {
 	ExtractionTimeMs int64 `json:"extraction_time_ms"`
 	DetectionTimeMs  int64 `json:"detection_time_ms"`
+	VectorTimeMs     int64 `json:"vector_time_ms,omitempty"` // Time spent on vector text extraction
 	TotalTimeMs      int64 `json:"total_time_ms"`
 }
 

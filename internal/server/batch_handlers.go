@@ -11,21 +11,21 @@ import (
 	"time"
 )
 
-// BatchOCRRequest represents a batch OCR request
+// BatchOCRRequest represents a batch OCR request.
 type BatchOCRRequest struct {
 	Images []BatchImageRequest `json:"images,omitempty"`
 	PDFs   []BatchPDFRequest   `json:"pdfs,omitempty"`
 	Format string              `json:"format,omitempty"`
 }
 
-// BatchImageRequest represents a single image in a batch request
+// BatchImageRequest represents a single image in a batch request.
 type BatchImageRequest struct {
 	Name    string                 `json:"name"`
 	Data    []byte                 `json:"data"`
 	Options map[string]interface{} `json:"options,omitempty"`
 }
 
-// BatchPDFRequest represents a single PDF in a batch request
+// BatchPDFRequest represents a single PDF in a batch request.
 type BatchPDFRequest struct {
 	Name    string                 `json:"name"`
 	Data    []byte                 `json:"data"`
@@ -33,7 +33,7 @@ type BatchPDFRequest struct {
 	Options map[string]interface{} `json:"options,omitempty"`
 }
 
-// BatchOCRResponse represents the response for batch OCR processing
+// BatchOCRResponse represents the response for batch OCR processing.
 type BatchOCRResponse struct {
 	Success bool                   `json:"success"`
 	Results []BatchOCRResult       `json:"results,omitempty"`
@@ -41,7 +41,7 @@ type BatchOCRResponse struct {
 	Summary BatchProcessingSummary `json:"summary"`
 }
 
-// BatchOCRResult represents a single result in batch processing
+// BatchOCRResult represents a single result in batch processing.
 type BatchOCRResult struct {
 	Type     string      `json:"type"` // "image" or "pdf"
 	Name     string      `json:"name"`
@@ -51,7 +51,7 @@ type BatchOCRResult struct {
 	Duration float64     `json:"duration_seconds"`
 }
 
-// BatchProcessingSummary provides summary statistics for batch processing
+// BatchProcessingSummary provides summary statistics for batch processing.
 type BatchProcessingSummary struct {
 	TotalItems    int     `json:"total_items"`
 	Successful    int     `json:"successful"`
@@ -310,6 +310,14 @@ func (s *Server) extractBatchConfig(options map[string]interface{}) *RequestConf
 				config.DictLangs[i] = strings.TrimSpace(langStr)
 			}
 		}
+	}
+
+	// Validate the configuration (ignore validation errors in batch processing to avoid failing entire batch)
+	// The individual item processing will handle validation errors appropriately
+	if err := config.Validate(); err != nil {
+		// For batch processing, we'll log the validation error but continue
+		// Individual item validation will be handled in the processing functions
+		fmt.Fprintf(os.Stderr, "Warning: invalid batch configuration: %v\n", err)
 	}
 
 	return config

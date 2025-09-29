@@ -7,13 +7,14 @@ import (
 	"image"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
-// WebSocket upgrader with reasonable defaults
+// WebSocket upgrader with reasonable defaults.
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -24,13 +25,13 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// WebSocketMessage represents a message sent over WebSocket
+// WebSocketMessage represents a message sent over WebSocket.
 type WebSocketMessage struct {
 	Type    string      `json:"type"`
 	Payload interface{} `json:"payload,omitempty"`
 }
 
-// WebSocketOCRRequest represents an OCR request via WebSocket
+// WebSocketOCRRequest represents an OCR request via WebSocket.
 type WebSocketOCRRequest struct {
 	Type     string                 `json:"type"` // "image" or "pdf"
 	Image    []byte                 `json:"image,omitempty"`
@@ -40,12 +41,12 @@ type WebSocketOCRRequest struct {
 	Options  map[string]interface{} `json:"options,omitempty"`
 }
 
-// WebSocketConnWriter is an interface for writing WebSocket messages
+// WebSocketConnWriter is an interface for writing WebSocket messages.
 type WebSocketConnWriter interface {
 	WriteMessage(messageType int, data []byte) error
 }
 
-// WebSocketOCRResponse represents an OCR response via WebSocket
+// WebSocketOCRResponse represents an OCR response via WebSocket.
 type WebSocketOCRResponse struct {
 	Type      string      `json:"type"`
 	Status    string      `json:"status"` // "processing", "completed", "error"
@@ -80,9 +81,9 @@ func (s *Server) ocrWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 // handleWebSocketConnection processes messages from a WebSocket connection.
 func (s *Server) handleWebSocketConnection(conn *websocket.Conn) {
 	// Set read deadline to prevent hanging connections
-	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		return nil
 	})
 
@@ -128,7 +129,7 @@ func (s *Server) handleWebSocketMessage(conn *websocket.Conn, data []byte) {
 	}
 
 	// Generate a request ID for tracking
-	requestID := fmt.Sprintf("%d", time.Now().UnixNano())
+	requestID := strconv.FormatInt(time.Now().UnixNano(), 10)
 
 	// Send processing start message
 	s.sendWebSocketResponse(conn, WebSocketOCRResponse{
@@ -145,7 +146,7 @@ func (s *Server) handleWebSocketMessage(conn *websocket.Conn, data []byte) {
 	case "pdf":
 		s.processWebSocketPDF(conn, req, requestID)
 	default:
-		s.sendWebSocketError(conn, "invalid_request", fmt.Sprintf("Unsupported request type: %s", req.Type))
+		s.sendWebSocketError(conn, "invalid_request", "Unsupported request type: "+req.Type)
 	}
 }
 

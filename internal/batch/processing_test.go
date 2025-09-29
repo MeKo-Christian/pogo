@@ -23,15 +23,15 @@ func TestLoadAndValidateImage_ValidImage(t *testing.T) {
 
 	// Create a minimal PNG image
 	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
-	for y := 0; y < 100; y++ {
-		for x := 0; x < 100; x++ {
+	for y := range 100 {
+		for x := range 100 {
 			img.Set(x, y, color.White)
 		}
 	}
 
 	file, err := os.Create(imagePath)
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() { require.NoError(t, file.Close()) }()
 
 	err = png.Encode(file, img)
 	require.NoError(t, err)
@@ -182,7 +182,7 @@ func TestApplyConfidenceFilters_AllFilteredOut(t *testing.T) {
 
 	applyConfidenceFilters(result, 0.5, 0.5)
 
-	assert.Len(t, result.Regions, 0)
+	assert.Empty(t, result.Regions)
 	assert.Equal(t, 0.0, result.AvgDetConf)
 }
 
@@ -192,8 +192,8 @@ func TestGenerateAndSaveOverlay_ValidInputs(t *testing.T) {
 
 	// Create a simple test image
 	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
-	for y := 0; y < 100; y++ {
-		for x := 0; x < 100; x++ {
+	for y := range 100 {
+		for x := range 100 {
 			img.Set(x, y, color.White)
 		}
 	}
@@ -254,15 +254,15 @@ func TestProcessSingleImage_ValidImage(t *testing.T) {
 	imagePath := filepath.Join(tempDir, "test.png")
 
 	img := image.NewRGBA(image.Rect(0, 0, 100, 100))
-	for y := 0; y < 100; y++ {
-		for x := 0; x < 100; x++ {
+	for y := range 100 {
+		for x := range 100 {
 			img.Set(x, y, color.White)
 		}
 	}
 
 	file, err := os.Create(imagePath)
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() { require.NoError(t, file.Close()) }()
 
 	err = png.Encode(file, img)
 	require.NoError(t, err)
@@ -324,13 +324,13 @@ func TestProcessImagesParallel_ValidImages(t *testing.T) {
 	tempDir := testutil.CreateTempDir(t)
 	imagePaths := make([]string, 2)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		imagePath := filepath.Join(tempDir, fmt.Sprintf("test%d.png", i))
 		imagePaths[i] = imagePath
 
 		img := image.NewRGBA(image.Rect(0, 0, 50, 50))
-		for y := 0; y < 50; y++ {
-			for x := 0; x < 50; x++ {
+		for y := range 50 {
+			for x := range 50 {
 				img.Set(x, y, color.White)
 			}
 		}
@@ -340,7 +340,7 @@ func TestProcessImagesParallel_ValidImages(t *testing.T) {
 
 		err = png.Encode(file, img)
 		require.NoError(t, err)
-		file.Close()
+		require.NoError(t, file.Close())
 	}
 
 	config := &Config{
@@ -376,15 +376,15 @@ func TestProcessImagesParallel_WithConfidenceFilters(t *testing.T) {
 	imagePath := filepath.Join(tempDir, "test.png")
 
 	img := image.NewRGBA(image.Rect(0, 0, 50, 50))
-	for y := 0; y < 50; y++ {
-		for x := 0; x < 50; x++ {
+	for y := range 50 {
+		for x := range 50 {
 			img.Set(x, y, color.White)
 		}
 	}
 
 	file, err := os.Create(imagePath)
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() { require.NoError(t, file.Close()) }()
 
 	err = png.Encode(file, img)
 	require.NoError(t, err)

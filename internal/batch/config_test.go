@@ -139,7 +139,7 @@ func TestResult_SaveResults_Stdout(t *testing.T) {
 	require.NoError(t, err)
 
 	// Restore stdout and read captured output
-	w.Close()
+	require.NoError(t, w.Close())
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
@@ -206,7 +206,7 @@ func TestResult_PrintStats_Quiet(t *testing.T) {
 	result.PrintStats(false) // Not quiet
 
 	// Restore stdout and read captured output
-	w.Close()
+	require.NoError(t, w.Close())
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
@@ -240,7 +240,7 @@ func TestResult_PrintStats_WithResults(t *testing.T) {
 	result.PrintStats(false)
 
 	// Restore stdout and read captured output
-	w.Close()
+	require.NoError(t, w.Close())
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
@@ -257,7 +257,7 @@ func TestResult_PrintStats_WithResults(t *testing.T) {
 	assert.Contains(t, output, "images/sec")
 }
 
-// Helper function to create mock OCR results for testing
+// Helper function to create mock OCR results for testing.
 func createMockOCRResult(text string, confidence float64) *pipeline.OCRImageResult {
 	return &pipeline.OCRImageResult{
 		Width:  640,

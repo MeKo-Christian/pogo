@@ -102,7 +102,7 @@ func (m *mockPipeline) Close() error {
 	return nil
 }
 
-// mockPipelineForTesting is a mock implementation of pipelineInterface for testing
+// mockPipelineForTesting is a mock implementation of pipelineInterface for testing.
 type mockPipelineForTesting struct {
 	processImageResult *pipeline.OCRImageResult
 	processImageError  error
@@ -122,7 +122,7 @@ func (m *mockPipelineForTesting) Close() error {
 	return nil
 }
 
-// testServer wraps Server with mock pipeline for testing
+// testServer wraps Server with mock pipeline for testing.
 type testServer struct {
 	*Server
 	mockPipeline pipelineInterface
@@ -130,13 +130,13 @@ type testServer struct {
 
 func (ts *testServer) ocrImageHandlerMock(w http.ResponseWriter, r *http.Request) {
 	// Temporarily replace the server's pipeline with mock
-	originalPipeline := ts.Server.pipeline
-	ts.Server.pipeline = ts.mockPipeline
+	originalPipeline := ts.pipeline
+	ts.pipeline = ts.mockPipeline
 	defer func() {
-		ts.Server.pipeline = originalPipeline
+		ts.pipeline = originalPipeline
 	}()
 
-	ts.Server.ocrImageHandler(w, r)
+	ts.ocrImageHandler(w, r)
 }
 
 // createTestImage creates a simple test image for testing.

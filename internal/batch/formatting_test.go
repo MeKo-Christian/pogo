@@ -191,7 +191,7 @@ func TestFormatCSV_EmptyRegions(t *testing.T) {
 	// Check empty row
 	assert.Contains(t, lines[1], "/path/empty.png")
 	assert.Contains(t, lines[1], "0")                // region_index
-	assert.Equal(t, strings.Count(lines[1], ","), 9) // 10 columns total
+	assert.Equal(t, 9, strings.Count(lines[1], ",")) // 10 columns total
 }
 
 func TestFormatText_SingleResult(t *testing.T) {
@@ -226,7 +226,7 @@ func TestFormatText_MultipleResults(t *testing.T) {
 	// Check for proper separation (single newline between results)
 	parts := strings.Split(strings.TrimSpace(output), "\n")
 	// Should have header for first, text for first, header for second, text for second
-	assert.True(t, len(parts) >= 4)
+	assert.GreaterOrEqual(t, len(parts), 4)
 	assert.Contains(t, parts[0], "# /path/first.png")
 	assert.Contains(t, parts[2], "# /path/second.png")
 }

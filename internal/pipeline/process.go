@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MeKo-Tech/pogo/internal/detector"
+	"github.com/MeKo-Tech/pogo/internal/orientation"
 	"github.com/MeKo-Tech/pogo/internal/pdf"
 	"github.com/MeKo-Tech/pogo/internal/recognizer"
 	"github.com/MeKo-Tech/pogo/internal/utils"
@@ -359,6 +360,78 @@ func (p *Pipeline) ProcessImagesContext(ctx context.Context, images []image.Imag
 	if len(images) == 0 {
 		return nil, errors.New("no images provided")
 	}
+
+	// Pre-process orientation detection for all images if enabled
+	var orientationResults []orientation.Result
+	var workingImages []image.Image
+	if p.Orienter != nil && (p.cfg.Orientation.Enabled || p.cfg.EnableOrientation) {
+		// Use batch orientation detection for better performance
+		results, err := p.Orienter.BatchPredict(images)
+		if err != nil {
+			slog.Debug("Batch orientation detection failed, falling back to individual processing", "error", err)
+			// Fall back to individual processing
+			return p.processImagesIndividual(ctx, images)
+		}
+		orientationResults = results
+
+		// Apply rotations to create working images
+		workingImages = make([]image.Image, len(images))
+		for i, img := range images {
+			result := results[i]
+			switch result.Angle {
+			case 90:
+				workingImages[i] = utils.Rotate90(img)
+			case 180:
+				workingImages[i] = utils.Rotate180(img)
+			case 270:
+				workingImages[i] = utils.Rotate270(img)
+			default:
+				workingImages[i] = img
+			}
+		}
+	} else {
+		// No orientation processing needed
+		workingImages = images
+		orientationResults = make([]orientation.Result, len(images)) // All zero values
+	}
+
+	// Process each image with its pre-rotated working image
+	results := make([]*OCRImageResult, len(images))
+	for i, workingImg := range workingImages {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		// Apply rectification to working image
+		rectifiedImg, err := p.applyRectification(ctx, workingImg)
+		if err != nil {
+			return nil, err
+		}
+
+		// Perform detection
+		regions, detNs, err := p.performDetection(ctx, rectifiedImg)
+		if err != nil {
+			return nil, fmt.Errorf("image %d detection: %w", i, err)
+		}
+
+		// Perform recognition
+		recResults, recNs, err := p.performRecognition(ctx, rectifiedImg, regions)
+		if err != nil {
+			return nil, fmt.Errorf("image %d recognition: %w", i, err)
+		}
+
+		// Build result with orientation info
+		totalNs := detNs + recNs // Simplified total for batch processing
+		appliedAngle := orientationResults[i].Angle
+		appliedConf := orientationResults[i].Confidence
+		results[i] = p.buildImageResult(images[i], regions, recResults, appliedAngle, appliedConf, detNs, recNs, totalNs)
+	}
+
+	return results, nil
+}
+
+// processImagesIndividual processes images one by one (fallback method).
+func (p *Pipeline) processImagesIndividual(ctx context.Context, images []image.Image) ([]*OCRImageResult, error) {
 	results := make([]*OCRImageResult, len(images))
 	for i, img := range images {
 		if err := ctx.Err(); err != nil {

@@ -75,8 +75,8 @@ func TestDecodeCTCBeamSearch_Basic(t *testing.T) {
 	dec := DecodeCTCBeamSearch(logits, shape, 0, 5, false)
 	if assert.Len(t, dec, 1) {
 		d := dec[0]
-		assert.Equal(t, []int{1}, d.Sequence) // Should collapse to just class 1
-		assert.True(t, d.Probability > -1.0)  // Should have reasonable log prob
+		assert.Equal(t, []int{1}, d.Sequence)  // Should collapse to just class 1
+		assert.Greater(t, d.Probability, -1.0) // Should have reasonable log prob
 		assert.InDelta(t, 0.9, d.CharProbs[0], 1e-6)
 	}
 }
@@ -98,7 +98,7 @@ func TestDecodeCTCBeamSearch_MultipleTimesteps(t *testing.T) {
 		d := dec[0]
 		assert.Equal(t, []int{1, 2}, d.Sequence) // Should be 1,2 (merged consecutive 1s)
 		assert.Len(t, d.CharProbs, 2)
-		assert.True(t, d.CharProbs[0] > 0.7)         // First char prob
+		assert.Greater(t, d.CharProbs[0], 0.7)       // First char prob
 		assert.InDelta(t, 0.6, d.CharProbs[1], 1e-6) // Second char prob
 	}
 }

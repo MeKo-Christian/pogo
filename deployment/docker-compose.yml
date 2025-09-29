@@ -1,5 +1,4 @@
-version: '3.8'
-
+version: "3.8"
 services:
   pogo-ocr:
     build:
@@ -19,14 +18,12 @@ services:
       - POGO_SERVER_MAX_UPLOAD_MB=50
       - POGO_SERVER_TIMEOUT_SEC=30
       - POGO_SERVER_SHUTDOWN_TIMEOUT=10
-
       # OCR configuration
       - POGO_MODELS_DIR=/usr/share/pogo/models
       - POGO_PIPELINE_RECOGNIZER_LANGUAGE=en
       - POGO_PIPELINE_DETECTOR_DB_BOX_THRESH=0.5
       - POGO_FEATURES_ORIENTATION_ENABLED=false
       - POGO_FEATURES_TEXTLINE_ENABLED=false
-
       # Logging
       - POGO_LOG_LEVEL=info
       - POGO_LOG_FORMAT=json
@@ -50,13 +47,12 @@ services:
       resources:
         limits:
           memory: 2G
-          cpus: '2.0'
+          cpus: "2.0"
         reservations:
           memory: 512M
-          cpus: '0.5'
+          cpus: "0.5"
     networks:
       - pogo-network
-
   # Optional: Reverse proxy with nginx
   nginx:
     image: nginx:alpine
@@ -70,10 +66,8 @@ services:
       - pogo-network
     profiles:
       - proxy
-
 volumes:
   pogo-tmp:
-
 networks:
   pogo-network:
     driver: bridge

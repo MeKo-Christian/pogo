@@ -711,3 +711,104 @@ func (m *mockRecognizerWithImageError) GetModelInfo() map[string]any {
 }
 func (m *mockRecognizerWithImageError) Warmup(iterations int) error              { return nil }
 func (m *mockRecognizerWithImageError) SetTextLineOrienter(orienter interface{}) {}
+
+// Additional tests for ProcessImagesParallelContext to improve coverage
+
+func TestProcessImagesParallelContext_MultipleImages(t *testing.T) {
+	// Test the parallel processing path with multiple images and workers
+	p := createMockPipeline(t)
+	defer func() { _ = p.Close() }()
+
+	// Create multiple images to trigger parallel processing
+	images := []image.Image{
+		testutil.CreateTestImage(100, 100, color.White),
+		testutil.CreateTestImage(100, 100, color.Black),
+		testutil.CreateTestImage(100, 100, color.Gray{128}),
+	}
+
+	config := ParallelConfig{
+		MaxWorkers:       2,
+		BatchSize:        1,
+		MemoryLimitBytes: 100 * 1024 * 1024, // 100MB
+	}
+
+	ctx := context.Background()
+
+	// This should trigger the parallel execution path
+	results, err := p.ProcessImagesParallelContext(ctx, images, config)
+	require.NoError(t, err)
+	assert.Len(t, results, len(images))
+}
+
+func TestProcessImagesParallelContext_SingleImageFallback(t *testing.T) {
+	// Test that single image falls back to sequential processing
+	p := createMockPipeline(t)
+	defer func() { _ = p.Close() }()
+
+	images := []image.Image{
+		testutil.CreateTestImage(100, 100, color.White),
+	}
+
+	config := ParallelConfig{
+		MaxWorkers: 4,
+		BatchSize:  1,
+	}
+
+	ctx := context.Background()
+
+	// Should fall back to ProcessImagesContext
+	results, err := p.ProcessImagesParallelContext(ctx, images, config)
+	require.NoError(t, err)
+	assert.Len(t, results, 1)
+}
+
+func TestProcessImagesParallelContext_SingleWorkerFallback(t *testing.T) {
+	// Test that single worker falls back to sequential processing
+	p := createMockPipeline(t)
+	defer func() { _ = p.Close() }()
+
+	images := []image.Image{
+		testutil.CreateTestImage(100, 100, color.White),
+		testutil.CreateTestImage(100, 100, color.Black),
+	}
+
+	config := ParallelConfig{
+		MaxWorkers: 1, // Single worker
+		BatchSize:  1,
+	}
+
+	ctx := context.Background()
+
+	// Should fall back to ProcessImagesContext
+	results, err := p.ProcessImagesParallelContext(ctx, images, config)
+	require.NoError(t, err)
+	assert.Len(t, results, len(images))
+}
+
+func TestProcessImagesParallelContext_ContextCancellation(t *testing.T) {
+	// Test context cancellation during parallel processing
+	p := createMockPipeline(t)
+	defer func() { _ = p.Close() }()
+
+	images := []image.Image{
+		testutil.CreateTestImage(100, 100, color.White),
+		testutil.CreateTestImage(100, 100, color.Black),
+	}
+
+	config := ParallelConfig{
+		MaxWorkers: 2,
+		BatchSize:  1,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+
+	// Should handle context cancellation
+	results, err := p.ProcessImagesParallelContext(ctx, images, config)
+	// Either succeeds quickly or gets cancelled
+	if err != nil {
+		assert.Contains(t, err.Error(), "context")
+	} else {
+		assert.NotNil(t, results)
+	}
+}

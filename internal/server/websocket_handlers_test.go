@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockWebSocketConn is a mock implementation of websocket.Conn for testing
+// mockWebSocketConn is a mock implementation of websocket.Conn for testing.
 type mockWebSocketConn struct {
 	sentMessages []sentMessage
 }

@@ -26,7 +26,15 @@ type Config struct {
 	// If true, falls back to a simple heuristic when the ONNX model is unavailable
 	// or fails to initialize (useful for tests without model/runtime).
 	UseHeuristicFallback bool
-	GPU                  onnx.GPUConfig // GPU acceleration configuration
+	GPU                  onnx.GPUConfig
+	// Early exit options to skip orientation detection for certain images
+	SkipSquareImages bool    // Skip orientation detection for near-square images
+	SquareThreshold  float64 // Aspect ratio threshold for considering image "square" (default 1.2)
+	// Warmup options
+	EnableWarmup bool // Perform warmup on initialization for faster first predictions
+	// Heuristic-only mode: force use of heuristic method only, bypassing ONNX entirely
+	// Useful for CPU-constrained environments or when models are not available
+	HeuristicOnly bool
 }
 
 // DefaultConfig provides sensible defaults.
@@ -38,6 +46,10 @@ func DefaultConfig() Config {
 		NumThreads:           0,
 		UseHeuristicFallback: true,
 		GPU:                  onnx.DefaultGPUConfig(),
+		SkipSquareImages:     true,
+		SquareThreshold:      1.2,
+		EnableWarmup:         false,
+		HeuristicOnly:        false,
 	}
 }
 
@@ -49,6 +61,8 @@ func DefaultTextLineConfig() Config {
 	c.ConfidenceThreshold = 0.6
 	c.Enabled = false
 	c.GPU = onnx.DefaultGPUConfig()
+	c.EnableWarmup = false
+	c.HeuristicOnly = false
 	return c
 }
 
@@ -83,7 +97,13 @@ type Classifier struct {
 
 // NewClassifier attempts to create an ONNX-backed classifier. If the model is
 // not available and UseHeuristicFallback is true, it creates a heuristic-only classifier.
+// If HeuristicOnly is true, it forces heuristic-only mode regardless of model availability.
 func NewClassifier(cfg Config) (*Classifier, error) {
+	// Force heuristic-only mode if requested
+	if cfg.HeuristicOnly {
+		return &Classifier{cfg: cfg, heuristic: true}, nil
+	}
+
 	if !cfg.Enabled {
 		return &Classifier{cfg: cfg, heuristic: true}, nil
 	}
@@ -242,6 +262,11 @@ func (c *Classifier) Predict(img image.Image) (Result, error) {
 		return Result{}, errors.New("nil image")
 	}
 
+	// Early exit for square images if enabled
+	if c.cfg.SkipSquareImages && c.shouldSkipOrientation(img) {
+		return Result{Angle: 0, Confidence: 1.0}, nil
+	}
+
 	if c.heuristic || c.session == nil {
 		return c.predictWithHeuristic(img)
 	}
@@ -361,50 +386,223 @@ func (c *Classifier) computeOrientationFromLogits(logits []float32) (int, float6
 	return angle, confidence
 }
 
-func softmax(logits []float32) []float64 {
-	if len(logits) == 0 {
-		return nil
+// BatchPredict processes multiple images in batch for improved performance.
+// Returns results in the same order as input images.
+func (c *Classifier) BatchPredict(images []image.Image) ([]Result, error) {
+	if len(images) == 0 {
+		return nil, nil
 	}
 
-	// Find max for numerical stability
-	maxLogit := logits[0]
-	for _, v := range logits[1:] {
-		if v > maxLogit {
-			maxLogit = v
+	results := make([]Result, len(images))
+
+	if c.heuristic || c.session == nil {
+		// Use heuristic for all images
+		for i, img := range images {
+			results[i] = c.predictWithHeuristicSingle(img)
+		}
+		return results, nil
+	}
+
+	// Separate images that should skip orientation detection
+	var processImages []image.Image
+	var processIndices []int
+
+	for i, img := range images {
+		if c.cfg.SkipSquareImages && c.shouldSkipOrientation(img) {
+			results[i] = Result{Angle: 0, Confidence: 1.0}
+		} else {
+			processImages = append(processImages, img)
+			processIndices = append(processIndices, i)
 		}
 	}
 
-	// Compute exp and sum
-	var sum float64
-	probs := make([]float64, len(logits))
-	for i, v := range logits {
-		exp := math.Exp(float64(v - maxLogit))
-		probs[i] = exp
-		sum += exp
+	// Process remaining images with ONNX
+	if len(processImages) > 0 {
+		onnxResults, err := c.batchPredictWithONNX(processImages)
+		if err != nil {
+			return nil, err
+		}
+
+		// Fill in ONNX results
+		for i, result := range onnxResults {
+			results[processIndices[i]] = result
+		}
 	}
 
-	// Normalize
-	for i := range probs {
-		probs[i] /= sum
-	}
-
-	return probs
+	return results, nil
 }
 
-func argmax(values []float64) int {
-	if len(values) == 0 {
-		return -1
+// predictWithHeuristicSingle is a single-image version that returns Result directly.
+func (c *Classifier) predictWithHeuristicSingle(img image.Image) Result {
+	ang, conf := heuristicOrientation(img)
+	if conf < c.cfg.ConfidenceThreshold {
+		return Result{Angle: 0, Confidence: conf}
+	}
+	return Result{Angle: ang, Confidence: conf}
+}
+
+// batchPredictWithONNX processes multiple images using batched ONNX inference.
+func (c *Classifier) batchPredictWithONNX(images []image.Image) ([]Result, error) {
+	if len(images) == 0 {
+		return nil, nil
 	}
 
-	maxIdx := 0
-	maxVal := values[0]
-	for i, v := range values[1:] {
-		if v > maxVal {
-			maxVal = v
-			maxIdx = i + 1
+	// Prepare input tensors for all images
+	inputTensors := make([]*onnxrt.Tensor[float32], 0, len(images))
+	cleanupFuncs := make([]func(), 0, len(images))
+
+	defer func() {
+		// Cleanup all tensors
+		for _, cleanup := range cleanupFuncs {
+			cleanup()
+		}
+	}()
+
+	for _, img := range images {
+		tensor, cleanup, err := c.prepareInputTensor(img)
+		if err != nil {
+			return nil, fmt.Errorf("failed to prepare input tensor: %w", err)
+		}
+		inputTensors = append(inputTensors, tensor)
+		cleanupFuncs = append(cleanupFuncs, cleanup)
+	}
+
+	// Create batched input tensor
+	batchedInput, batchCleanup, err := c.createBatchedInputTensor(inputTensors)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create batched input: %w", err)
+	}
+	defer batchCleanup()
+
+	// Run batch inference
+	outputs, cleanupOutputs, err := c.runBatchInference(batchedInput, len(images))
+	if err != nil {
+		return nil, err
+	}
+	defer cleanupOutputs()
+
+	// Extract and process results for each image
+	results := make([]Result, len(images))
+	for i := range images {
+		logits, err := c.extractBatchLogits(outputs, i)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract logits for image %d: %w", i, err)
+		}
+
+		angle, confidence := c.computeOrientationFromLogits(logits)
+		if confidence < c.cfg.ConfidenceThreshold {
+			results[i] = Result{Angle: 0, Confidence: confidence}
+		} else {
+			results[i] = Result{Angle: angle, Confidence: confidence}
 		}
 	}
-	return maxIdx
+
+	return results, nil
+}
+
+// createBatchedInputTensor combines multiple input tensors into a single batched tensor.
+func (c *Classifier) createBatchedInputTensor(tensors []*onnxrt.Tensor[float32]) (*onnxrt.Tensor[float32], func(), error) {
+	if len(tensors) == 0 {
+		return nil, nil, errors.New("no tensors provided")
+	}
+
+	// Assume all tensors have the same shape (C, H, W)
+	firstShape := tensors[0].GetShape()
+	batchSize := len(tensors)
+	batchedShape := []int64{int64(batchSize), firstShape[0], firstShape[1], firstShape[2]}
+
+	// Calculate total size
+	totalSize := batchSize * int(firstShape[0]*firstShape[1]*firstShape[2])
+
+	// Create batched data array
+	batchedData := make([]float32, totalSize)
+
+	// Copy data from each tensor
+	offset := 0
+	for _, tensor := range tensors {
+		data := tensor.GetData()
+		copy(batchedData[offset:], data)
+		offset += len(data)
+	}
+
+	// Create batched tensor
+	batchedTensor, err := onnxrt.NewTensor(onnxrt.NewShape(batchedShape...), batchedData)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create batched tensor: %w", err)
+	}
+
+	cleanup := func() {
+		if err := batchedTensor.Destroy(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error destroying batched tensor: %v\n", err)
+		}
+	}
+
+	return batchedTensor, cleanup, nil
+}
+
+// runBatchInference runs inference on a batched input tensor.
+func (c *Classifier) runBatchInference(input *onnxrt.Tensor[float32], batchSize int) ([]onnxrt.Value, func(), error) {
+	outputs := []onnxrt.Value{nil}
+	if err := c.session.Run([]onnxrt.Value{input}, outputs); err != nil {
+		return nil, nil, fmt.Errorf("batch run: %w", err)
+	}
+
+	cleanup := func() {
+		for _, o := range outputs {
+			if o != nil {
+				if err := o.Destroy(); err != nil {
+					fmt.Fprintf(os.Stderr, "Error destroying batch output tensor: %v\n", err)
+				}
+			}
+		}
+	}
+
+	return outputs, cleanup, nil
+}
+
+// extractBatchLogits extracts logits for a specific image from batched output.
+func (c *Classifier) extractBatchLogits(outputs []onnxrt.Value, imageIndex int) ([]float32, error) {
+	t, ok := outputs[0].(*onnxrt.Tensor[float32])
+	if !ok {
+		return nil, fmt.Errorf("unexpected output type %T", outputs[0])
+	}
+
+	shape := t.GetShape()
+	if len(shape) != 3 || shape[0] < int64(imageIndex+1) || shape[2] < 4 {
+		return nil, fmt.Errorf("unexpected batch output shape %v for image %d", shape, imageIndex)
+	}
+
+	data := t.GetData()
+	logitsPerImage := int(shape[2]) // Should be 4 for 4 orientations
+	startIndex := imageIndex * logitsPerImage
+
+	if startIndex+logitsPerImage > len(data) {
+		return nil, fmt.Errorf("insufficient data for image %d", imageIndex)
+	}
+
+	logits := make([]float32, logitsPerImage)
+	copy(logits, data[startIndex:startIndex+logitsPerImage])
+
+	return logits, nil
+}
+
+// shouldSkipOrientation determines if orientation detection should be skipped for this image.
+func (c *Classifier) shouldSkipOrientation(img image.Image) bool {
+	bounds := img.Bounds()
+	width := float64(bounds.Dx())
+	height := float64(bounds.Dy())
+
+	if width <= 0 || height <= 0 {
+		return true // Skip invalid images
+	}
+
+	aspectRatio := width / height
+	if aspectRatio < 1.0 {
+		aspectRatio = 1.0 / aspectRatio
+	}
+
+	// Skip if image is near-square
+	return aspectRatio <= c.cfg.SquareThreshold
 }
 
 // heuristicOrientation uses a simple gradient-projection heuristic to
@@ -604,4 +802,65 @@ func setONNXLibraryPath() error {
 	}
 	onnxrt.SetSharedLibraryPath(p)
 	return nil
+}
+
+func softmax(logits []float32) []float64 {
+	if len(logits) == 0 {
+		return nil
+	}
+
+	// Find max for numerical stability
+	maxLogit := logits[0]
+	for _, v := range logits[1:] {
+		if v > maxLogit {
+			maxLogit = v
+		}
+	}
+
+	// Compute exp and sum
+	var sum float64
+	probs := make([]float64, len(logits))
+	for i, v := range logits {
+		exp := math.Exp(float64(v - maxLogit))
+		probs[i] = exp
+		sum += exp
+	}
+
+	// Normalize
+	for i := range probs {
+		probs[i] /= sum
+	}
+
+	return probs
+}
+
+func argmax(values []float64) int {
+	if len(values) == 0 {
+		return -1
+	}
+
+	maxIdx := 0
+	maxVal := values[0]
+	for i, v := range values[1:] {
+		if v > maxVal {
+			maxVal = v
+			maxIdx = i + 1
+		}
+	}
+	return maxIdx
+}
+
+// Warmup prepares the ONNX session for faster first predictions by running
+// a dummy inference to initialize internal state and bind IO.
+func (c *Classifier) Warmup() error {
+	if c.heuristic || c.session == nil {
+		return nil // No warmup needed for heuristic mode
+	}
+
+	// Create a small dummy image for warmup
+	dummyImg := image.NewRGBA(image.Rect(0, 0, 192, 192))
+
+	// Run a dummy prediction to warm up the session
+	_, err := c.Predict(dummyImg)
+	return err
 }

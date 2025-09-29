@@ -324,13 +324,13 @@ services:
 
 **Environment Variables:**
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `POGO_SERVER_HOST` | `0.0.0.0` | Server bind address |
-| `POGO_SERVER_PORT` | `8080` | Server port |
-| `POGO_MODELS_DIR` | `/usr/share/pogo/models` | Models directory |
-| `POGO_LOG_LEVEL` | `info` | Logging level |
-| `POGO_PIPELINE_RECOGNIZER_LANGUAGE` | `en` | Recognition language |
+| Variable                            | Default                  | Description          |
+| ----------------------------------- | ------------------------ | -------------------- |
+| `POGO_SERVER_HOST`                  | `0.0.0.0`                | Server bind address  |
+| `POGO_SERVER_PORT`                  | `8080`                   | Server port          |
+| `POGO_MODELS_DIR`                   | `/usr/share/pogo/models` | Models directory     |
+| `POGO_LOG_LEVEL`                    | `info`                   | Logging level        |
+| `POGO_PIPELINE_RECOGNIZER_LANGUAGE` | `en`                     | Recognition language |
 
 **Custom Models:**
 Mount your custom models directory to override the built-in models:

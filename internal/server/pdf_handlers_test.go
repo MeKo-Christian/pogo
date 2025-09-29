@@ -3,7 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -440,7 +440,7 @@ func TestServer_ocrPdfHandler_MethodNotAllowed(t *testing.T) {
 func TestServer_ocrPdfHandler_PipelineError(t *testing.T) {
 	mockPipeline := &mockPipelineForTesting{
 		processPDFResult: nil,
-		processPDFError:  fmt.Errorf("PDF processing failed"),
+		processPDFError:  errors.New("PDF processing failed"),
 	}
 
 	server := &Server{

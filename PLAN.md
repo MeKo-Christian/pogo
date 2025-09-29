@@ -176,14 +176,14 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 6.1 Enhanced PDF Capabilities
 
-- [ ] Handle vector-based PDFs (text extraction vs OCR):
-  - [ ] Vector text detection and extraction
-  - [ ] Hybrid vector/raster processing
-  - [ ] Quality assessment for OCR vs extraction decision
-- [ ] Process password-protected PDFs:
-  - [ ] Password prompt and handling
-  - [ ] Secure password storage
-  - [ ] Batch processing with credentials
+- [x] Handle vector-based PDFs (text extraction vs OCR):
+  - [x] Vector text detection and extraction
+  - [x] Hybrid vector/raster processing
+  - [x] Quality assessment for OCR vs extraction decision
+- [x] Process password-protected PDFs:
+  - [x] Password prompt and handling
+  - [x] Secure password storage
+  - [x] Batch processing with credentials
 
 ### 6.2 PDF Robustness & Scale
 
@@ -214,10 +214,10 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 7.1 API Endpoint Extensions
 
-- [ ] Add server endpoint: POST /ocr/pdf - PDF OCR:
-  - [ ] PDF upload and processing
-  - [ ] Page range selection
-  - [ ] Batch PDF processing
+- [x] Add server endpoint: POST /ocr/pdf - PDF OCR:
+  - [x] PDF upload and processing
+  - [x] Page range selection
+  - [x] Batch PDF processing
 - [x] Server rate limiting:
   - [x] Request rate limiting
   - [x] Resource-based throttling
@@ -229,15 +229,15 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 7.2 Advanced Server Features
 
-- [-] Enhanced server capabilities:
-  - [ ] Graceful shutdown handling
+- [x] Enhanced server capabilities:
+  - [x] Graceful shutdown handling
   - [x] Metrics/Prometheus endpoint
   - [x] WebSocket support for real-time OCR
-  - [ ] Batch processing endpoint
-- [ ] Server: accept dict-langs and language overrides per request (multipart fields):
-  - [ ] Dynamic language configuration
-  - [ ] Request-specific model selection
-  - [ ] Configuration validation
+  - [x] Batch processing endpoint
+- [x] Server: accept dict-langs and language overrides per request (multipart fields):
+  - [x] Dynamic language configuration
+  - [x] Request-specific model selection
+  - [x] Configuration validation
 
 ### 7.3 API Testing & Documentation
 

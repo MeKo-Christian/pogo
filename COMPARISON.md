@@ -4,21 +4,22 @@ This document provides a comprehensive comparison between two OCR implementation
 
 ## Project Overview
 
-| Aspect | Pogo (Go) | OAR-OCR (Rust) |
-|--------|-----------|----------------|
-| **Language** | Go | Rust |
-| **Primary Purpose** | CLI OCR tool with Go port of OAR-OCR functionality | Comprehensive OCR library with examples |
-| **ONNX Runtime Binding** | `github.com/yalue/onnxruntime_go` | `ort = "2.0.0-rc.10"` |
-| **Project Status** | Active development, Go implementation | Mature library, published on crates.io |
-| **Main Binary** | CLI application (`cmd/ocr`) | Library with examples |
-| **Version** | In development | v0.2.1 |
-| **License** | Not specified in files analyzed | Apache-2.0 |
+| Aspect                   | Pogo (Go)                                          | OAR-OCR (Rust)                          |
+| ------------------------ | -------------------------------------------------- | --------------------------------------- |
+| **Language**             | Go                                                 | Rust                                    |
+| **Primary Purpose**      | CLI OCR tool with Go port of OAR-OCR functionality | Comprehensive OCR library with examples |
+| **ONNX Runtime Binding** | `github.com/yalue/onnxruntime_go`                  | `ort = "2.0.0-rc.10"`                   |
+| **Project Status**       | Active development, Go implementation              | Mature library, published on crates.io  |
+| **Main Binary**          | CLI application (`cmd/ocr`)                        | Library with examples                   |
+| **Version**              | In development                                     | v0.2.1                                  |
+| **License**              | Not specified in files analyzed                    | Apache-2.0                              |
 
 ## Architecture Comparison
 
 ### Package/Module Structure
 
 #### Pogo (Go) Structure
+
 ```
 cmd/ocr/           # CLI application using Cobra
 internal/
@@ -38,6 +39,7 @@ pkg/ocr/           # Public API
 ```
 
 #### OAR-OCR (Rust) Structure
+
 ```
 src/
 ├── core/          # Core functionality
@@ -65,23 +67,25 @@ examples/          # Usage examples
 
 ### Detection Stage
 
-| Component | Pogo | OAR-OCR |
-|-----------|------|---------|
-| **Algorithm** | DB (Differentiable Binarization) | DB (Differentiable Binarization) |
-| **Models Supported** | PP-OCRv5 mobile/server detection | PP-OCRv4/v5 mobile/server detection |
-| **Preprocessing** | Standard image preprocessing | Advanced image preprocessing with transforms |
-| **Postprocessing** | DB mask, bitmap, score processing | DB mask, bitmap, score + advanced geometry |
-| **Configuration** | Threshold configuration | Rich configuration with builder pattern |
+| Component            | Pogo                              | OAR-OCR                                      |
+| -------------------- | --------------------------------- | -------------------------------------------- |
+| **Algorithm**        | DB (Differentiable Binarization)  | DB (Differentiable Binarization)             |
+| **Models Supported** | PP-OCRv5 mobile/server detection  | PP-OCRv4/v5 mobile/server detection          |
+| **Preprocessing**    | Standard image preprocessing      | Advanced image preprocessing with transforms |
+| **Postprocessing**   | DB mask, bitmap, score processing | DB mask, bitmap, score + advanced geometry   |
+| **Configuration**    | Threshold configuration           | Rich configuration with builder pattern      |
 
 #### Detection Implementation Details
 
 **Pogo Detection (`internal/detector/`)**:
+
 - Basic DB algorithm implementation
 - Standard threshold configuration
 - Simple polygon processing
 - Focus on core functionality
 
 **OAR-OCR Detection (`predictor/db_detector.rs`)**:
+
 - Advanced DB implementation with multiple postprocessing options
 - Sophisticated geometry processing
 - Configurable preprocessing pipelines
@@ -89,23 +93,25 @@ examples/          # Usage examples
 
 ### Recognition Stage
 
-| Component | Pogo | OAR-OCR |
-|-----------|------|---------|
-| **Algorithm** | CRNN (Convolutional Recurrent Neural Network) | CRNN |
-| **Models Supported** | PP-OCRv5 mobile/server recognition | PP-OCRv4/v5 + language-specific models |
-| **Dictionary Support** | Multiple dictionary support | Rich dictionary system |
-| **Language Support** | Multi-language via dictionaries | Extensive language support (Chinese, English, Korean, Latin, etc.) |
-| **Batch Processing** | Basic batch processing | Advanced dynamic batching |
+| Component              | Pogo                                          | OAR-OCR                                                            |
+| ---------------------- | --------------------------------------------- | ------------------------------------------------------------------ |
+| **Algorithm**          | CRNN (Convolutional Recurrent Neural Network) | CRNN                                                               |
+| **Models Supported**   | PP-OCRv5 mobile/server recognition            | PP-OCRv4/v5 + language-specific models                             |
+| **Dictionary Support** | Multiple dictionary support                   | Rich dictionary system                                             |
+| **Language Support**   | Multi-language via dictionaries               | Extensive language support (Chinese, English, Korean, Latin, etc.) |
+| **Batch Processing**   | Basic batch processing                        | Advanced dynamic batching                                          |
 
 #### Recognition Features
 
 **Pogo Recognition (`internal/recognizer/`)**:
+
 - Standard CRNN implementation
 - Multi-dictionary support
 - Language detection capabilities
 - Confidence scoring
 
 **OAR-OCR Recognition (`predictor/crnn_recognizer.rs`)**:
+
 - Advanced CRNN with multiple model variants
 - Rich language ecosystem with pre-trained models
 - Sophisticated text processing
@@ -113,37 +119,39 @@ examples/          # Usage examples
 
 ### Additional Pipeline Stages
 
-| Stage | Pogo | OAR-OCR |
-|-------|------|---------|
-| **Document Orientation** | ✅ PPLCNet models | ✅ PPLCNet models |
-| **Text Line Orientation** | ✅ Text line classification | ✅ Text line classification |
+| Stage                      | Pogo                           | OAR-OCR                        |
+| -------------------------- | ------------------------------ | ------------------------------ |
+| **Document Orientation**   | ✅ PPLCNet models              | ✅ PPLCNet models              |
+| **Text Line Orientation**  | ✅ Text line classification    | ✅ Text line classification    |
 | **Document Rectification** | ✅ UVDoc + DocTR rectification | ✅ UVDoc + DocTR rectification |
-| **Layout Analysis** | ❌ Not implemented | ✅ Advanced layout analysis |
-| **Image Preprocessing** | Basic utilities | Advanced transform pipelines |
+| **Layout Analysis**        | ❌ Not implemented             | ✅ Advanced layout analysis    |
+| **Image Preprocessing**    | Basic utilities                | Advanced transform pipelines   |
 
 ## CLI Tooling Comparison
 
 ### Available Commands
 
 #### Pogo CLI Commands
-| Command | Purpose | Key Features |
-|---------|---------|--------------|
-| `image` | Process individual images | Single/batch image processing, multiple output formats |
-| `pdf` | Process PDF documents | PDF page extraction and OCR |
-| `batch` | Batch processing | Directory processing, parallel execution |
-| `serve` | HTTP server | REST API for OCR processing |
-| `config` | Configuration management | View/edit configuration, validation |
-| `test` | Testing utilities | Pipeline testing and validation |
+
+| Command  | Purpose                   | Key Features                                           |
+| -------- | ------------------------- | ------------------------------------------------------ |
+| `image`  | Process individual images | Single/batch image processing, multiple output formats |
+| `pdf`    | Process PDF documents     | PDF page extraction and OCR                            |
+| `batch`  | Batch processing          | Directory processing, parallel execution               |
+| `serve`  | HTTP server               | REST API for OCR processing                            |
+| `config` | Configuration management  | View/edit configuration, validation                    |
+| `test`   | Testing utilities         | Pipeline testing and validation                        |
 
 #### OAR-OCR Examples (Library Usage)
-| Example | Purpose | Key Features |
-|---------|---------|--------------|
-| `oarocr_pipeline` | Complete OCR pipeline | Full pipeline with all stages |
-| `text_detection` | Text detection only | Standalone detection |
-| `text_recognition` | Text recognition only | Standalone recognition |
-| `doc_orientation_classification` | Document orientation | Document rotation detection |
-| `text_line_classification` | Text line orientation | Text line rotation |
-| `image_rectification` | Document rectification | Perspective correction |
+
+| Example                          | Purpose                | Key Features                  |
+| -------------------------------- | ---------------------- | ----------------------------- |
+| `oarocr_pipeline`                | Complete OCR pipeline  | Full pipeline with all stages |
+| `text_detection`                 | Text detection only    | Standalone detection          |
+| `text_recognition`               | Text recognition only  | Standalone recognition        |
+| `doc_orientation_classification` | Document orientation   | Document rotation detection   |
+| `text_line_classification`       | Text line orientation  | Text line rotation            |
+| `image_rectification`            | Document rectification | Perspective correction        |
 
 ### CLI Design Approach
 
@@ -154,6 +162,7 @@ examples/          # Usage examples
 ### Configuration Systems
 
 #### Pogo Configuration
+
 - YAML-based configuration files
 - Environment variable support
 - CLI flag overrides
@@ -161,6 +170,7 @@ examples/          # Usage examples
 - Config validation and defaults
 
 #### OAR-OCR Configuration
+
 - Builder pattern for configuration
 - Rich type-safe configuration system
 - ONNX Runtime configuration
@@ -171,15 +181,16 @@ examples/          # Usage examples
 
 ### Parallel Processing
 
-| Aspect | Pogo | OAR-OCR |
-|--------|------|---------|
-| **Strategy** | Goroutine-based parallelism | Rayon-based parallelism |
-| **Batch Processing** | Custom batch implementation | Dynamic batching system |
-| **Resource Management** | Memory limit enforcement | Advanced resource management |
-| **GPU Support** | CUDA via ONNX Runtime | CUDA + TensorRT + DirectML + OpenVINO |
-| **Threading** | Go's goroutines | Rayon work-stealing |
+| Aspect                  | Pogo                        | OAR-OCR                               |
+| ----------------------- | --------------------------- | ------------------------------------- |
+| **Strategy**            | Goroutine-based parallelism | Rayon-based parallelism               |
+| **Batch Processing**    | Custom batch implementation | Dynamic batching system               |
+| **Resource Management** | Memory limit enforcement    | Advanced resource management          |
+| **GPU Support**         | CUDA via ONNX Runtime       | CUDA + TensorRT + DirectML + OpenVINO |
+| **Threading**           | Go's goroutines             | Rayon work-stealing                   |
 
 #### Pogo Parallelization (`internal/pipeline/parallel.go`)
+
 ```go
 type ParallelConfig struct {
     Workers         int     // Number of worker goroutines
@@ -191,6 +202,7 @@ type ParallelConfig struct {
 ```
 
 #### OAR-OCR Parallelization (`core/config/parallel.rs`)
+
 ```rust
 pub struct ParallelPolicy {
     // Sophisticated parallel configuration
@@ -202,12 +214,14 @@ pub struct ParallelPolicy {
 ### Performance Features
 
 **Pogo**:
+
 - Resource management with memory limits
 - Adaptive scaling based on system resources
 - Progress tracking and reporting
 - Backpressure handling
 
 **OAR-OCR**:
+
 - Advanced dynamic batching
 - Work-stealing parallelism via Rayon
 - Multiple GPU execution providers
@@ -217,18 +231,19 @@ pub struct ParallelPolicy {
 
 ### Model Support
 
-| Aspect | Pogo | OAR-OCR |
-|--------|------|---------|
-| **Detection Models** | PP-OCRv5 mobile/server | PP-OCRv4/v5 mobile/server |
-| **Recognition Models** | PP-OCRv5 mobile/server | PP-OCRv4/v5 + language-specific |
-| **Orientation Models** | PPLCNet variants | PPLCNet variants |
-| **Rectification Models** | UVDoc + DocTR | UVDoc + DocTR |
-| **Model Discovery** | Automatic path resolution | Configurable model paths |
-| **Default Models** | Predefined model constants | Rich model ecosystem |
+| Aspect                   | Pogo                       | OAR-OCR                         |
+| ------------------------ | -------------------------- | ------------------------------- |
+| **Detection Models**     | PP-OCRv5 mobile/server     | PP-OCRv4/v5 mobile/server       |
+| **Recognition Models**   | PP-OCRv5 mobile/server     | PP-OCRv4/v5 + language-specific |
+| **Orientation Models**   | PPLCNet variants           | PPLCNet variants                |
+| **Rectification Models** | UVDoc + DocTR              | UVDoc + DocTR                   |
+| **Model Discovery**      | Automatic path resolution  | Configurable model paths        |
+| **Default Models**       | Predefined model constants | Rich model ecosystem            |
 
 #### Model Path Management
 
 **Pogo** (`internal/models/paths.go`):
+
 ```go
 const (
     DetectionMobile = "PP-OCRv5_mobile_det.onnx"
@@ -239,6 +254,7 @@ const (
 ```
 
 **OAR-OCR**:
+
 - Pre-trained models available via GitHub releases
 - Rich model ecosystem with language-specific variants
 - Automatic model downloading and caching
@@ -249,6 +265,7 @@ const (
 **Pogo**: Multi-language support through dictionary files with basic language detection.
 
 **OAR-OCR**: Extensive language support with dedicated models for:
+
 - Chinese/General (PP-OCRv4/v5)
 - English
 - Eastern Slavic
@@ -259,16 +276,17 @@ const (
 
 ### Supported Output Formats
 
-| Format | Pogo | OAR-OCR |
-|--------|------|---------|
+| Format   | Pogo                      | OAR-OCR                    |
+| -------- | ------------------------- | -------------------------- |
 | **JSON** | ✅ Structured JSON output | ✅ Rich JSON with metadata |
-| **CSV** | ✅ Tabular format | ❌ Not built-in |
-| **Text** | ✅ Plain text extraction | ✅ Plain text |
-| **XML** | ❌ Not supported | ❌ Not supported |
+| **CSV**  | ✅ Tabular format         | ❌ Not built-in            |
+| **Text** | ✅ Plain text extraction  | ✅ Plain text              |
+| **XML**  | ❌ Not supported          | ❌ Not supported           |
 
 ### Output Features
 
 #### Pogo Output Features
+
 - Bounding box coordinates (polygons and rectangles)
 - Confidence scores
 - Text orientation information
@@ -277,6 +295,7 @@ const (
 - Error metrics
 
 #### OAR-OCR Output Features
+
 - Rich `TextRegion` data structures
 - Confidence scores and probabilities
 - Advanced geometry information
@@ -294,14 +313,15 @@ const (
 
 ### Build Systems
 
-| Aspect | Pogo | OAR-OCR |
-|--------|------|---------|
-| **Build Tool** | Just (justfile) + Go modules | Cargo (Rust standard) |
-| **Dependencies** | Go modules, ONNX Runtime setup | Cargo.toml, automatic dependency management |
-| **Environment** | direnv for automatic env setup | Standard Rust toolchain |
-| **Cross-compilation** | Go's built-in cross-compilation | Cargo's cross-compilation |
+| Aspect                | Pogo                            | OAR-OCR                                     |
+| --------------------- | ------------------------------- | ------------------------------------------- |
+| **Build Tool**        | Just (justfile) + Go modules    | Cargo (Rust standard)                       |
+| **Dependencies**      | Go modules, ONNX Runtime setup  | Cargo.toml, automatic dependency management |
+| **Environment**       | direnv for automatic env setup  | Standard Rust toolchain                     |
+| **Cross-compilation** | Go's built-in cross-compilation | Cargo's cross-compilation                   |
 
 #### Pogo Build Commands
+
 ```bash
 just build          # Build with version info
 just build-dev       # Fast development build
@@ -311,6 +331,7 @@ just setup-deps     # Install dependencies
 ```
 
 #### OAR-OCR Build Commands
+
 ```bash
 cargo build         # Standard Rust build
 cargo test          # Run tests
@@ -321,6 +342,7 @@ cargo add           # Add dependencies
 ### Testing Approaches
 
 **Pogo Testing**:
+
 - Unit tests for individual components
 - Integration tests for full pipeline
 - Benchmark tests for performance
@@ -328,6 +350,7 @@ cargo add           # Add dependencies
 - Coverage reporting with `just test-coverage`
 
 **OAR-OCR Testing**:
+
 - Standard Rust unit and integration tests
 - Example-based testing
 - Property-based testing where applicable
@@ -337,12 +360,14 @@ cargo add           # Add dependencies
 ### Code Quality
 
 **Pogo**:
+
 - Comprehensive linting with golangci-lint (85+ rules)
 - Code formatting with gofumpt and gci
 - Structured logging with slog
 - Error handling with custom error types
 
 **OAR-OCR**:
+
 - Rust's built-in safety guarantees
 - Clippy linting
 - rustfmt formatting
@@ -375,12 +400,14 @@ cargo add           # Add dependencies
 ### Architecture Philosophy Differences
 
 **Pogo**:
+
 - CLI-first application design
 - Traditional Go project structure
 - Focus on operational use cases
 - Emphasis on deployment and production usage
 
 **OAR-OCR**:
+
 - Library-first design philosophy
 - Modern Rust architectural patterns
 - Focus on developer experience and extensibility
@@ -389,6 +416,7 @@ cargo add           # Add dependencies
 ### When to Choose Which
 
 **Choose Pogo if you need**:
+
 - A ready-to-use CLI tool for OCR processing
 - HTTP server capabilities for API integration
 - PDF document processing
@@ -396,6 +424,7 @@ cargo add           # Add dependencies
 - Integration with Go applications
 
 **Choose OAR-OCR if you need**:
+
 - A library to embed in Rust applications
 - Extensive language and model support
 - Advanced GPU acceleration options

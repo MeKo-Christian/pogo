@@ -3,12 +3,17 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/MeKo-Tech/pogo/internal/detector"
+	"github.com/MeKo-Tech/pogo/internal/pdf"
 	"github.com/MeKo-Tech/pogo/internal/pipeline"
 )
 
@@ -27,18 +32,40 @@ func (s *Server) ocrPdfHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = file.Close() }()
 
-	// Get pipeline for this request
-	pipeline, err := s.getPipelineForRequest(reqConfig)
+	// Save uploaded file to temporary location
+	tempFile, err := s.saveUploadedFile(file, header)
 	if err != nil {
-		s.writeErrorResponse(w, fmt.Sprintf("Failed to create pipeline: %v", err), http.StatusInternalServerError)
+		s.writeErrorResponse(w, fmt.Sprintf("Failed to save uploaded file: %v", err), http.StatusInternalServerError)
 		ocrRequestsTotal.WithLabelValues("pdf", "error").Inc()
 		return
 	}
+	defer func() { _ = os.Remove(tempFile) }() // Clean up temp file
 
-	// Run full OCR pipeline on PDF with timing
-	start := time.Now()
-	res, err := pipeline.ProcessPDF(header.Filename, pageRange)
-	duration := time.Since(start)
+	// Check if we need enhanced PDF processing (passwords or vector text)
+	needsEnhanced := reqConfig.UserPassword != "" || reqConfig.OwnerPassword != "" ||
+		reqConfig.EnableVectorText || reqConfig.EnableHybrid
+
+	var res *pipeline.OCRPDFResult
+	var duration time.Duration
+
+	if needsEnhanced {
+		// Use enhanced PDF processor
+		start := time.Now()
+		res, err = s.processEnhancedPDF(tempFile, pageRange, reqConfig)
+		duration = time.Since(start)
+	} else {
+		// Use standard pipeline processing
+		pipeline, err := s.getPipelineForRequest(reqConfig)
+		if err != nil {
+			s.writeErrorResponse(w, fmt.Sprintf("Failed to create pipeline: %v", err), http.StatusInternalServerError)
+			ocrRequestsTotal.WithLabelValues("pdf", "error").Inc()
+			return
+		}
+
+		start := time.Now()
+		res, err = pipeline.ProcessPDF(tempFile, pageRange)
+		duration = time.Since(start)
+	}
 
 	if err != nil {
 		ocrRequestsTotal.WithLabelValues("pdf", "error").Inc()
@@ -107,6 +134,22 @@ func (s *Server) parsePdfRequest(
 		DictPath: r.FormValue("dict"),
 		DetModel: r.FormValue("det-model"),
 		RecModel: r.FormValue("rec-model"),
+
+		// PDF enhancement options
+		UserPassword:     r.FormValue("user-password"),
+		OwnerPassword:    r.FormValue("owner-password"),
+		EnableVectorText: r.FormValue("enable-vector-text") != "false", // Default to true
+		EnableHybrid:     r.FormValue("enable-hybrid") == "true",
+	}
+
+	// Parse quality threshold
+	if qthreshStr := r.FormValue("quality-threshold"); qthreshStr != "" {
+		if qthresh, err := strconv.ParseFloat(qthreshStr, 64); err == nil && qthresh > 0 && qthresh <= 1.0 {
+			reqConfig.QualityThreshold = qthresh
+		}
+	}
+	if reqConfig.QualityThreshold == 0 {
+		reqConfig.QualityThreshold = 0.7 // Default threshold
 	}
 
 	// Parse dict-langs
@@ -115,6 +158,12 @@ func (s *Server) parsePdfRequest(
 		for i, lang := range reqConfig.DictLangs {
 			reqConfig.DictLangs[i] = strings.TrimSpace(lang)
 		}
+	}
+
+	// Validate request configuration
+	if err := reqConfig.Validate(); err != nil {
+		s.writeErrorResponse(w, fmt.Sprintf("Invalid request parameters: %v", err), http.StatusBadRequest)
+		return nil, nil, "", nil, err
 	}
 
 	return file, header, pageRange, reqConfig, nil
@@ -182,4 +231,186 @@ func (s *Server) writePDFTextResponse(w http.ResponseWriter, result *pipeline.OC
 		// Log error, but can't send another response
 		fmt.Fprintf(os.Stderr, "Error writing response: %v\n", err)
 	}
+}
+
+// saveUploadedFile saves the uploaded multipart file to a temporary location.
+func (s *Server) saveUploadedFile(file multipart.File, header *multipart.FileHeader) (string, error) {
+	// Create temporary file with proper extension
+	ext := filepath.Ext(header.Filename)
+	if ext == "" {
+		ext = ".pdf"
+	}
+
+	tempFile, err := os.CreateTemp("", "upload-*"+ext)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer func() { _ = tempFile.Close() }()
+
+	// Copy uploaded file to temp location
+	_, err = io.Copy(tempFile, file)
+	if err != nil {
+		_ = os.Remove(tempFile.Name()) // Clean up on error
+		return "", fmt.Errorf("failed to copy uploaded file: %w", err)
+	}
+
+	return tempFile.Name(), nil
+}
+
+// processEnhancedPDF processes a PDF using the enhanced processor with password and vector text support.
+func (s *Server) processEnhancedPDF(filename, pageRange string, reqConfig *RequestConfig) (*pipeline.OCRPDFResult, error) {
+	// Create detector for enhanced PDF processor
+	detectorConfig := detector.Config{
+		ModelPath:    s.baseConfig.Detector.ModelPath,
+		NumThreads:   s.baseConfig.Detector.NumThreads,
+		DbThresh:     s.baseConfig.Detector.DbThresh,
+		DbBoxThresh:  s.baseConfig.Detector.DbBoxThresh,
+		UseNMS:       s.baseConfig.Detector.UseNMS,
+		NMSThreshold: s.baseConfig.Detector.NMSThreshold,
+	}
+
+	// Update model paths if needed
+	detectorConfig.UpdateModelPath(s.baseConfig.ModelsDir)
+
+	det, err := detector.NewDetector(detectorConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create detector: %w", err)
+	}
+	defer func() { _ = det.Close() }()
+
+	// Create enhanced PDF processor configuration
+	processorConfig := &pdf.ProcessorConfig{
+		EnableVectorText:    reqConfig.EnableVectorText,
+		EnableHybrid:        reqConfig.EnableHybrid,
+		VectorTextQuality:   reqConfig.QualityThreshold,
+		VectorTextCoverage:  0.8, // Default coverage threshold
+		AllowPasswords:      true,
+		AllowPasswordPrompt: false, // Don't allow prompts in server mode
+	}
+
+	// Create enhanced PDF processor
+	processor := pdf.NewProcessorWithConfig(det, processorConfig)
+
+	// Set up credentials if provided
+	var creds *pdf.PasswordCredentials
+	if reqConfig.UserPassword != "" || reqConfig.OwnerPassword != "" {
+		creds = &pdf.PasswordCredentials{
+			UserPassword:  reqConfig.UserPassword,
+			OwnerPassword: reqConfig.OwnerPassword,
+		}
+	}
+
+	// Process the PDF with enhanced features
+	var result *pdf.DocumentResult
+	if creds != nil {
+		result, err = processor.ProcessFileWithCredentials(filename, pageRange, creds)
+	} else {
+		result, err = processor.ProcessFile(filename, pageRange)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("enhanced PDF processing failed: %w", err)
+	}
+
+	// Convert enhanced result to pipeline format for compatibility
+	return s.convertEnhancedResultToPipeline(result), nil
+}
+
+// convertEnhancedResultToPipeline converts enhanced PDF results to pipeline format for API compatibility.
+func (s *Server) convertEnhancedResultToPipeline(result *pdf.DocumentResult) *pipeline.OCRPDFResult {
+	pipelineResult := &pipeline.OCRPDFResult{
+		Filename:   result.Filename,
+		TotalPages: result.TotalPages,
+		Processing: struct {
+			ExtractionNs int64 `json:"extraction_ns"`
+			TotalNs      int64 `json:"total_ns"`
+		}{
+			ExtractionNs: result.Processing.ExtractionTimeMs * 1000000, // Convert ms to ns
+			TotalNs:      result.Processing.TotalTimeMs * 1000000,      // Convert ms to ns
+		},
+	}
+
+	// Convert pages
+	for _, page := range result.Pages {
+		pipelinePage := pipeline.OCRPDFPageResult{
+			PageNumber: page.PageNumber,
+			Width:      page.Width,
+			Height:     page.Height,
+			Processing: struct {
+				TotalNs int64 `json:"total_ns"`
+			}{
+				TotalNs: page.Processing.TotalTimeMs * 1000000, // Convert ms to ns
+			},
+		}
+
+		// Convert images from each page
+		for _, img := range page.Images {
+			pipelineImage := pipeline.OCRPDFImageResult{
+				ImageIndex: img.ImageIndex,
+				Width:      img.Width,
+				Height:     img.Height,
+				Confidence: img.Confidence,
+			}
+
+			// Convert OCR regions to pipeline format
+			if len(img.OCRRegions) > 0 {
+				// Use enriched OCR regions if available
+				for _, region := range img.OCRRegions {
+					pipelineRegion := pipeline.OCRRegionResult{
+						Box: struct{ X, Y, W, H int }{
+							X: region.Box.X,
+							Y: region.Box.Y,
+							W: region.Box.W,
+							H: region.Box.H,
+						},
+						DetConfidence: region.DetConfidence,
+						Text:          region.Text,
+						RecConfidence: region.RecConfidence,
+						Language:      region.Language,
+					}
+
+					// Convert polygon points
+					for _, point := range region.Polygon {
+						pipelineRegion.Polygon = append(pipelineRegion.Polygon, struct{ X, Y float64 }{
+							X: float64(point.X),
+							Y: float64(point.Y),
+						})
+					}
+
+					pipelineImage.Regions = append(pipelineImage.Regions, pipelineRegion)
+				}
+			} else {
+				// Fall back to basic detected regions
+				for _, region := range img.Regions {
+					pipelineRegion := pipeline.OCRRegionResult{
+						Box: struct{ X, Y, W, H int }{
+							X: int(region.Box.MinX),
+							Y: int(region.Box.MinY),
+							W: int(region.Box.MaxX - region.Box.MinX),
+							H: int(region.Box.MaxY - region.Box.MinY),
+						},
+						DetConfidence: region.Confidence,
+						Text:          "", // No text available from detection only
+						RecConfidence: 0,  // No recognition performed
+					}
+
+					// Convert polygon points if available
+					for _, point := range region.Polygon {
+						pipelineRegion.Polygon = append(pipelineRegion.Polygon, struct{ X, Y float64 }{
+							X: point.X,
+							Y: point.Y,
+						})
+					}
+
+					pipelineImage.Regions = append(pipelineImage.Regions, pipelineRegion)
+				}
+			}
+
+			pipelinePage.Images = append(pipelinePage.Images, pipelineImage)
+		}
+
+		pipelineResult.Pages = append(pipelineResult.Pages, pipelinePage)
+	}
+
+	return pipelineResult
 }

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -47,11 +48,12 @@ func TestRateLimiter_CheckRateLimit_RequestsPerMinute(t *testing.T) {
 	err = rl.CheckRateLimit(userID, 0)
 	assert.Error(t, err)
 
-	rateLimitErr, ok := err.(*RateLimitError)
+	rateLimitErr := &RateLimitError{}
+	ok := errors.As(err, &rateLimitErr)
 	require.True(t, ok)
 	assert.Equal(t, "minute", rateLimitErr.Type)
 	assert.Equal(t, 2, rateLimitErr.Limit)
-	assert.True(t, rateLimitErr.RetryAfter > 0)
+	assert.Positive(t, rateLimitErr.RetryAfter)
 }
 
 func TestRateLimiter_CheckRateLimit_RequestsPerHour(t *testing.T) {
@@ -60,7 +62,7 @@ func TestRateLimiter_CheckRateLimit_RequestsPerHour(t *testing.T) {
 	userID := "user1"
 
 	// Make 3 requests
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		err := rl.CheckRateLimit(userID, 0)
 		assert.NoError(t, err)
 	}
@@ -69,7 +71,8 @@ func TestRateLimiter_CheckRateLimit_RequestsPerHour(t *testing.T) {
 	err := rl.CheckRateLimit(userID, 0)
 	assert.Error(t, err)
 
-	rateLimitErr, ok := err.(*RateLimitError)
+	rateLimitErr := &RateLimitError{}
+	ok := errors.As(err, &rateLimitErr)
 	require.True(t, ok)
 	assert.Equal(t, "hour", rateLimitErr.Type)
 	assert.Equal(t, 3, rateLimitErr.Limit)
@@ -92,7 +95,8 @@ func TestRateLimiter_CheckRateLimit_MaxRequestsPerDay(t *testing.T) {
 	err = rl.CheckRateLimit(userID, 0)
 	assert.Error(t, err)
 
-	quotaErr, ok := err.(*QuotaExceededError)
+	quotaErr := &QuotaExceededError{}
+	ok := errors.As(err, &quotaErr)
 	require.True(t, ok)
 	assert.Equal(t, "requests", quotaErr.Type)
 	assert.Equal(t, int64(2), quotaErr.Limit)
@@ -117,7 +121,8 @@ func TestRateLimiter_CheckRateLimit_MaxDataPerDay(t *testing.T) {
 	err = rl.CheckRateLimit(userID, 200)
 	assert.Error(t, err)
 
-	quotaErr, ok := err.(*QuotaExceededError)
+	quotaErr := &QuotaExceededError{}
+	ok := errors.As(err, &quotaErr)
 	require.True(t, ok)
 	assert.Equal(t, "data", quotaErr.Type)
 	assert.Equal(t, int64(1000), quotaErr.Limit)
@@ -265,7 +270,7 @@ func TestQuotaExceededError_Error(t *testing.T) {
 	assert.Equal(t, expected, err.Error())
 }
 
-// Benchmark tests
+// Benchmark tests.
 func BenchmarkRateLimiter_CheckRateLimit(b *testing.B) {
 	rl := NewRateLimiter(100, 1000, 10000, 1024*1024)
 

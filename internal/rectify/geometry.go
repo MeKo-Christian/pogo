@@ -85,7 +85,7 @@ func (r *Rectifier) processDocTROutput(outData []float32, oh, ow int) ([]utils.P
 	// Extract corner coordinates from the first 8 values
 	// Assuming output format: [x1, y1, x2, y2, x3, y3, x4, y4]
 	corners := make([]utils.Point, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		x := float64(outData[i*2])
 		y := float64(outData[i*2+1])
 
@@ -128,7 +128,7 @@ func (r *Rectifier) validateDocTRCorners(corners []utils.Point, oh, ow int) bool
 
 	// Check that points are not too close together (degenerate quadrilateral)
 	minDist := float64(ow) * 0.05 // Minimum 5% of image width between points
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		for j := i + 1; j < 4; j++ {
 			dist := hypot(corners[i], corners[j])
 			if dist < minDist {

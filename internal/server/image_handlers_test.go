@@ -235,3 +235,103 @@ func TestServer_OCRImageHandler_OverlayDisabled(t *testing.T) {
 	// Should fail due to nil pipeline check before overlay check
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
+
+func TestRequestConfig_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  RequestConfig
+		wantErr bool
+	}{
+		{
+			name: "valid config",
+			config: RequestConfig{
+				Language:  "en",
+				DictLangs: []string{"en", "de"},
+				DictPath:  "/valid/path.txt",
+				DetModel:  "/models/det.onnx",
+				RecModel:  "/models/rec.onnx",
+			},
+			wantErr: false,
+		},
+		{
+			name:    "empty config",
+			config:  RequestConfig{},
+			wantErr: false,
+		},
+		{
+			name: "invalid language code - too long",
+			config: RequestConfig{
+				Language: "thisiswaytoolongforalanguagecode",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid language code - special chars",
+			config: RequestConfig{
+				Language: "en<script>",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid dict lang - too long",
+			config: RequestConfig{
+				DictLangs: []string{"thisiswaytoolongforalanguagecode"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid dict lang - special chars",
+			config: RequestConfig{
+				DictLangs: []string{"en<script>"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid det model path - too long",
+			config: RequestConfig{
+				DetModel: strings.Repeat("a", 501),
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid det model path - dangerous chars",
+			config: RequestConfig{
+				DetModel: "/models/../../../etc/passwd",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid rec model path - newlines",
+			config: RequestConfig{
+				RecModel: "/models/rec.onnx\nrm -rf /",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid dict path - carriage returns",
+			config: RequestConfig{
+				DictPath: "/dict.txt\r\n",
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid complex language codes",
+			config: RequestConfig{
+				Language:  "en-US",
+				DictLangs: []string{"zh-CN", "ja_1"},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate()
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

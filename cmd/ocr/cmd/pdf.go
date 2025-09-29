@@ -63,6 +63,18 @@ func init() {
 	pdfCmd.Flags().Int("rectify-height", 1024, "rectified page output height (advisory)")
 	pdfCmd.Flags().String("rectify-debug-dir", "",
 		"directory to write rectification debug images (mask, overlay, compare)")
+
+	// Enhanced PDF processing flags
+	pdfCmd.Flags().Bool("enable-vector-text", true, "enable vector text extraction")
+	pdfCmd.Flags().Bool("enable-hybrid", true, "enable hybrid processing (vector + OCR)")
+	pdfCmd.Flags().Float64("vector-text-quality", 0.7, "minimum vector text quality threshold (0..1)")
+	pdfCmd.Flags().Float64("vector-text-coverage", 0.8, "minimum vector text coverage for preference (0..1)")
+
+	// Password-related flags
+	pdfCmd.Flags().StringP("password", "p", "", "user password for encrypted PDFs")
+	pdfCmd.Flags().String("owner-password", "", "owner password for encrypted PDFs")
+	pdfCmd.Flags().Bool("allow-passwords", true, "allow processing of password-protected PDFs")
+	pdfCmd.Flags().Bool("prompt-password", false, "prompt for password if PDF is encrypted and no password provided")
 }
 
 // pdfConfig holds all the configuration for PDF processing.
@@ -87,6 +99,18 @@ type pdfConfig struct {
 	rectifyMask       float64
 	rectifyHeight     int
 	rectifyDebugDir   string
+
+	// Enhanced PDF processing options
+	enableVectorText   bool
+	enableHybrid       bool
+	vectorTextQuality  float64
+	vectorTextCoverage float64
+
+	// Password-related options
+	userPassword   string
+	ownerPassword  string
+	allowPasswords bool
+	promptPassword bool
 }
 
 // configToPDFConfig maps centralized configuration to pdfConfig.
@@ -150,6 +174,18 @@ func configToPDFConfig(centralCfg *config.Config, cmd *cobra.Command) (*pdfConfi
 
 	// PDF-specific flags (these don't have config file equivalents)
 	cfg.pages, _ = cmd.Flags().GetString("pages")
+
+	// Enhanced PDF processing flags
+	cfg.enableVectorText, _ = cmd.Flags().GetBool("enable-vector-text")
+	cfg.enableHybrid, _ = cmd.Flags().GetBool("enable-hybrid")
+	cfg.vectorTextQuality, _ = cmd.Flags().GetFloat64("vector-text-quality")
+	cfg.vectorTextCoverage, _ = cmd.Flags().GetFloat64("vector-text-coverage")
+
+	// Password-related flags
+	cfg.userPassword, _ = cmd.Flags().GetString("password")
+	cfg.ownerPassword, _ = cmd.Flags().GetString("owner-password")
+	cfg.allowPasswords, _ = cmd.Flags().GetBool("allow-passwords")
+	cfg.promptPassword, _ = cmd.Flags().GetBool("prompt-password")
 
 	// Validate parameters
 	if err := validatePDFConfig(cfg); err != nil {
@@ -451,17 +487,30 @@ func processPDFs(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Processing %d PDF(s): %v\n", len(args), args)
 
-	// Build pipeline
-	pl, err := buildPDFPipeline(cfg)
+	// Build enhanced PDF processor
+	processor, err := buildEnhancedPDFProcessor(cfg)
 	if err != nil {
-		return fmt.Errorf("failed to build OCR pipeline: %w", err)
+		return fmt.Errorf("failed to build enhanced PDF processor: %w", err)
 	}
-	defer func() { _ = pl.Close() }()
+	defer func() { _ = processor.Close() }()
+
+	// Setup password credentials if provided
+	if cfg.userPassword != "" || cfg.ownerPassword != "" {
+		creds := &pdf.PasswordCredentials{
+			UserPassword:  cfg.userPassword,
+			OwnerPassword: cfg.ownerPassword,
+		}
+		processor.SetPasswordCredentials(creds)
+	}
 
 	// Process each PDF file
 	results := make([]*pdf.DocumentResult, 0, len(args))
 	for _, file := range args {
-		doc, err := processPDFFile(file, cfg.pages, pl)
+		creds := &pdf.PasswordCredentials{
+			UserPassword:  cfg.userPassword,
+			OwnerPassword: cfg.ownerPassword,
+		}
+		doc, err := processor.ProcessFileWithCredentials(file, cfg.pages, creds)
 		if err != nil {
 			return err
 		}
@@ -656,4 +705,42 @@ func validateSinglePage(part string) error {
 		return fmt.Errorf("page number must be positive: %d", pageNum)
 	}
 	return nil
+}
+
+// buildEnhancedPDFProcessor creates an enhanced PDF processor with the given configuration.
+func buildEnhancedPDFProcessor(cfg *pdfConfig) (*pdf.Processor, error) {
+	// Create detector configuration
+	detectorConfig := detector.Config{
+		ModelPath:    cfg.detModel,
+		DbThresh:     0.3, // Default DB threshold
+		DbBoxThresh:  float32(cfg.detConf),
+		MaxImageSize: 960, // Default max image size
+		NumThreads:   0,   // Auto-detect threads
+	}
+
+	// If no specific model path, use models dir
+	if detectorConfig.ModelPath == "" {
+		detectorConfig.ModelPath = cfg.modelsDir
+	}
+
+	// Create a detector
+	det, err := detector.NewDetector(detectorConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create detector: %w", err)
+	}
+
+	// Create processor configuration
+	processorConfig := &pdf.ProcessorConfig{
+		EnableVectorText:    cfg.enableVectorText,
+		EnableHybrid:        cfg.enableHybrid,
+		VectorTextQuality:   cfg.vectorTextQuality,
+		VectorTextCoverage:  cfg.vectorTextCoverage,
+		AllowPasswords:      cfg.allowPasswords,
+		AllowPasswordPrompt: cfg.promptPassword,
+	}
+
+	// Create enhanced processor
+	processor := pdf.NewProcessorWithConfig(det, processorConfig)
+
+	return processor, nil
 }

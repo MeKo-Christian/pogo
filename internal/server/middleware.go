@@ -2,9 +2,12 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -68,11 +71,15 @@ func (s *Server) rateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// Check rate limits
 		if err := s.rateLimiter.CheckRateLimit(userID, dataSize); err != nil {
 			// Record rate limit hit
-			switch e := err.(type) {
-			case *RateLimitError:
-				rateLimitHits.WithLabelValues(e.Type).Inc()
-			case *QuotaExceededError:
-				rateLimitHits.WithLabelValues(e.Type).Inc()
+			{
+				var e *RateLimitError
+				var e1 *QuotaExceededError
+				switch {
+				case errors.As(err, &e):
+					rateLimitHits.WithLabelValues(e.Type).Inc()
+				case errors.As(err, &e1):
+					rateLimitHits.WithLabelValues(e1.Type).Inc()
+				}
 			}
 			s.handleRateLimitError(w, err)
 			return
@@ -86,45 +93,35 @@ func (s *Server) rateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func (s *Server) handleRateLimitError(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "application/json")
 
-	switch e := err.(type) {
-	case *RateLimitError:
-		w.Header().Set("X-RateLimit-Type", e.Type)
-		w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", e.Limit))
-		w.Header().Set("Retry-After", fmt.Sprintf("%.0f", e.RetryAfter.Seconds()))
-		w.WriteHeader(http.StatusTooManyRequests)
-
-		response := map[string]interface{}{
-			"error":       "rate_limit_exceeded",
-			"type":        e.Type,
-			"limit":       e.Limit,
-			"retry_after": e.RetryAfter.Seconds(),
-			"message":     e.Error(),
+	{
+		var e *RateLimitError
+		var e1 *QuotaExceededError
+		switch {
+		case errors.As(err, &e):
+			w.Header().Set("X-RateLimit-Type", e.Type)
+			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(e.Limit))
+			w.Header().Set("Retry-After", fmt.Sprintf("%.0f", e.RetryAfter.Seconds()))
+			w.WriteHeader(http.StatusTooManyRequests)
+			response := map[string]interface{}{"error": "rate_limit_exceeded", "type": e.Type, "limit": e.Limit, "retry_after": e.RetryAfter.Seconds(), "message": e.Error()}
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				slog.Error("Failed to encode rate limit response", "error", err)
+			}
+		case errors.As(err, &e1):
+			w.Header().Set("X-Quota-Type", e1.Type)
+			w.Header().Set("X-Quota-Limit", strconv.FormatInt(e1.Limit, 10))
+			w.Header().Set("X-Quota-Used", strconv.FormatInt(e1.Used, 10))
+			w.Header().Set("X-Quota-Resets", e1.Resets.Format(http.TimeFormat))
+			w.WriteHeader(http.StatusTooManyRequests)
+			response := map[string]interface{}{"error": "quota_exceeded", "type": e1.Type, "limit": e1.Limit, "used": e1.Used, "resets": e1.Resets.Format(time.RFC3339), "message": e1.Error()}
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				slog.Error("Failed to encode quota exceeded response", "error", err)
+			}
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+			if err := json.NewEncoder(w).Encode(map[string]string{"error": "internal_error", "message": "Rate limiting check failed"}); err != nil {
+				slog.Error("Failed to encode internal error response", "error", err)
+			}
 		}
-		json.NewEncoder(w).Encode(response)
-
-	case *QuotaExceededError:
-		w.Header().Set("X-Quota-Type", e.Type)
-		w.Header().Set("X-Quota-Limit", fmt.Sprintf("%d", e.Limit))
-		w.Header().Set("X-Quota-Used", fmt.Sprintf("%d", e.Used))
-		w.Header().Set("X-Quota-Resets", e.Resets.Format(http.TimeFormat))
-		w.WriteHeader(http.StatusTooManyRequests)
-
-		response := map[string]interface{}{
-			"error":   "quota_exceeded",
-			"type":    e.Type,
-			"limit":   e.Limit,
-			"used":    e.Used,
-			"resets":  e.Resets.Format(time.RFC3339),
-			"message": e.Error(),
-		}
-		json.NewEncoder(w).Encode(response)
-
-	default:
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error":   "internal_error",
-			"message": "Rate limiting check failed",
-		})
 	}
 }
 
