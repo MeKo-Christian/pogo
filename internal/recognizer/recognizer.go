@@ -29,6 +29,9 @@ type Config struct {
 	PadWidthMultiple int            // If >0, right-pad width to this multiple
 	Language         string         // Optional language for post-processing rules
 	GPU              onnx.GPUConfig // GPU acceleration configuration
+	// Decoding parameters
+	DecodingMethod string // "greedy" or "beam_search"
+	BeamWidth      int    // Beam width for beam search (ignored for greedy)
 }
 
 // DefaultConfig returns a default recognizer configuration.
@@ -43,6 +46,8 @@ func DefaultConfig() Config {
 		PadWidthMultiple: 8,
 		Language:         "",
 		GPU:              onnx.DefaultGPUConfig(),
+		DecodingMethod:   "greedy",
+		BeamWidth:        10,
 	}
 }
 
@@ -294,6 +299,8 @@ func (r *Recognizer) GetModelInfo() map[string]interface{} {
 		"num_threads":      r.config.NumThreads,
 		"charset_size":     r.charset.Size(),
 		"language":         r.config.Language,
+		"decoding_method":  r.config.DecodingMethod,
+		"beam_width":       r.config.BeamWidth,
 		"gpu": map[string]interface{}{
 			"enabled":                r.config.GPU.UseGPU,
 			"device_id":              r.config.GPU.DeviceID,

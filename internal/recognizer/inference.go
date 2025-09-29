@@ -180,19 +180,52 @@ func (r *Recognizer) runInference(tensor onnx.Tensor) (*modelOutput, int64, erro
 func (r *Recognizer) decodeOutput(output *modelOutput, preprocessed *preprocessedRegion) (*Result, int64, error) {
 	d0 := time.Now()
 
-	// Decode CTC greedy
+	r.mu.RLock()
+	decodingMethod := r.config.DecodingMethod
+	beamWidth := r.config.BeamWidth
+	r.mu.RUnlock()
+
 	classesGuess := r.charset.Size() + 1
 	classesFirst := determineClassesFirst(output.shape, classesGuess)
 	blankIndex := 0 // PaddleOCR CTC typically uses blank=0
-	decoded := DecodeCTCGreedy(output.data, output.shape, blankIndex, classesFirst)
-	if len(decoded) == 0 {
-		return nil, 0, errors.New("empty decoded output")
-	}
-	seq := decoded[0]
 
-	// Map to text
-	runes := make([]rune, 0, len(seq.Collapsed))
-	for _, idx := range seq.Collapsed {
+	var seq interface{}
+	if decodingMethod == "beam_search" && beamWidth > 1 {
+		// Use beam search decoding
+		decoded := DecodeCTCBeamSearch(output.data, output.shape, blankIndex, beamWidth, classesFirst)
+		if len(decoded) == 0 {
+			return nil, 0, errors.New("empty beam search decoded output")
+		}
+		seq = decoded[0]
+	} else {
+		// Use greedy decoding (default)
+		decoded := DecodeCTCGreedy(output.data, output.shape, blankIndex, classesFirst)
+		if len(decoded) == 0 {
+			return nil, 0, errors.New("empty decoded output")
+		}
+		seq = decoded[0]
+	}
+
+	// Map to text based on sequence type
+	var collapsed []int
+	var charProbs []float64
+	var confidence float64
+
+	switch s := seq.(type) {
+	case DecodedSequence:
+		collapsed = s.Collapsed
+		charProbs = s.CollapsedProb
+		confidence = SequenceConfidence(s.CollapsedProb)
+	case BeamSearchResult:
+		collapsed = s.Sequence
+		charProbs = s.CharProbs
+		confidence = SequenceConfidence(s.CharProbs)
+	default:
+		return nil, 0, errors.New("unknown sequence type")
+	}
+
+	runes := make([]rune, 0, len(collapsed))
+	for _, idx := range collapsed {
 		// map index to token; idx in [0..classes-1], 0 is blank
 		ch := r.charset.LookupToken(idx - 1) // shift by -1 to skip blank
 		if ch == "" {
@@ -201,13 +234,12 @@ func (r *Recognizer) decodeOutput(output *modelOutput, preprocessed *preprocesse
 		runes = append(runes, []rune(ch)...)
 	}
 	text := string(runes)
-	conf := SequenceConfidence(seq.CollapsedProb)
 
 	return &Result{
 		Text:            text,
-		Confidence:      conf,
-		CharConfidences: seq.CollapsedProb,
-		Indices:         seq.Collapsed,
+		Confidence:      confidence,
+		CharConfidences: charProbs,
+		Indices:         collapsed,
 		Rotated:         preprocessed.rotated,
 		Width:           preprocessed.width,
 		Height:          preprocessed.height,
@@ -335,16 +367,49 @@ func (r *Recognizer) runBatchInference(tensor onnx.Tensor) (*modelOutput, error)
 }
 
 // buildBatchResults constructs Result structs from decoded sequences.
-func (r *Recognizer) buildBatchResults(decoded []DecodedSequence, prepped []preprocessedBatchRegion) []Result {
+func (r *Recognizer) buildBatchResults(decoded interface{}, prepped []preprocessedBatchRegion) []Result {
 	out := make([]Result, len(prepped))
+
+	r.mu.RLock()
+	charset := r.charset
+	r.mu.RUnlock()
+
 	for i := range out {
-		if i >= len(decoded) {
-			break
+		var seq interface{}
+		switch d := decoded.(type) {
+		case []DecodedSequence:
+			if i >= len(d) {
+				break
+			}
+			seq = d[i]
+		case []BeamSearchResult:
+			if i >= len(d) {
+				break
+			}
+			seq = d[i]
+		default:
+			continue
 		}
-		seq := decoded[i]
-		runes := make([]rune, 0, len(seq.Collapsed))
-		for _, idx := range seq.Collapsed {
-			ch := r.charset.LookupToken(idx - 1)
+
+		// Extract sequence data based on type
+		var collapsed []int
+		var charProbs []float64
+		var confidence float64
+
+		switch s := seq.(type) {
+		case DecodedSequence:
+			collapsed = s.Collapsed
+			charProbs = s.CollapsedProb
+			confidence = SequenceConfidence(s.CollapsedProb)
+		case BeamSearchResult:
+			collapsed = s.Sequence
+			charProbs = s.CharProbs
+			confidence = SequenceConfidence(s.CharProbs)
+		}
+
+		runes := make([]rune, 0, len(collapsed))
+		for _, idx := range collapsed {
+			ch := charset.LookupToken(idx - 1)
 			if ch == "" {
 				continue
 			}
@@ -352,9 +417,9 @@ func (r *Recognizer) buildBatchResults(decoded []DecodedSequence, prepped []prep
 		}
 		out[i] = Result{
 			Text:            string(runes),
-			Confidence:      SequenceConfidence(seq.CollapsedProb),
-			CharConfidences: seq.CollapsedProb,
-			Indices:         seq.Collapsed,
+			Confidence:      confidence,
+			CharConfidences: charProbs,
+			Indices:         collapsed,
 			Rotated:         prepped[i].rotated,
 			Width:           prepped[i].w,
 			Height:          prepped[i].h,
@@ -405,10 +470,21 @@ func (r *Recognizer) RecognizeBatch(img image.Image, regions []detector.Detected
 	}
 
 	// Decode output
+	r.mu.RLock()
+	decodingMethod := r.config.DecodingMethod
+	beamWidth := r.config.BeamWidth
+	r.mu.RUnlock()
+
 	classesGuess := r.charset.Size() + 1
 	classesFirst := determineClassesFirst(output.shape, classesGuess)
 	blankIndex := 0
-	decoded := DecodeCTCGreedy(output.data, output.shape, blankIndex, classesFirst)
+
+	var decoded interface{}
+	if decodingMethod == "beam_search" && beamWidth > 1 {
+		decoded = DecodeCTCBeamSearch(output.data, output.shape, blankIndex, beamWidth, classesFirst)
+	} else {
+		decoded = DecodeCTCGreedy(output.data, output.shape, blankIndex, classesFirst)
+	}
 
 	// Build results
 	return r.buildBatchResults(decoded, prepped), nil

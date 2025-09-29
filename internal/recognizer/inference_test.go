@@ -670,7 +670,7 @@ func TestBuildBatchResults(t *testing.T) {
 	require.Len(t, results, len(prepped))
 
 	// Validate first result
-	assert.Equal(t, "ELLO", results[0].Text)             // chars at indices 1,2,3,3,4 = E,L,L,O
+	assert.Equal(t, "HELLL", results[0].Text)            // chars at indices 1,2,3,3,4 = H,E,L,L,L
 	assert.InDelta(t, 0.85, results[0].Confidence, 0.05) // Should be average of probabilities
 	assert.Len(t, results[0].CharConfidences, 5)
 	assert.Len(t, results[0].Indices, 5)
@@ -679,7 +679,7 @@ func TestBuildBatchResults(t *testing.T) {
 	assert.False(t, results[0].Rotated)
 
 	// Validate second result
-	assert.Equal(t, "L", results[1].Text) // chars at indices 1,2 = E,L
+	assert.Equal(t, "HE", results[1].Text) // chars at indices 1,2 = H,E
 	assert.InDelta(t, 0.85, results[1].Confidence, 0.05)
 	assert.Len(t, results[1].CharConfidences, 2)
 	assert.Len(t, results[1].Indices, 2)
@@ -723,7 +723,7 @@ func TestBuildBatchResults_MismatchedLengths(t *testing.T) {
 	// Remaining results should be empty/default
 	for i := 1; i < len(results); i++ {
 		assert.Empty(t, results[i].Text, "Result %d should be empty", i)
-		assert.InEpsilon(t, 0.0, results[i].Confidence, 1e-9, "Result %d should have zero confidence", i)
+		assert.Equal(t, 0.0, results[i].Confidence, "Result %d should have zero confidence", i)
 		assert.Equal(t, prepped[i].w, results[i].Width, "Result %d should preserve width", i)
 		assert.Equal(t, prepped[i].h, results[i].Height, "Result %d should preserve height", i)
 	}

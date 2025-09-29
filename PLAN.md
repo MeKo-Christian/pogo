@@ -229,10 +229,10 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 7.2 Advanced Server Features
 
-- [ ] Enhanced server capabilities:
+- [-] Enhanced server capabilities:
   - [ ] Graceful shutdown handling
-  - [ ] Metrics/Prometheus endpoint
-  - [ ] WebSocket support for real-time OCR
+  - [x] Metrics/Prometheus endpoint
+  - [x] WebSocket support for real-time OCR
   - [ ] Batch processing endpoint
 - [ ] Server: accept dict-langs and language overrides per request (multipart fields):
   - [ ] Dynamic language configuration
