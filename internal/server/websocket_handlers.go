@@ -40,6 +40,11 @@ type WebSocketOCRRequest struct {
 	Options  map[string]interface{} `json:"options,omitempty"`
 }
 
+// WebSocketConnWriter is an interface for writing WebSocket messages
+type WebSocketConnWriter interface {
+	WriteMessage(messageType int, data []byte) error
+}
+
 // WebSocketOCRResponse represents an OCR response via WebSocket
 type WebSocketOCRResponse struct {
 	Type      string      `json:"type"`
@@ -271,7 +276,7 @@ func (s *Server) processWebSocketPDF(conn *websocket.Conn, req WebSocketOCRReque
 }
 
 // sendWebSocketResponse sends a response message over WebSocket.
-func (s *Server) sendWebSocketResponse(conn *websocket.Conn, response WebSocketOCRResponse) {
+func (s *Server) sendWebSocketResponse(conn WebSocketConnWriter, response WebSocketOCRResponse) {
 	data, err := json.Marshal(response)
 	if err != nil {
 		slog.Error("Failed to marshal WebSocket response", "error", err)
@@ -315,10 +320,10 @@ func (s *Server) extractWebSocketConfig(options map[string]interface{}) *Request
 			config.DictLangs[i] = strings.TrimSpace(lang)
 		}
 	} else if val, ok := options["dict-langs"].([]interface{}); ok {
-		config.DictLangs = make([]string, len(val))
-		for i, lang := range val {
+		config.DictLangs = make([]string, 0, len(val))
+		for _, lang := range val {
 			if langStr, ok := lang.(string); ok {
-				config.DictLangs[i] = strings.TrimSpace(langStr)
+				config.DictLangs = append(config.DictLangs, strings.TrimSpace(langStr))
 			}
 		}
 	}
@@ -327,7 +332,7 @@ func (s *Server) extractWebSocketConfig(options map[string]interface{}) *Request
 }
 
 // sendWebSocketError sends an error message over WebSocket.
-func (s *Server) sendWebSocketError(conn *websocket.Conn, errorType, message string) {
+func (s *Server) sendWebSocketError(conn WebSocketConnWriter, errorType, message string) {
 	response := WebSocketOCRResponse{
 		Type:   "error",
 		Status: "error",
