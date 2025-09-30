@@ -725,7 +725,7 @@ func TestBuildBatchResults_MismatchedLengths(t *testing.T) {
 	// Remaining results should be empty/default
 	for i := 1; i < len(results); i++ {
 		assert.Empty(t, results[i].Text, "Result %d should be empty", i)
-		assert.Equal(t, 0.0, results[i].Confidence, "Result %d should have zero confidence", i)
+		assert.InDelta(t, 0.0, results[i].Confidence, 1e-6, "Result %d should have zero confidence", i)
 		assert.Equal(t, prepped[i].w, results[i].Width, "Result %d should preserve width", i)
 		assert.Equal(t, prepped[i].h, results[i].Height, "Result %d should preserve height", i)
 	}

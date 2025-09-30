@@ -143,7 +143,6 @@ func TestSendJobsContextCancellation(t *testing.T) {
 		case _, ok := <-jobs:
 			if !ok {
 				channelClosed = true
-				break
 			}
 		case <-time.After(10 * time.Millisecond):
 			// Small delay between checks
@@ -198,7 +197,7 @@ func TestApplyOrientationDetectionNilOrienter(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, img, resultImg)
 	assert.Equal(t, 0, angle)
-	assert.Equal(t, 0.0, conf)
+	assert.InDelta(t, 0.0, conf, 1e-6)
 }
 
 func TestApplyOrientationDetectionContextCancelled(t *testing.T) {
@@ -218,7 +217,7 @@ func TestApplyOrientationDetectionContextCancelled(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, img, resultImg)
 	assert.Equal(t, 0, angle)
-	assert.Equal(t, 0.0, conf)
+	assert.InDelta(t, 0.0, conf, 1e-6)
 }
 
 func TestApplyRectificationNilRectifier(t *testing.T) {

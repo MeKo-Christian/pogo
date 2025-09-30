@@ -98,8 +98,8 @@ func (s *Server) handleRateLimitError(w http.ResponseWriter, err error) {
 		var e1 *QuotaExceededError
 		switch {
 		case errors.As(err, &e):
-			w.Header().Set("X-RateLimit-Type", e.Type)
-			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(e.Limit))
+			w.Header().Set("X-Ratelimit-Type", e.Type)
+			w.Header().Set("X-Ratelimit-Limit", strconv.Itoa(e.Limit))
 			w.Header().Set("Retry-After", fmt.Sprintf("%.0f", e.RetryAfter.Seconds()))
 			w.WriteHeader(http.StatusTooManyRequests)
 			response := map[string]interface{}{"error": "rate_limit_exceeded", "type": e.Type, "limit": e.Limit, "retry_after": e.RetryAfter.Seconds(), "message": e.Error()}

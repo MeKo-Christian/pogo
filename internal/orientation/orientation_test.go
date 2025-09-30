@@ -105,12 +105,12 @@ func TestNewClassifier_DisabledConfig(t *testing.T) {
 func TestValidateModelPath(t *testing.T) {
 	// Test empty path
 	err := validateModelPath("")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty model path")
 
 	// Test non-existent path
 	err = validateModelPath("/non/existent/path.onnx")
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// Test valid path (create a temporary file)
 	tmpDir := t.TempDir()
@@ -144,11 +144,11 @@ func TestBatchPredict_EmptyInput(t *testing.T) {
 	require.NoError(t, err)
 
 	results, err := cls.BatchPredict(nil)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Nil(t, results)
 
 	results, err = cls.BatchPredict([]image.Image{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Nil(t, results)
 }
 
@@ -336,7 +336,7 @@ func TestArgmax(t *testing.T) {
 func TestGetONNXLibName(t *testing.T) {
 	// This tests the current OS
 	libName, err := getONNXLibName()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, libName)
 
 	// On Linux, should be .so
@@ -356,7 +356,7 @@ func TestGetONNXLibName(t *testing.T) {
 func TestFindProjectRoot(t *testing.T) {
 	// This should find the project root (where go.mod is)
 	root, err := findProjectRoot()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, root)
 
 	// Verify go.mod exists at the root
@@ -457,7 +457,7 @@ func TestNewClassifier_EmptyModelPath(t *testing.T) {
 	cfg.ModelPath = ""
 	cfg.UseHeuristicFallback = false
 	cls, err := NewClassifier(cfg)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, cls)
 	assert.Contains(t, err.Error(), "empty model path")
 }
@@ -495,7 +495,7 @@ func TestBatchPredict_NonHeuristicMode_EmptyInputs(t *testing.T) {
 
 	// Test empty inputs in non-heuristic path (will still use heuristic due to nil session)
 	results, err := cls.BatchPredict([]image.Image{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Nil(t, results)
 }
 
@@ -565,7 +565,7 @@ func TestGetONNXLibName_UnsupportedOS(t *testing.T) {
 	// We can't actually change runtime.GOOS, so we test the supported cases
 	// The function already works correctly for the current OS
 	libName, err := getONNXLibName()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, libName)
 
 	// Restore original GOOS (even though we didn't change it)
@@ -587,7 +587,7 @@ func TestFindProjectRoot_EdgeCase(t *testing.T) {
 
 	// Should fail to find project root (no go.mod in temp dir)
 	_, err = findProjectRoot()
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not find project root")
 
 	// Change back to original directory
@@ -596,7 +596,7 @@ func TestFindProjectRoot_EdgeCase(t *testing.T) {
 
 	// Now should work
 	root, err := findProjectRoot()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, root)
 }
 
@@ -614,7 +614,7 @@ func TestPredict_SkipSquareImages(t *testing.T) {
 	result, err := cls.Predict(squareImg)
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Angle)
-	assert.Equal(t, 1.0, result.Confidence)
+	assert.InDelta(t, 1.0, result.Confidence, 1e-6)
 }
 
 func TestBatchPredict_MixedSkipAndProcess(t *testing.T) {
@@ -667,4 +667,200 @@ func TestComputeOrientationFromLogits_Coverage(t *testing.T) {
 	angle2, confidence2 := cls.computeOrientationFromLogits(logits2)
 	assert.Equal(t, 180, angle2) // Index 2 -> 180 degrees
 	assert.Greater(t, confidence2, 0.0)
+}
+
+func TestComputeOrientationFromLogits_AllAngles(t *testing.T) {
+	cfg := Config{Enabled: false, UseHeuristicFallback: true}
+	cls, err := NewClassifier(cfg)
+	require.NoError(t, err)
+
+	// Test each angle
+	testCases := []struct {
+		logits        []float32
+		expectedAngle int
+	}{
+		{[]float32{0.9, 0.05, 0.03, 0.02}, 0},   // Index 0 -> 0 degrees
+		{[]float32{0.05, 0.9, 0.03, 0.02}, 90},  // Index 1 -> 90 degrees
+		{[]float32{0.05, 0.03, 0.9, 0.02}, 180}, // Index 2 -> 180 degrees
+		{[]float32{0.05, 0.03, 0.02, 0.9}, 270}, // Index 3 -> 270 degrees
+	}
+
+	for _, tc := range testCases {
+		angle, conf := cls.computeOrientationFromLogits(tc.logits)
+		assert.Equal(t, tc.expectedAngle, angle)
+		assert.Greater(t, conf, 0.0)
+		assert.LessOrEqual(t, conf, 1.0)
+	}
+}
+
+func TestDefaultTextLineConfig_Values(t *testing.T) {
+	cfg := DefaultTextLineConfig()
+
+	// Verify it returns proper defaults
+	assert.False(t, cfg.Enabled)
+	assert.Contains(t, cfg.ModelPath, models.LayoutPPLCNetX025Textline)
+	assert.InDelta(t, 0.6, cfg.ConfidenceThreshold, 1e-6)
+	assert.False(t, cfg.EnableWarmup)
+	assert.False(t, cfg.HeuristicOnly)
+}
+
+func TestPredictWithHeuristic_EdgeCases(t *testing.T) {
+	cls, err := NewClassifier(Config{Enabled: false, UseHeuristicFallback: true, ConfidenceThreshold: 0.5})
+	require.NoError(t, err)
+
+	// Test with very small image
+	smallImg := image.NewRGBA(image.Rect(0, 0, 10, 10))
+	result, err := cls.predictWithHeuristic(smallImg)
+	require.NoError(t, err)
+	assert.Contains(t, []int{0, 90, 180, 270}, result.Angle)
+
+	// Test with very large aspect ratio
+	wideImg := image.NewRGBA(image.Rect(0, 0, 1000, 10))
+	result, err = cls.predictWithHeuristic(wideImg)
+	require.NoError(t, err)
+	assert.Contains(t, []int{0, 90, 180, 270}, result.Angle)
+
+	tallImg := image.NewRGBA(image.Rect(0, 0, 10, 1000))
+	result, err = cls.predictWithHeuristic(tallImg)
+	require.NoError(t, err)
+	assert.Contains(t, []int{0, 90, 180, 270}, result.Angle)
+}
+
+func TestHeuristicOrientation_UniformImage(t *testing.T) {
+	// Create a uniform gray image (no transitions)
+	uniformImg := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	for y := range 100 {
+		for x := range 100 {
+			uniformImg.Set(x, y, color.RGBA{128, 128, 128, 255})
+		}
+	}
+
+	angle, conf := heuristicOrientation(uniformImg)
+	assert.Equal(t, 0, angle)
+	assert.InDelta(t, 0.0, conf, 1e-6) // Should have low confidence for uniform image
+}
+
+func TestHeuristicOrientation_HighContrastPatterns(t *testing.T) {
+	// Create a horizontal striped pattern (high row transitions)
+	horizontalStripes := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	for y := range 100 {
+		c := color.RGBA{255, 255, 255, 255}
+		if y%10 < 5 {
+			c = color.RGBA{0, 0, 0, 255}
+		}
+		for x := range 100 {
+			horizontalStripes.Set(x, y, c)
+		}
+	}
+
+	angle, conf := heuristicOrientation(horizontalStripes)
+	assert.Contains(t, []int{0, 90}, angle)
+	assert.GreaterOrEqual(t, conf, 0.0)
+	assert.LessOrEqual(t, conf, 1.0)
+
+	// Create a vertical striped pattern (high column transitions)
+	verticalStripes := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	for x := range 100 {
+		c := color.RGBA{255, 255, 255, 255}
+		if x%10 < 5 {
+			c = color.RGBA{0, 0, 0, 255}
+		}
+		for y := range 100 {
+			verticalStripes.Set(x, y, c)
+		}
+	}
+
+	angle2, conf2 := heuristicOrientation(verticalStripes)
+	assert.Contains(t, []int{0, 90}, angle2)
+	assert.GreaterOrEqual(t, conf2, 0.0)
+	assert.LessOrEqual(t, conf2, 1.0)
+}
+
+func TestShouldSkipOrientation_ExactThreshold(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SkipSquareImages = true
+	cfg.SquareThreshold = 1.5
+	cls, err := NewClassifier(cfg)
+	require.NoError(t, err)
+
+	// Test image exactly at threshold (150x100 = 1.5 ratio)
+	thresholdImg := image.NewRGBA(image.Rect(0, 0, 150, 100))
+	assert.True(t, cls.shouldSkipOrientation(thresholdImg))
+
+	// Test image just above threshold
+	aboveImg := image.NewRGBA(image.Rect(0, 0, 151, 100))
+	assert.False(t, cls.shouldSkipOrientation(aboveImg))
+}
+
+func TestBatchPredict_SingleImage(t *testing.T) {
+	cls, err := NewClassifier(Config{Enabled: false, UseHeuristicFallback: true, ConfidenceThreshold: 0.0})
+	require.NoError(t, err)
+
+	imgCfg := testutil.DefaultTestImageConfig()
+	img, err := testutil.GenerateTextImage(imgCfg)
+	require.NoError(t, err)
+
+	// Test batch predict with single image
+	results, err := cls.BatchPredict([]image.Image{img})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Contains(t, []int{0, 90, 180, 270}, results[0].Angle)
+}
+
+func TestNewClassifier_HeuristicOnlyFlag(t *testing.T) {
+	// Even with Enabled=true and valid model path, HeuristicOnly should force heuristic mode
+	cfg := DefaultConfig()
+	cfg.Enabled = true
+	cfg.HeuristicOnly = true
+
+	cls, err := NewClassifier(cfg)
+	require.NoError(t, err)
+	require.NotNil(t, cls)
+	assert.True(t, cls.heuristic)
+
+	// Should work with heuristic
+	imgCfg := testutil.DefaultTestImageConfig()
+	img, err := testutil.GenerateTextImage(imgCfg)
+	require.NoError(t, err)
+
+	result, err := cls.Predict(img)
+	require.NoError(t, err)
+	assert.Contains(t, []int{0, 90, 180, 270}, result.Angle)
+}
+
+func TestCountTransitions_EdgeCases(t *testing.T) {
+	// Test with single-pixel wide/tall images
+	singleCol := image.NewRGBA(image.Rect(0, 0, 1, 100))
+	for y := range 100 {
+		c := color.RGBA{255, 255, 255, 255}
+		if y%2 == 0 {
+			c = color.RGBA{0, 0, 0, 255}
+		}
+		singleCol.Set(0, y, c)
+	}
+
+	// Should not panic
+	meanLum := calculateMeanLuminance(singleCol)
+	transitions := countTransitionsInRows(singleCol, meanLum)
+	assert.GreaterOrEqual(t, transitions, 0.0)
+
+	transitions = countTransitionsInColumns(singleCol, meanLum)
+	assert.GreaterOrEqual(t, transitions, 0.0)
+}
+
+func TestDetermineOrientation_ExtremeAspectRatios(t *testing.T) {
+	// Test with very wide image (ar > 1.2)
+	wideAngle, wideConf := determineOrientation(10, 20, image.Rect(0, 0, 1000, 100))
+	assert.Equal(t, 90, wideAngle) // colTransitions > rowTransitions
+	assert.GreaterOrEqual(t, wideConf, 0.0)
+
+	// Test with very tall image (ar < 0.8)
+	tallAngle, tallConf := determineOrientation(20, 10, image.Rect(0, 0, 100, 1000))
+	assert.Equal(t, 0, tallAngle) // rowTransitions > colTransitions
+	assert.GreaterOrEqual(t, tallConf, 0.0)
+
+	// Test with equal transitions and extreme aspect ratio
+	equalAngle, equalConf := determineOrientation(10, 10, image.Rect(0, 0, 1000, 100))
+	assert.Equal(t, 90, equalAngle) // colTransitions >= rowTransitions
+	assert.GreaterOrEqual(t, equalConf, 0.0)
 }

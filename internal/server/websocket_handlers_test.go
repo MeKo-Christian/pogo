@@ -171,6 +171,7 @@ func TestServer_SendWebSocketError(t *testing.T) {
 	assert.Equal(t, "error", response.Type)
 	assert.Equal(t, "error", response.Status)
 	assert.Equal(t, "Test error message", response.Error)
+	assert.Equal(t, "test_error", response.ErrorType)
 }
 
 func TestWebSocketUpgrader(t *testing.T) {

@@ -55,9 +55,9 @@ func (s *Server) ocrPdfHandler(w http.ResponseWriter, r *http.Request) {
 		duration = time.Since(start)
 	} else {
 		// Use standard pipeline processing
-		pipeline, err := s.getPipelineForRequest(reqConfig)
-		if err != nil {
-			s.writeErrorResponse(w, fmt.Sprintf("Failed to create pipeline: %v", err), http.StatusInternalServerError)
+		pipeline, pipelineErr := s.getPipelineForRequest(reqConfig)
+		if pipelineErr != nil {
+			s.writeErrorResponse(w, fmt.Sprintf("Failed to create pipeline: %v", pipelineErr), http.StatusInternalServerError)
 			ocrRequestsTotal.WithLabelValues("pdf", "error").Inc()
 			return
 		}

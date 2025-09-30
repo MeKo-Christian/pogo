@@ -108,22 +108,26 @@ func parseMemoryLimitOrDefault(limitStr string) uint64 {
 func parseMemoryLimit(limit string) (uint64, error) {
 	limit = strings.TrimSpace(strings.ToUpper(strings.ReplaceAll(limit, " ", "")))
 
-	multipliers := map[string]uint64{
-		"B":  1,
-		"KB": 1024,
-		"MB": 1024 * 1024,
-		"GB": 1024 * 1024 * 1024,
-		"TB": 1024 * 1024 * 1024 * 1024,
+	// Check suffixes from longest to shortest to avoid partial matches
+	suffixes := []struct {
+		suffix     string
+		multiplier uint64
+	}{
+		{"TB", 1024 * 1024 * 1024 * 1024},
+		{"GB", 1024 * 1024 * 1024},
+		{"MB", 1024 * 1024},
+		{"KB", 1024},
+		{"B", 1},
 	}
 
-	for suffix, multiplier := range multipliers {
-		if strings.HasSuffix(limit, suffix) {
-			numStr := strings.TrimSuffix(limit, suffix)
+	for _, s := range suffixes {
+		if strings.HasSuffix(limit, s.suffix) {
+			numStr := strings.TrimSuffix(limit, s.suffix)
 			num, err := strconv.ParseFloat(numStr, 64)
 			if err != nil {
 				return 0, err
 			}
-			return uint64(num * float64(multiplier)), nil
+			return uint64(num * float64(s.multiplier)), nil
 		}
 	}
 

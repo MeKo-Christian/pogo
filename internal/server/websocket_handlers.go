@@ -53,6 +53,7 @@ type WebSocketOCRResponse struct {
 	Progress  float64     `json:"progress,omitempty"`
 	Result    interface{} `json:"result,omitempty"`
 	Error     string      `json:"error,omitempty"`
+	ErrorType string      `json:"error_type,omitempty"`
 	RequestID string      `json:"request_id,omitempty"`
 }
 
@@ -91,12 +92,9 @@ func (s *Server) handleWebSocketConnection(conn *websocket.Conn) {
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
-					return
-				}
+		for range ticker.C {
+			if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
+				return
 			}
 		}
 	}()
@@ -335,9 +333,10 @@ func (s *Server) extractWebSocketConfig(options map[string]interface{}) *Request
 // sendWebSocketError sends an error message over WebSocket.
 func (s *Server) sendWebSocketError(conn WebSocketConnWriter, errorType, message string) {
 	response := WebSocketOCRResponse{
-		Type:   "error",
-		Status: "error",
-		Error:  message,
+		Type:      "error",
+		Status:    "error",
+		Error:     message,
+		ErrorType: errorType,
 	}
 
 	data, err := json.Marshal(response)

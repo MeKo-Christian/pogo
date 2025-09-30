@@ -85,3 +85,6 @@ docs/_build/
 # Results
 results.txt
 results.json
+
+# Trunk
+.trunk

@@ -144,7 +144,10 @@ func createTestImage(width, height int) image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	for y := range height {
 		for x := range width {
-			img.Set(x, y, color.RGBA{uint8(x % 256), uint8(y % 256), 0, 255})
+			// Safe conversion: x and y are loop indices, guaranteed to be >= 0
+			r := byte(x % 256)
+			g := byte(y % 256)
+			img.Set(x, y, color.RGBA{r, g, 0, 255})
 		}
 	}
 	return img

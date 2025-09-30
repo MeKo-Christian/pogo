@@ -120,7 +120,7 @@ func (s *Server) ocrBatchHandler(w http.ResponseWriter, r *http.Request) {
 
 // processBatchRequest processes all items in a batch request.
 func (s *Server) processBatchRequest(req BatchOCRRequest) ([]BatchOCRResult, BatchProcessingSummary) {
-	var results []BatchOCRResult
+	results := make([]BatchOCRResult, 0, len(req.Images)+len(req.PDFs))
 	summary := BatchProcessingSummary{
 		TotalItems: len(req.Images) + len(req.PDFs),
 	}

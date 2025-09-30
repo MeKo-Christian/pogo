@@ -99,7 +99,7 @@ func TestBuildPipeline_InvalidModelsDir(t *testing.T) {
 	}
 
 	pl, err := buildPipeline(config, nil)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, pl)
 }
 

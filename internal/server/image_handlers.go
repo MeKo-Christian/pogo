@@ -43,7 +43,7 @@ func (c *RequestConfig) Validate() error {
 		}
 		// Basic validation - should be letters (case insensitive), optionally with numbers/hyphens/underscores
 		for _, r := range strings.ToLower(c.Language) {
-			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_' {
 				return fmt.Errorf("invalid language code format: %s", c.Language)
 			}
 		}
@@ -59,7 +59,7 @@ func (c *RequestConfig) Validate() error {
 		}
 		// Basic validation - should be letters (case insensitive), optionally with numbers/hyphens/underscores
 		for _, r := range strings.ToLower(lang) {
-			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
+			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_' {
 				return fmt.Errorf("invalid dictionary language code format: %s", lang)
 			}
 		}

@@ -1,10 +1,11 @@
 package server
 
 import (
-	"crypto/md5"
 	"fmt"
+	"hash/fnv"
 	"image"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/MeKo-Tech/pogo/internal/pipeline"
@@ -70,7 +71,14 @@ func (c *PipelineCache) hashConfig(config pipeline.Config) string {
 		fmt.Sprintf("%v", config.Recognizer.DictPaths),
 		config.Recognizer.Language,
 	)
-	return fmt.Sprintf("%x", md5.Sum([]byte(key)))
+	
+	h := fnv.New64a()
+	_, err := h.Write([]byte(key))
+	if err != nil {
+		// FNV hash write should never fail, but handle it gracefully
+		return fmt.Sprintf("%x", 0)
+	}
+	return strconv.FormatUint(h.Sum64(), 16)
 }
 
 // createPipeline creates a new pipeline with the given configuration.

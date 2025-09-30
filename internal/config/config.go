@@ -14,11 +14,22 @@ import (
 	"github.com/MeKo-Tech/pogo/internal/rectify"
 )
 
+const (
+	// Common string constants to avoid repetition.
+	autoValue       = "auto"
+	infoLevel       = "info"
+	debugLevel      = "debug"
+	warnLevel       = "warn"
+	dilateOp        = "dilate"
+	histogramMethod = "histogram"
+	noneOp          = "none"
+)
+
 // DefaultConfig returns a configuration with sensible defaults.
 func DefaultConfig() Config {
 	return Config{
 		ModelsDir: models.DefaultModelsDir,
-		LogLevel:  "info",
+		LogLevel:  infoLevel,
 		Verbose:   false,
 		Pipeline: PipelineConfig{
 			Detector:         defaultDetectorConfig(),
@@ -58,7 +69,7 @@ func DefaultConfig() Config {
 		GPU: GPUConfig{
 			Enabled:     false,
 			Device:      0,
-			MemoryLimit: "auto",
+			MemoryLimit: autoValue,
 		},
 	}
 }
@@ -85,7 +96,7 @@ func defaultDetectorConfig() DetectorConfig {
 
 		// Morphological operations defaults
 		Morphology: MorphologyConfig{
-			Operation:  "none",
+			Operation:  noneOp,
 			KernelSize: cfg.Morphology.KernelSize,
 			Iterations: cfg.Morphology.Iterations,
 		},
@@ -93,7 +104,7 @@ func defaultDetectorConfig() DetectorConfig {
 		// Adaptive thresholds defaults
 		AdaptiveThresholds: AdaptiveThresholdsConfig{
 			Enabled:      cfg.AdaptiveThresholds.Enabled,
-			Method:       "histogram",
+			Method:       histogramMethod,
 			MinDbThresh:  cfg.AdaptiveThresholds.MinDbThresh,
 			MaxDbThresh:  cfg.AdaptiveThresholds.MaxDbThresh,
 			MinBoxThresh: cfg.AdaptiveThresholds.MinBoxThresh,
@@ -229,7 +240,7 @@ func (c *Config) validateEnums() error {
 // validateGPU validates GPU-related settings.
 func (c *Config) validateGPU() error {
 	// Validate GPU memory limit format
-	if c.GPU.MemoryLimit != "auto" && c.GPU.MemoryLimit != "" {
+	if c.GPU.MemoryLimit != autoValue && c.GPU.MemoryLimit != "" {
 		if err := validateMemoryLimit(c.GPU.MemoryLimit); err != nil {
 			return fmt.Errorf("invalid GPU memory limit: %w", err)
 		}
@@ -392,7 +403,7 @@ func validateThreshold(value float64, name string) error {
 
 // validateMemoryLimit validates GPU memory limit format (e.g., "1GB", "512MB").
 func validateMemoryLimit(limit string) error {
-	if limit == "" || limit == "auto" {
+	if limit == "" || limit == autoValue {
 		return nil
 	}
 
@@ -425,7 +436,7 @@ func parseMorphologyConfig(config MorphologyConfig) detector.MorphConfig {
 
 	// Parse operation string to MorphologicalOp
 	switch strings.ToLower(config.Operation) {
-	case "dilate":
+	case dilateOp:
 		morphConfig.Operation = detector.MorphDilate
 	case "erode":
 		morphConfig.Operation = detector.MorphErode
@@ -455,7 +466,7 @@ func parseAdaptiveThresholdsConfig(config AdaptiveThresholdsConfig) detector.Ada
 	switch strings.ToLower(config.Method) {
 	case "otsu":
 		adaptiveConfig.Method = detector.AdaptiveMethodOtsu
-	case "histogram":
+	case histogramMethod:
 		adaptiveConfig.Method = detector.AdaptiveMethodHistogram
 	case "dynamic":
 		adaptiveConfig.Method = detector.AdaptiveMethodDynamic

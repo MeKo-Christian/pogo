@@ -114,7 +114,7 @@ func TestResult_SaveResults_ToFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check file was created and contains expected content
-	content, err := os.ReadFile(outputFile)
+	content, err := os.ReadFile(outputFile) // #nosec G304 - outputFile is controlled by test
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "Test Content")
 }
@@ -163,10 +163,10 @@ func TestResult_SaveResults_FormatError(t *testing.T) {
 
 	// Invalid format defaults to text format, should succeed
 	err := result.SaveResults("invalid", outputFile, true)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify file was written
-	content, err := os.ReadFile(outputFile)
+	content, err := os.ReadFile(outputFile) // #nosec G304 - outputFile is controlled by test
 	require.NoError(t, err)
 	assert.Empty(t, content) // Empty results produce empty output
 }
@@ -185,7 +185,7 @@ func TestResult_SaveResults_WriteError(t *testing.T) {
 	}
 
 	err := result.SaveResults("text", invalidPath, true)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to write output file")
 }
 

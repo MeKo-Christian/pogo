@@ -475,7 +475,7 @@ func (c *Classifier) batchPredictWithONNX(images []image.Image) ([]Result, error
 	defer batchCleanup()
 
 	// Run batch inference
-	outputs, cleanupOutputs, err := c.runBatchInference(batchedInput, len(images))
+	outputs, cleanupOutputs, err := c.runBatchInference(batchedInput)
 	if err != nil {
 		return nil, err
 	}
@@ -541,7 +541,7 @@ func (c *Classifier) createBatchedInputTensor(tensors []*onnxrt.Tensor[float32])
 }
 
 // runBatchInference runs inference on a batched input tensor.
-func (c *Classifier) runBatchInference(input *onnxrt.Tensor[float32], batchSize int) ([]onnxrt.Value, func(), error) {
+func (c *Classifier) runBatchInference(input *onnxrt.Tensor[float32]) ([]onnxrt.Value, func(), error) {
 	outputs := []onnxrt.Value{nil}
 	if err := c.session.Run([]onnxrt.Value{input}, outputs); err != nil {
 		return nil, nil, fmt.Errorf("batch run: %w", err)

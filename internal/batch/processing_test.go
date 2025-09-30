@@ -29,7 +29,7 @@ func TestLoadAndValidateImage_ValidImage(t *testing.T) {
 		}
 	}
 
-	file, err := os.Create(imagePath)
+	file, err := os.Create(imagePath) // #nosec G304 - imagePath is controlled by test
 	require.NoError(t, err)
 	defer func() { require.NoError(t, file.Close()) }()
 
@@ -52,7 +52,7 @@ func TestLoadAndValidateImage_UnsupportedFormat(t *testing.T) {
 	require.NoError(t, err)
 
 	loadedImg, meta, err := loadAndValidateImage(imagePath)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, loadedImg)
 	assert.Equal(t, utils.ImageMetadata{}, meta)
 	assert.Contains(t, err.Error(), "unsupported image format")
@@ -60,7 +60,7 @@ func TestLoadAndValidateImage_UnsupportedFormat(t *testing.T) {
 
 func TestLoadAndValidateImage_NonExistentFile(t *testing.T) {
 	loadedImg, meta, err := loadAndValidateImage("/nonexistent/file.png")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, loadedImg)
 	assert.Equal(t, utils.ImageMetadata{}, meta)
 }
@@ -81,7 +81,7 @@ func TestApplyConfidenceFilters_NoFilters(t *testing.T) {
 	applyConfidenceFilters(result, 0.0, 0.0)
 
 	assert.Len(t, result.Regions, 1)
-	assert.Equal(t, 0.8, result.AvgDetConf)
+	assert.InDelta(t, 0.8, result.AvgDetConf, 1e-6)
 }
 
 func TestApplyConfidenceFilters_DetectionFilter(t *testing.T) {
@@ -107,7 +107,7 @@ func TestApplyConfidenceFilters_DetectionFilter(t *testing.T) {
 
 	assert.Len(t, result.Regions, 1)
 	assert.Equal(t, "High confidence", result.Regions[0].Text)
-	assert.Equal(t, 0.9, result.AvgDetConf)
+	assert.InDelta(t, 0.9, result.AvgDetConf, 1e-6)
 }
 
 func TestApplyConfidenceFilters_RecognitionFilter(t *testing.T) {
@@ -164,7 +164,7 @@ func TestApplyConfidenceFilters_BothFilters(t *testing.T) {
 
 	assert.Len(t, result.Regions, 1)
 	assert.Equal(t, "Good both", result.Regions[0].Text)
-	assert.Equal(t, 0.9, result.AvgDetConf)
+	assert.InDelta(t, 0.9, result.AvgDetConf, 1e-6)
 }
 
 func TestApplyConfidenceFilters_AllFilteredOut(t *testing.T) {
@@ -183,7 +183,7 @@ func TestApplyConfidenceFilters_AllFilteredOut(t *testing.T) {
 	applyConfidenceFilters(result, 0.5, 0.5)
 
 	assert.Empty(t, result.Regions)
-	assert.Equal(t, 0.0, result.AvgDetConf)
+	assert.InDelta(t, 0.0, result.AvgDetConf, 1e-6)
 }
 
 func TestGenerateAndSaveOverlay_ValidInputs(t *testing.T) {
@@ -243,9 +243,13 @@ func TestGenerateAndSaveOverlay_NilOverlay(t *testing.T) {
 }
 
 func TestProcessSingleImage_ValidImage(t *testing.T) {
+	// Get the project root and models directory
+	root, err := testutil.GetProjectRoot()
+	require.NoError(t, err)
+	modelsDir := filepath.Join(root, "models")
+
 	// Skip if models directory doesn't exist (ONNX runtime not set up)
-	modelsDir := testutil.GetTestDataDir(t)
-	if !testutil.DirExists(filepath.Join(modelsDir, "models")) {
+	if !testutil.DirExists(modelsDir) {
 		t.Skip("Models directory not found, skipping integration test")
 	}
 
@@ -260,7 +264,7 @@ func TestProcessSingleImage_ValidImage(t *testing.T) {
 		}
 	}
 
-	file, err := os.Create(imagePath)
+	file, err := os.Create(imagePath) // #nosec G304 - imagePath is controlled by test
 	require.NoError(t, err)
 	defer func() { require.NoError(t, file.Close()) }()
 
@@ -285,16 +289,20 @@ func TestProcessSingleImage_ValidImage(t *testing.T) {
 }
 
 func TestProcessSingleImage_UnsupportedImage(t *testing.T) {
+	// Get the project root and models directory
+	root, err := testutil.GetProjectRoot()
+	require.NoError(t, err)
+	modelsDir := filepath.Join(root, "models")
+
 	// Skip if models directory doesn't exist (ONNX runtime not set up)
-	modelsDir := testutil.GetTestDataDir(t)
-	if !testutil.DirExists(filepath.Join(modelsDir, "models")) {
+	if !testutil.DirExists(modelsDir) {
 		t.Skip("Models directory not found, skipping integration test")
 	}
 
 	tempDir := testutil.CreateTempDir(t)
 	imagePath := filepath.Join(tempDir, "test.txt")
 
-	err := os.WriteFile(imagePath, []byte("not an image"), 0o600)
+	err = os.WriteFile(imagePath, []byte("not an image"), 0o600)
 	require.NoError(t, err)
 
 	config := &Config{
@@ -308,15 +316,19 @@ func TestProcessSingleImage_UnsupportedImage(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err := processSingleImage(pl, imagePath, 0.3, 0.0, "")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "unsupported image format")
 }
 
 func TestProcessImagesParallel_ValidImages(t *testing.T) {
+	// Get the project root and models directory
+	root, err := testutil.GetProjectRoot()
+	require.NoError(t, err)
+	modelsDir := filepath.Join(root, "models")
+
 	// Skip if models directory doesn't exist (ONNX runtime not set up)
-	modelsDir := testutil.GetTestDataDir(t)
-	if !testutil.DirExists(filepath.Join(modelsDir, "models")) {
+	if !testutil.DirExists(modelsDir) {
 		t.Skip("Models directory not found, skipping integration test")
 	}
 
@@ -335,7 +347,7 @@ func TestProcessImagesParallel_ValidImages(t *testing.T) {
 			}
 		}
 
-		file, err := os.Create(imagePath)
+		file, err := os.Create(imagePath) // #nosec G304 - imagePath is controlled by test
 		require.NoError(t, err)
 
 		err = png.Encode(file, img)
@@ -365,9 +377,13 @@ func TestProcessImagesParallel_ValidImages(t *testing.T) {
 }
 
 func TestProcessImagesParallel_WithConfidenceFilters(t *testing.T) {
+	// Get the project root and models directory
+	root, err := testutil.GetProjectRoot()
+	require.NoError(t, err)
+	modelsDir := filepath.Join(root, "models")
+
 	// Skip if models directory doesn't exist (ONNX runtime not set up)
-	modelsDir := testutil.GetTestDataDir(t)
-	if !testutil.DirExists(filepath.Join(modelsDir, "models")) {
+	if !testutil.DirExists(modelsDir) {
 		t.Skip("Models directory not found, skipping integration test")
 	}
 
@@ -382,7 +398,7 @@ func TestProcessImagesParallel_WithConfidenceFilters(t *testing.T) {
 		}
 	}
 
-	file, err := os.Create(imagePath)
+	file, err := os.Create(imagePath) // #nosec G304 - imagePath is controlled by test
 	require.NoError(t, err)
 	defer func() { require.NoError(t, file.Close()) }()
 

@@ -84,7 +84,7 @@ func TestTryCreateONNXClassifier_MoreErrorPaths(t *testing.T) {
 
 	// This should fail at ONNX parsing stage
 	_, err := tryCreateONNXClassifier(cfg)
-	assert.Error(t, err)
+	require.Error(t, err)
 	// The error should be related to ONNX parsing or IO info retrieval
 	assert.Error(t, err)
 }

@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testUserID = "user1"
+
 func TestNewRateLimiter(t *testing.T) {
 	rl := NewRateLimiter(10, 100, 1000, 1024*1024)
 
@@ -23,10 +25,10 @@ func TestNewRateLimiter(t *testing.T) {
 func TestRateLimiter_CheckRateLimit_NoLimits(t *testing.T) {
 	rl := NewRateLimiter(0, 0, 0, 0) // No limits
 
-	err := rl.CheckRateLimit("user1", 100)
-	assert.NoError(t, err)
+	err := rl.CheckRateLimit(testUserID, 100)
+	require.NoError(t, err)
 
-	usage := rl.GetUsage("user1")
+	usage := rl.GetUsage(testUserID)
 	assert.Equal(t, 1, usage.requestsToday)
 	assert.Equal(t, int64(100), usage.dataToday)
 }
@@ -34,19 +36,19 @@ func TestRateLimiter_CheckRateLimit_NoLimits(t *testing.T) {
 func TestRateLimiter_CheckRateLimit_RequestsPerMinute(t *testing.T) {
 	rl := NewRateLimiter(2, 0, 0, 0) // 2 requests per minute
 
-	userID := "user1"
+	userID := testUserID
 
 	// First request should succeed
 	err := rl.CheckRateLimit(userID, 0)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Second request should succeed
 	err = rl.CheckRateLimit(userID, 0)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Third request should fail
 	err = rl.CheckRateLimit(userID, 0)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	rateLimitErr := &RateLimitError{}
 	ok := errors.As(err, &rateLimitErr)
@@ -59,17 +61,17 @@ func TestRateLimiter_CheckRateLimit_RequestsPerMinute(t *testing.T) {
 func TestRateLimiter_CheckRateLimit_RequestsPerHour(t *testing.T) {
 	rl := NewRateLimiter(0, 3, 0, 0) // 3 requests per hour
 
-	userID := "user1"
+	userID := testUserID
 
 	// Make 3 requests
 	for range 3 {
 		err := rl.CheckRateLimit(userID, 0)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	// Fourth request should fail
 	err := rl.CheckRateLimit(userID, 0)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	rateLimitErr := &RateLimitError{}
 	ok := errors.As(err, &rateLimitErr)
@@ -81,19 +83,19 @@ func TestRateLimiter_CheckRateLimit_RequestsPerHour(t *testing.T) {
 func TestRateLimiter_CheckRateLimit_MaxRequestsPerDay(t *testing.T) {
 	rl := NewRateLimiter(0, 0, 2, 0) // 2 requests per day
 
-	userID := "user1"
+	userID := testUserID
 
 	// First request should succeed
 	err := rl.CheckRateLimit(userID, 0)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Second request should succeed
 	err = rl.CheckRateLimit(userID, 0)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Third request should fail
 	err = rl.CheckRateLimit(userID, 0)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	quotaErr := &QuotaExceededError{}
 	ok := errors.As(err, &quotaErr)
@@ -107,19 +109,19 @@ func TestRateLimiter_CheckRateLimit_MaxRequestsPerDay(t *testing.T) {
 func TestRateLimiter_CheckRateLimit_MaxDataPerDay(t *testing.T) {
 	rl := NewRateLimiter(0, 0, 0, 1000) // 1000 bytes per day
 
-	userID := "user1"
+	userID := testUserID
 
 	// First request with 500 bytes should succeed
 	err := rl.CheckRateLimit(userID, 500)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Second request with 400 bytes should succeed
 	err = rl.CheckRateLimit(userID, 400)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Third request with 200 bytes should fail
 	err = rl.CheckRateLimit(userID, 200)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	quotaErr := &QuotaExceededError{}
 	ok := errors.As(err, &quotaErr)
@@ -132,15 +134,15 @@ func TestRateLimiter_CheckRateLimit_MaxDataPerDay(t *testing.T) {
 func TestRateLimiter_CheckRateLimit_TimeReset(t *testing.T) {
 	rl := NewRateLimiter(1, 0, 0, 0) // 1 request per minute
 
-	userID := "user1"
+	userID := testUserID
 
 	// First request
 	err := rl.CheckRateLimit(userID, 0)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Second request should fail
 	err = rl.CheckRateLimit(userID, 0)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// Manually reset the last request time to more than a minute ago
 	rl.mu.Lock()
@@ -157,15 +159,15 @@ func TestRateLimiter_CheckRateLimit_TimeReset(t *testing.T) {
 func TestRateLimiter_CheckRateLimit_DayReset(t *testing.T) {
 	rl := NewRateLimiter(0, 0, 1, 0) // 1 request per day
 
-	userID := "user1"
+	userID := testUserID
 
 	// First request
 	err := rl.CheckRateLimit(userID, 0)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Second request should fail
 	err = rl.CheckRateLimit(userID, 0)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// Manually reset the day start time to yesterday
 	rl.mu.Lock()
@@ -182,7 +184,7 @@ func TestRateLimiter_CheckRateLimit_DayReset(t *testing.T) {
 func TestRateLimiter_GetUsage(t *testing.T) {
 	rl := NewRateLimiter(10, 100, 1000, 10000)
 
-	userID := "user1"
+	userID := testUserID
 
 	// No usage initially
 	usage := rl.GetUsage(userID)
@@ -193,10 +195,10 @@ func TestRateLimiter_GetUsage(t *testing.T) {
 
 	// Make some requests
 	err := rl.CheckRateLimit(userID, 500)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = rl.CheckRateLimit(userID, 300)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check usage
 	usage = rl.GetUsage(userID)
@@ -222,28 +224,28 @@ func TestRateLimiter_GetUsage_NonExistentUser(t *testing.T) {
 func TestRateLimiter_MultipleUsers(t *testing.T) {
 	rl := NewRateLimiter(2, 0, 0, 0) // 2 requests per minute
 
-	user1 := "user1"
+	user1 := testUserID
 	user2 := "user2"
 
 	// User1 makes 2 requests
 	err := rl.CheckRateLimit(user1, 0)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = rl.CheckRateLimit(user1, 0)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// User1's third request should fail
 	err = rl.CheckRateLimit(user1, 0)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// User2 should still be able to make requests
 	err = rl.CheckRateLimit(user2, 0)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = rl.CheckRateLimit(user2, 0)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// User2's third request should also fail
 	err = rl.CheckRateLimit(user2, 0)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestRateLimitError_Error(t *testing.T) {

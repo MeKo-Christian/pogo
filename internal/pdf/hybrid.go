@@ -171,15 +171,16 @@ func (h *HybridProcessor) determineStrategy(vectorText *TextExtraction, ocrResul
 	hasVectorText := vectorText != nil && vectorText.Quality.HasText
 	hasOCRResults := len(ocrResults) > 0
 
-	if hasVectorText && hasOCRResults {
+	switch {
+	case hasVectorText && hasOCRResults:
 		return StrategyHybrid
-	} else if hasVectorText {
+	case hasVectorText:
 		return StrategyVectorText
-	} else if hasOCRResults {
+	case hasOCRResults:
 		return StrategyOCR
+	default:
+		return StrategySkip
 	}
-
-	return StrategySkip
 }
 
 // mergeByAppending simply appends all text sources.
@@ -361,7 +362,7 @@ func (h *HybridProcessor) mergeBySpatialLayout(result *HybridResult, pageWidth, 
 	}
 
 	// Build combined text and regions
-	var texts []string
+	texts := make([]string, 0, len(mergedElements))
 	for _, element := range mergedElements {
 		texts = append(texts, element.Text)
 		if element.Region != nil {

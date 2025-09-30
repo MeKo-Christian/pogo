@@ -205,7 +205,7 @@ func TestServer_ocrPdfHandler_Success(t *testing.T) {
 	ocr, ok := response["ocr"].(map[string]interface{})
 	require.True(t, ok)
 	assert.Equal(t, "test.pdf", ocr["filename"])
-	assert.Equal(t, float64(1), ocr["total_pages"])
+	assert.InDelta(t, float64(1), ocr["total_pages"], 1e-6)
 }
 
 func TestServer_ocrPdfHandler_PageRange(t *testing.T) {
@@ -294,7 +294,7 @@ func TestServer_ocrPdfHandler_PageRange(t *testing.T) {
 
 	ocr, ok := response["ocr"].(map[string]interface{})
 	require.True(t, ok)
-	assert.Equal(t, float64(2), ocr["total_pages"])
+	assert.InDelta(t, float64(2), ocr["total_pages"], 1e-6)
 }
 
 func TestServer_ocrPdfHandler_TextFormat(t *testing.T) {

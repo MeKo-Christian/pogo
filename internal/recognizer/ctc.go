@@ -265,7 +265,7 @@ func beamSearchStep(beam []BeamCandidate, clsProbs []float32, blank int, beamWid
 	newBeam := make([]BeamCandidate, 0, len(beam)*2)
 
 	// Track the best probability seen so far for early pruning
-	var bestProb = -1e10
+	bestProb := -1e10
 	if len(beam) > 0 {
 		bestProb = beam[0].Probability
 	}

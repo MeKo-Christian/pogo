@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"syscall"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
@@ -186,6 +185,7 @@ func (h *PasswordHandler) readPasswordMasked() (string, error) {
 
 	// Read character by character and mask with *
 	var password strings.Builder
+inputLoop:
 	for {
 		var b [1]byte
 		_, err := os.Stdin.Read(b[:])
@@ -194,10 +194,11 @@ func (h *PasswordHandler) readPasswordMasked() (string, error) {
 		}
 
 		char := b[0]
-		if char == '\n' || char == '\r' {
+		switch {
+		case char == '\n' || char == '\r':
 			fmt.Println() // New line
-			break
-		} else if char == '\b' || char == 127 { // Backspace or DEL
+			break inputLoop
+		case char == '\b' || char == 127: // Backspace or DEL
 			if password.Len() > 0 {
 				// Convert to string, remove last character, and recreate builder
 				currentPassword := password.String()
@@ -207,7 +208,8 @@ func (h *PasswordHandler) readPasswordMasked() (string, error) {
 					fmt.Print("\b \b") // Erase character
 				}
 			}
-		} else if char >= 32 && char <= 126 { // Printable characters
+			continue // Continue to next iteration instead of break
+		case char >= 32 && char <= 126: // Printable characters
 			password.WriteByte(char)
 			fmt.Print("*")
 		}
@@ -338,15 +340,6 @@ func IsPasswordError(err error) bool {
 // init ensures that the terminal is in the correct mode for password reading.
 func init() {
 	// Set up terminal for password input (Unix-like systems)
-	if isUnixLike() {
-		// This is a placeholder - in a real implementation you might want to
-		// configure the terminal appropriately for secure password input
-	}
-}
-
-// isUnixLike checks if we're running on a Unix-like system.
-func isUnixLike() bool {
-	// Check if we have Unix-like file descriptors
-	_, _, err := syscall.Syscall(syscall.SYS_GETPID, 0, 0, 0)
-	return err == 0
+	// This is a placeholder - in a real implementation you might want to
+	// configure the terminal appropriately for secure password input
 }

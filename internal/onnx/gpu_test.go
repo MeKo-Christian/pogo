@@ -317,3 +317,143 @@ func TestSetONNXLibraryPathNoLibraries(t *testing.T) {
 	// The important thing is that the function completes without panicking
 	_ = err
 }
+
+func TestConfigureSessionForGPU_Disabled(t *testing.T) {
+	// Test that when GPU is disabled, function returns nil without error
+	config := GPUConfig{UseGPU: false}
+
+	// We don't need a real session options for this test
+	// since the function should return early
+	err := ConfigureSessionForGPU(nil, config)
+	if err != nil {
+		t.Errorf("ConfigureSessionForGPU with GPU disabled should not error, got: %v", err)
+	}
+}
+
+func TestSetONNXLibraryPath_GPUFallback(t *testing.T) {
+	// Create a temporary project structure
+	tempDir := t.TempDir()
+	projectDir := filepath.Join(tempDir, "project")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("Failed to create project directory: %v", err)
+	}
+
+	// Create go.mod
+	goModPath := filepath.Join(projectDir, "go.mod")
+	if err := os.WriteFile(goModPath, []byte("module test\n\ngo 1.21\n"), 0o644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	// Determine library name
+	libName := libLinux
+	switch runtime.GOOS {
+	case osDarwin:
+		libName = libDarwin
+	case osWindows:
+		libName = libWindows
+	}
+
+	// Create GPU library
+	gpuLibDir := filepath.Join(projectDir, "onnxruntime", "gpu", "lib")
+	if err := os.MkdirAll(gpuLibDir, 0o755); err != nil {
+		t.Fatalf("Failed to create GPU lib directory: %v", err)
+	}
+	gpuLibPath := filepath.Join(gpuLibDir, libName)
+	if err := os.WriteFile(gpuLibPath, []byte("fake gpu library"), 0o644); err != nil {
+		t.Fatalf("Failed to create fake GPU library: %v", err)
+	}
+
+	// Change to project directory
+	oldWd, _ := os.Getwd()
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
+
+	if err := os.Chdir(projectDir); err != nil {
+		t.Fatalf("Failed to change to project directory: %v", err)
+	}
+
+	// Test GPU library path setting
+	err := SetONNXLibraryPath(true)
+	if err != nil {
+		t.Errorf("SetONNXLibraryPath(true) with GPU library should succeed, got: %v", err)
+	}
+}
+
+func TestGetLibraryName_AllPlatforms(t *testing.T) {
+	// This test documents expected behavior for all platforms
+	tests := []struct {
+		name     string
+		goos     string
+		expected string
+	}{
+		{
+			name:     "Linux",
+			goos:     osLinux,
+			expected: libLinux,
+		},
+		{
+			name:     "Darwin/macOS",
+			goos:     osDarwin,
+			expected: libDarwin,
+		},
+		{
+			name:     "Windows",
+			goos:     osWindows,
+			expected: libWindows,
+		},
+	}
+
+	// We can only directly test the current platform
+	// but we can verify the logic is correct
+	currentGOOS := runtime.GOOS
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if currentGOOS == tt.goos {
+				name, err := getLibraryName()
+				if err != nil {
+					t.Errorf("getLibraryName() failed: %v", err)
+				}
+				if name != tt.expected {
+					t.Errorf("getLibraryName() = %v, want %v", name, tt.expected)
+				}
+			} else {
+				t.Logf("Skipping test for %s (current OS: %s)", tt.goos, currentGOOS)
+			}
+		})
+	}
+}
+
+func TestSetONNXLibraryPath_SystemLibraries(t *testing.T) {
+	// Test that SetONNXLibraryPath handles system libraries correctly
+	// This may succeed or fail depending on whether ONNX Runtime is installed
+	// but should not panic
+
+	// Test CPU path
+	err := SetONNXLibraryPath(false)
+	_ = err // Don't check error as system libraries may or may not exist
+
+	// Test GPU path
+	err = SetONNXLibraryPath(true)
+	_ = err // Don't check error as GPU libraries may or may not exist
+}
+
+func TestFindProjectRoot_NotFound(t *testing.T) {
+	// Test finding project root when it doesn't exist
+	// Create a temp directory that won't have go.mod
+	tempDir := t.TempDir()
+
+	oldWd, _ := os.Getwd()
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
+
+	_, err := findProjectRoot()
+	if err == nil {
+		t.Log("findProjectRoot() succeeded (may have found parent project)")
+	}
+}

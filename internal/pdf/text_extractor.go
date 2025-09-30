@@ -199,7 +199,7 @@ func (e *VectorTextExtractor) extractTextWithPositions(page pdf.Page) (string, [
 	}
 
 	// Convert font map to slice
-	var fonts []string
+	fonts := make([]string, 0, len(fontMap))
 	for font := range fontMap {
 		fonts = append(fonts, font)
 	}
@@ -214,12 +214,10 @@ func (e *VectorTextExtractor) getPageDimensions(page pdf.Page) (float64, float64
 	width, height := 612.0, 792.0 // Standard letter size in points
 
 	// Try to get actual dimensions from the page
-	if !page.V.IsNull() {
-		// The pdf package doesn't expose MediaBox directly in this version
-		// This is a simplified implementation
-		// In a full implementation, we would parse the page dictionary
-		// to get the actual MediaBox or CropBox values
-	}
+	// The pdf package doesn't expose MediaBox directly in this version
+	// This is a simplified implementation
+	// In a full implementation, we would parse the page dictionary
+	// to get the actual MediaBox or CropBox values
 
 	return width, height
 }

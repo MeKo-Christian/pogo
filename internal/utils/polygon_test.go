@@ -379,7 +379,7 @@ func TestCross(t *testing.T) {
 
 	// Parallel vectors should give zero
 	result = cross(o, Point{1, 0}, Point{2, 0})
-	require.Equal(t, 0.0, result)
+	require.InEpsilon(t, 0.0, result, 1e-6)
 
 	// Test with different origin
 	result = cross(Point{1, 1}, Point{2, 1}, Point{1, 2})

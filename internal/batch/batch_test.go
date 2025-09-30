@@ -20,7 +20,7 @@ func TestProcessBatch_NoImageFiles(t *testing.T) {
 
 	// Test with empty file list
 	result, err := ProcessBatch([]string{}, config)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "no image files found")
 }
@@ -33,7 +33,7 @@ func TestProcessBatch_InvalidImagePath(t *testing.T) {
 
 	// Test with non-existent file
 	result, err := ProcessBatch([]string{"/nonexistent/file.png"}, config)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "cannot access")
 }
@@ -216,7 +216,7 @@ func TestProcessBatch_PipelineBuildFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err := ProcessBatch([]string{imagePath}, config)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "failed to build OCR pipeline")
 }

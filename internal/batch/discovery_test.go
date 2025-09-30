@@ -12,7 +12,7 @@ import (
 
 func TestDiscoverImageFiles_EmptyArgs(t *testing.T) {
 	files, err := discoverImageFiles([]string{}, false, []string{"*.png"}, []string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Empty(t, files)
 }
 
@@ -120,7 +120,7 @@ func TestDiscoverImageFiles_IncludeExcludePatterns(t *testing.T) {
 
 func TestDiscoverImageFiles_NonExistentDirectory(t *testing.T) {
 	files, err := discoverImageFiles([]string{"/nonexistent/directory"}, false, []string{"*.png"}, []string{})
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, files)
 	assert.Contains(t, err.Error(), "cannot access")
 }
