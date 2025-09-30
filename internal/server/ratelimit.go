@@ -169,5 +169,6 @@ type QuotaExceededError struct {
 }
 
 func (e *QuotaExceededError) Error() string {
-	return fmt.Sprintf("quota exceeded for %s (used: %d, limit: %d, resets: %s)", e.Type, e.Used, e.Limit, e.Resets.Format(time.RFC3339))
+	return fmt.Sprintf("quota exceeded for %s (used: %d, limit: %d, resets: %s)",
+		e.Type, e.Used, e.Limit, e.Resets.Format(time.RFC3339))
 }

@@ -186,6 +186,10 @@ func TestServer_ocrPdfHandler_Success(t *testing.T) {
 	err = writer.WriteField("pages", "1")
 	require.NoError(t, err)
 
+	// Disable enhanced processing to use mock pipeline
+	err = writer.WriteField("enable-vector-text", "false")
+	require.NoError(t, err)
+
 	err = writer.Close()
 	require.NoError(t, err)
 
@@ -277,6 +281,10 @@ func TestServer_ocrPdfHandler_PageRange(t *testing.T) {
 	err = writer.WriteField("pages", "1-2")
 	require.NoError(t, err)
 
+	// Disable enhanced processing to use mock pipeline
+	err = writer.WriteField("enable-vector-text", "false")
+	require.NoError(t, err)
+
 	err = writer.Close()
 	require.NoError(t, err)
 
@@ -347,6 +355,10 @@ func TestServer_ocrPdfHandler_TextFormat(t *testing.T) {
 	err = writer.WriteField("format", "text")
 	require.NoError(t, err)
 
+	// Disable enhanced processing to use mock pipeline
+	err = writer.WriteField("enable-vector-text", "false")
+	require.NoError(t, err)
+
 	err = writer.Close()
 	require.NoError(t, err)
 
@@ -376,6 +388,10 @@ func TestServer_ocrPdfHandler_NoPipeline(t *testing.T) {
 	_, err = fileWriter.Write([]byte("mock pdf content"))
 	require.NoError(t, err)
 
+	// Disable enhanced processing to test nil pipeline check
+	err = writer.WriteField("enable-vector-text", "false")
+	require.NoError(t, err)
+
 	err = writer.Close()
 	require.NoError(t, err)
 
@@ -392,6 +408,7 @@ func TestServer_ocrPdfHandler_NoPipeline(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, false, response["success"])
+	// The error message will be about pipeline not initialized
 	assert.Contains(t, response["error"], "OCR pipeline not initialized")
 }
 

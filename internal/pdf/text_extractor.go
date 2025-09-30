@@ -124,7 +124,7 @@ func (e *VectorTextExtractor) extractPageText(reader *pdf.Reader, pageNum int) (
 	textContent, positions, fonts := e.extractTextWithPositions(page)
 
 	// Calculate text quality metrics
-	quality := e.assessTextQuality(textContent, positions, pageWidth, pageHeight)
+	quality := e.assessTextQuality(textContent, pageWidth, pageHeight)
 
 	// Calculate coverage
 	coverage := e.calculateTextCoverage(positions, pageWidth, pageHeight)
@@ -223,7 +223,7 @@ func (e *VectorTextExtractor) getPageDimensions(page pdf.Page) (float64, float64
 }
 
 // assessTextQuality evaluates the quality of extracted text.
-func (e *VectorTextExtractor) assessTextQuality(text string, positions []TextPosition, pageWidth, pageHeight float64) TextQuality {
+func (e *VectorTextExtractor) assessTextQuality(text string, pageWidth, pageHeight float64) TextQuality {
 	hasText := len(strings.TrimSpace(text)) > 0
 	wordCount := len(strings.Fields(text))
 	charCount := len(text)

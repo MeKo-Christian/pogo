@@ -202,10 +202,12 @@ func TestConfigRoundTripJSON(t *testing.T) {
 		t.Errorf("Port mismatch: expected %d, got %d", original.Server.Port, decoded.Server.Port)
 	}
 	if decoded.Pipeline.Detector.DbThresh != original.Pipeline.Detector.DbThresh {
-		t.Errorf("DbThresh mismatch: expected %f, got %f", original.Pipeline.Detector.DbThresh, decoded.Pipeline.Detector.DbThresh)
+		t.Errorf("DbThresh mismatch: expected %f, got %f",
+			original.Pipeline.Detector.DbThresh, decoded.Pipeline.Detector.DbThresh)
 	}
 	if decoded.Features.OrientationEnabled != original.Features.OrientationEnabled {
-		t.Errorf("OrientationEnabled mismatch: expected %v, got %v", original.Features.OrientationEnabled, decoded.Features.OrientationEnabled)
+		t.Errorf("OrientationEnabled mismatch: expected %v, got %v",
+			original.Features.OrientationEnabled, decoded.Features.OrientationEnabled)
 	}
 }
 
@@ -247,7 +249,8 @@ func TestConfigRoundTripYAML(t *testing.T) {
 		t.Errorf("Port mismatch: expected %d, got %d", original.Server.Port, decoded.Server.Port)
 	}
 	if decoded.Pipeline.Recognizer.Language != original.Pipeline.Recognizer.Language {
-		t.Errorf("Language mismatch: expected %s, got %s", original.Pipeline.Recognizer.Language, decoded.Pipeline.Recognizer.Language)
+		t.Errorf("Language mismatch: expected %s, got %s",
+			original.Pipeline.Recognizer.Language, decoded.Pipeline.Recognizer.Language)
 	}
 	if decoded.GPU.Enabled != original.GPU.Enabled {
 		t.Errorf("GPU Enabled mismatch: expected %v, got %v", original.GPU.Enabled, decoded.GPU.Enabled)

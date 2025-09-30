@@ -102,7 +102,13 @@ func (s *Server) handleRateLimitError(w http.ResponseWriter, err error) {
 			w.Header().Set("X-Ratelimit-Limit", strconv.Itoa(e.Limit))
 			w.Header().Set("Retry-After", fmt.Sprintf("%.0f", e.RetryAfter.Seconds()))
 			w.WriteHeader(http.StatusTooManyRequests)
-			response := map[string]interface{}{"error": "rate_limit_exceeded", "type": e.Type, "limit": e.Limit, "retry_after": e.RetryAfter.Seconds(), "message": e.Error()}
+			response := map[string]interface{}{
+				"error":       "rate_limit_exceeded",
+				"type":        e.Type,
+				"limit":       e.Limit,
+				"retry_after": e.RetryAfter.Seconds(),
+				"message":     e.Error(),
+			}
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				slog.Error("Failed to encode rate limit response", "error", err)
 			}
@@ -112,13 +118,23 @@ func (s *Server) handleRateLimitError(w http.ResponseWriter, err error) {
 			w.Header().Set("X-Quota-Used", strconv.FormatInt(e1.Used, 10))
 			w.Header().Set("X-Quota-Resets", e1.Resets.Format(http.TimeFormat))
 			w.WriteHeader(http.StatusTooManyRequests)
-			response := map[string]interface{}{"error": "quota_exceeded", "type": e1.Type, "limit": e1.Limit, "used": e1.Used, "resets": e1.Resets.Format(time.RFC3339), "message": e1.Error()}
+			response := map[string]interface{}{
+				"error":   "quota_exceeded",
+				"type":    e1.Type,
+				"limit":   e1.Limit,
+				"used":    e1.Used,
+				"resets":  e1.Resets.Format(time.RFC3339),
+				"message": e1.Error(),
+			}
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				slog.Error("Failed to encode quota exceeded response", "error", err)
 			}
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
-			if err := json.NewEncoder(w).Encode(map[string]string{"error": "internal_error", "message": "Rate limiting check failed"}); err != nil {
+			if err := json.NewEncoder(w).Encode(map[string]string{
+				"error":   "internal_error",
+				"message": "Rate limiting check failed",
+			}); err != nil {
 				slog.Error("Failed to encode internal error response", "error", err)
 			}
 		}

@@ -146,7 +146,8 @@ func (p *Processor) ProcessFileWithCredentials(filename string, pageRange string
 	}
 
 	for pageNum := range allPageNums {
-		pageResult, detectionTime, vectorTime, err := p.processPageEnhanced(pageNum, pageImages[pageNum], pageAnalyses[pageNum], workingFilename)
+		pageResult, detectionTime, vectorTime, err := p.processPageEnhanced(
+			pageNum, pageImages[pageNum], pageAnalyses[pageNum], workingFilename)
 		if err != nil {
 			return nil, fmt.Errorf("failed to process page %d: %w", pageNum, err)
 		}
@@ -311,19 +312,14 @@ func (p *Processor) processPageEnhanced(pageNum int, images []image.Image, analy
 	return pageResult, totalDetectionTime, totalVectorTime, nil
 }
 
-// processPage processes all images from a single PDF page (legacy method for backward compatibility).
-func (p *Processor) processPage(pageNum int, images []image.Image) (*PageResult, time.Duration, error) {
-	result, detectionTime, _, err := p.processPageEnhanced(pageNum, images, nil, "")
-	return result, detectionTime, err
-}
-
 // ProcessFiles processes multiple PDF files.
 func (p *Processor) ProcessFiles(filenames []string, pageRange string) ([]*DocumentResult, error) {
 	return p.ProcessFilesWithCredentials(filenames, pageRange, nil)
 }
 
 // ProcessFilesWithCredentials processes multiple PDF files with optional password credentials.
-func (p *Processor) ProcessFilesWithCredentials(filenames []string, pageRange string, creds *PasswordCredentials) ([]*DocumentResult, error) {
+func (p *Processor) ProcessFilesWithCredentials(filenames []string, pageRange string,
+	creds *PasswordCredentials) ([]*DocumentResult, error) {
 	results := make([]*DocumentResult, 0, len(filenames))
 
 	for _, filename := range filenames {

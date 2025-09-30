@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 const (
@@ -24,6 +26,12 @@ func clearPogoEnvVars() {
 	// Reset viper's global instance by creating a fresh one
 	// Note: This is a workaround since viper caches environment variables
 	// We can't fully reset it, but we can at least clear some state
+}
+
+// newTestLoader creates a fresh loader with a new viper instance for testing.
+// This ensures test isolation by avoiding the global viper instance.
+func newTestLoader() *Loader {
+	return &Loader{v: viper.New()}
 }
 
 // TestNewLoader tests loader creation.
@@ -169,7 +177,7 @@ server:
 		t.Fatalf("Failed to write config file: %v", err)
 	}
 
-	loader := NewLoader()
+	loader := newTestLoader()
 	_, err := loader.LoadWithFile(configFile)
 
 	if err == nil {
@@ -243,7 +251,7 @@ func TestEnvironmentVariableOverride(t *testing.T) {
 		t.Fatalf("Failed to change directory: %v", err)
 	}
 
-	loader := NewLoader()
+	loader := newTestLoader()
 	cfg, err := loader.Load()
 	if err != nil {
 		t.Errorf("Load() unexpected error: %v", err)
@@ -289,7 +297,7 @@ func TestEnvironmentVariableWithUnderscores(t *testing.T) {
 		t.Fatalf("Failed to change directory: %v", err)
 	}
 
-	loader := NewLoader()
+	loader := newTestLoader()
 	cfg, err := loader.Load()
 	if err != nil {
 		t.Errorf("Load() unexpected error: %v", err)
@@ -491,7 +499,7 @@ func TestLoadWithEmptyConfigFile(t *testing.T) {
 		t.Fatalf("Failed to write config file: %v", err)
 	}
 
-	loader := NewLoader()
+	loader := newTestLoader()
 	cfg, err := loader.LoadWithFile(configFile)
 	if err != nil {
 		t.Errorf("LoadWithFile() unexpected error: %v", err)
@@ -546,7 +554,7 @@ func TestLoadWithEmptyFilenameUsesDefaultLoad(t *testing.T) {
 		t.Fatalf("Failed to change directory: %v", err)
 	}
 
-	loader := NewLoader()
+	loader := newTestLoader()
 	cfg, err := loader.LoadWithFile("")
 	if err != nil {
 		t.Errorf("LoadWithFile(\"\") unexpected error: %v", err)
@@ -573,7 +581,7 @@ func TestLoadWithoutValidationUsesDefaults(t *testing.T) {
 		t.Fatalf("Failed to change directory: %v", err)
 	}
 
-	loader := NewLoader()
+	loader := newTestLoader()
 	cfg, err := loader.LoadWithoutValidation()
 	if err != nil {
 		t.Errorf("LoadWithoutValidation() unexpected error: %v", err)

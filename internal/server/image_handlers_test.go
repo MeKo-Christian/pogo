@@ -233,7 +233,7 @@ func TestServer_OCRImageHandler_OverlayDisabled(t *testing.T) {
 	server.ocrImageHandler(w, req)
 
 	// Should fail due to nil pipeline check before overlay check
-	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
 func TestRequestConfig_Validate(t *testing.T) {

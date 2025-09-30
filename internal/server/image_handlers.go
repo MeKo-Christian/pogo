@@ -336,6 +336,22 @@ func (s *Server) handleOverlayOutput(
 // getPipelineForRequest returns a pipeline configured for the specific request.
 // Creates or retrieves a cached pipeline based on the request configuration.
 func (s *Server) getPipelineForRequest(reqConfig *RequestConfig) (pipelineInterface, error) {
+	// If no custom configuration is requested, use the default pipeline
+	hasCustomConfig := reqConfig.DetModel != "" || reqConfig.RecModel != "" ||
+		reqConfig.Language != "" || reqConfig.DictPath != "" || len(reqConfig.DictLangs) > 0
+
+	if !hasCustomConfig && s.pipeline != nil {
+		return s.pipeline, nil
+	}
+
+	// If pipeline cache is not available, return error
+	if s.pipelineCache == nil {
+		if s.pipeline != nil {
+			return s.pipeline, nil
+		}
+		return nil, errors.New("OCR pipeline not initialized")
+	}
+
 	// Start with base configuration
 	config := s.baseConfig
 

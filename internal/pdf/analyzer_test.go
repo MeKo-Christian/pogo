@@ -66,7 +66,8 @@ func TestNewPageAnalyzer(t *testing.T) {
 		require.NotNil(t, analyzer)
 		assert.NotNil(t, analyzer.config)
 		assert.NotNil(t, analyzer.textExtractor)
-		assert.InDelta(t, DefaultAnalyzerConfig().VectorTextQualityThreshold, analyzer.config.VectorTextQualityThreshold, 1e-9)
+		assert.InDelta(t, DefaultAnalyzerConfig().VectorTextQualityThreshold,
+			analyzer.config.VectorTextQualityThreshold, 1e-9)
 	})
 
 	t.Run("with custom config", func(t *testing.T) {
@@ -512,10 +513,10 @@ func TestPageAnalysis_Structure(t *testing.T) {
 	assert.NotNil(t, analysis.VectorTextExtraction)
 	assert.True(t, analysis.HasImages)
 	assert.Equal(t, 3, analysis.ImageCount)
-	assert.Equal(t, 0.8, analysis.VectorTextQuality)
-	assert.Equal(t, 0.75, analysis.VectorTextCoverage)
-	assert.Equal(t, 0.3, analysis.EstimatedOCRBenefit)
-	assert.Equal(t, 0.85, analysis.AnalysisScore)
+	assert.InDelta(t, 0.8, analysis.VectorTextQuality, 1e-9)
+	assert.InDelta(t, 0.75, analysis.VectorTextCoverage, 1e-9)
+	assert.InDelta(t, 0.3, analysis.EstimatedOCRBenefit, 1e-9)
+	assert.InDelta(t, 0.85, analysis.AnalysisScore, 1e-9)
 	assert.Equal(t, "Test reasoning", analysis.Reasoning)
 }
 
@@ -547,7 +548,7 @@ func TestPageAnalyzer_ConfigPropagation(t *testing.T) {
 	analyzer := NewPageAnalyzer(nil)
 
 	// Initial threshold
-	assert.Equal(t, 0.7, analyzer.config.VectorTextQualityThreshold)
+	assert.InDelta(t, 0.7, analyzer.config.VectorTextQualityThreshold, 1e-9)
 
 	// Update config
 	newCfg := &AnalyzerConfig{
@@ -561,7 +562,7 @@ func TestPageAnalyzer_ConfigPropagation(t *testing.T) {
 	analyzer.UpdateConfig(newCfg)
 
 	// Verify config was updated
-	assert.Equal(t, 0.5, analyzer.config.VectorTextQualityThreshold)
+	assert.InDelta(t, 0.5, analyzer.config.VectorTextQualityThreshold, 1e-9)
 
 	// Note: We can't directly test if the text extractor threshold was updated
 	// without exposing internal state, but the UpdateConfig method should handle it
@@ -615,7 +616,7 @@ func TestPageAnalyzer_EdgeCases(t *testing.T) {
 
 		benefit := analyzer.estimateOCRBenefit(extraction, true)
 		// Should return minimum benefit of 0.1
-		assert.Equal(t, 0.1, benefit)
+		assert.InDelta(t, 0.1, benefit, 1e-9)
 	})
 
 	t.Run("very large image count", func(t *testing.T) {

@@ -71,7 +71,7 @@ func (c *PipelineCache) hashConfig(config pipeline.Config) string {
 		fmt.Sprintf("%v", config.Recognizer.DictPaths),
 		config.Recognizer.Language,
 	)
-	
+
 	h := fnv.New64a()
 	_, err := h.Write([]byte(key))
 	if err != nil {

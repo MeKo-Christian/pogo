@@ -501,7 +501,8 @@ func (c *Classifier) batchPredictWithONNX(images []image.Image) ([]Result, error
 }
 
 // createBatchedInputTensor combines multiple input tensors into a single batched tensor.
-func (c *Classifier) createBatchedInputTensor(tensors []*onnxrt.Tensor[float32]) (*onnxrt.Tensor[float32], func(), error) {
+func (c *Classifier) createBatchedInputTensor(tensors []*onnxrt.Tensor[float32]) (*onnxrt.Tensor[float32],
+	func(), error) {
 	if len(tensors) == 0 {
 		return nil, nil, errors.New("no tensors provided")
 	}

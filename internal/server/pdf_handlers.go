@@ -258,7 +258,8 @@ func (s *Server) saveUploadedFile(file multipart.File, header *multipart.FileHea
 }
 
 // processEnhancedPDF processes a PDF using the enhanced processor with password and vector text support.
-func (s *Server) processEnhancedPDF(filename, pageRange string, reqConfig *RequestConfig) (*pipeline.OCRPDFResult, error) {
+func (s *Server) processEnhancedPDF(filename, pageRange string,
+	reqConfig *RequestConfig) (*pipeline.OCRPDFResult, error) {
 	// Create detector for enhanced PDF processor
 	detectorConfig := detector.Config{
 		ModelPath:    s.baseConfig.Detector.ModelPath,

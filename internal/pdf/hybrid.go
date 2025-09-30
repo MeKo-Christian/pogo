@@ -124,12 +124,13 @@ func (h *HybridProcessor) MergeResults(
 		VectorText: vectorText,
 		OCRResults: ocrResults,
 		ProcessingInfo: HybridProcessingInfo{
-			Strategy:             h.determineStrategy(vectorText, ocrResults),
-			VectorTextUsed:       vectorText != nil,
-			OCRUsed:              len(ocrResults) > 0,
-			MergeMethod:          h.config.MergeStrategy.String(),
-			ConfidenceThreshold:  h.config.ConfidenceThreshold,
-			SpatialMergingUsed:   h.config.MergeStrategy == MergeStrategySpatial || h.config.MergeStrategy == MergeStrategyHybridSmart,
+			Strategy:            h.determineStrategy(vectorText, ocrResults),
+			VectorTextUsed:      vectorText != nil,
+			OCRUsed:             len(ocrResults) > 0,
+			MergeMethod:         h.config.MergeStrategy.String(),
+			ConfidenceThreshold: h.config.ConfidenceThreshold,
+			SpatialMergingUsed: h.config.MergeStrategy == MergeStrategySpatial ||
+				h.config.MergeStrategy == MergeStrategyHybridSmart,
 			DeduplicationApplied: h.config.DeduplicationEnabled,
 		},
 	}
