@@ -400,16 +400,21 @@ func (r *Recognizer) buildBatchResults(decoded interface{}, prepped []preprocess
 	r.mu.RUnlock()
 
 	for i := range out {
+		// Always set width/height from prepped region
+		out[i].Width = prepped[i].w
+		out[i].Height = prepped[i].h
+		out[i].Rotated = prepped[i].rotated
+
 		var seq interface{}
 		switch d := decoded.(type) {
 		case []DecodedSequence:
 			if i >= len(d) {
-				break
+				continue
 			}
 			seq = d[i]
 		case []BeamSearchResult:
 			if i >= len(d) {
-				break
+				continue
 			}
 			seq = d[i]
 		default:
@@ -422,15 +427,10 @@ func (r *Recognizer) buildBatchResults(decoded interface{}, prepped []preprocess
 		}
 
 		runes := convertIndicesToRunes(collapsed, charset)
-		out[i] = Result{
-			Text:            string(runes),
-			Confidence:      confidence,
-			CharConfidences: charProbs,
-			Indices:         collapsed,
-			Rotated:         prepped[i].rotated,
-			Width:           prepped[i].w,
-			Height:          prepped[i].h,
-		}
+		out[i].Text = string(runes)
+		out[i].Confidence = confidence
+		out[i].CharConfidences = charProbs
+		out[i].Indices = collapsed
 	}
 	return out
 }

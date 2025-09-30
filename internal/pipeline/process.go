@@ -18,7 +18,7 @@ import (
 // OCRRegionResult combines detection geometry with recognition output.
 type OCRRegionResult struct {
 	// Geometry and detection
-	Polygon []struct{ X, Y float64 } `json:"polygon"`
+	Polygon       []struct{ X, Y float64 } `json:"polygon"`
 	Box           struct{ X, Y, W, H int } `json:"box"`
 	DetConfidence float64                  `json:"det_confidence"`
 

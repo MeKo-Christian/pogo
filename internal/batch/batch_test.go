@@ -86,26 +86,14 @@ func TestProcessBatch_ValidImage(t *testing.T) {
 }
 
 func TestProcessBatch_MultipleImages(t *testing.T) {
-	// Skip if models directory doesn't exist (ONNX runtime not set up)
-	modelsDir := testutil.GetTestDataDir(t)
-	if !testutil.DirExists(filepath.Join(modelsDir, "models")) {
-		t.Skip("Models directory not found, skipping integration test")
-	}
-
-	config := &Config{
-		ModelsDir:        modelsDir,
-		Workers:          2,
-		Confidence:       0.3,
-		MinRecConf:       0.0,
-		ShowProgress:     false,
-		Quiet:            true,
-		ProgressInterval: time.Millisecond * 100,
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
 	}
 
 	// Use test images
 	imagePaths := []string{
-		filepath.Join(modelsDir, "images", "simple_text.png"),
-		filepath.Join(modelsDir, "images", "english_text.png"),
+		testutil.GetTestImagePath(t, "simple_text.png"),
+		testutil.GetTestImagePath(t, "english_text.png"),
 	}
 
 	// Filter to only existing files
@@ -120,6 +108,16 @@ func TestProcessBatch_MultipleImages(t *testing.T) {
 		t.Skip("No test images found")
 	}
 
+	config := &Config{
+		ModelsDir:        testutil.GetTestDataDir(t),
+		Workers:          2,
+		Confidence:       0.3,
+		MinRecConf:       0.0,
+		ShowProgress:     false,
+		Quiet:            true,
+		ProgressInterval: time.Millisecond * 100,
+	}
+
 	result, err := ProcessBatch(existingPaths, config)
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -130,17 +128,21 @@ func TestProcessBatch_MultipleImages(t *testing.T) {
 }
 
 func TestProcessBatch_WithOverlay(t *testing.T) {
-	// Skip if models directory doesn't exist (ONNX runtime not set up)
-	modelsDir := testutil.GetTestDataDir(t)
-	if !testutil.DirExists(filepath.Join(modelsDir, "models")) {
-		t.Skip("Models directory not found, skipping integration test")
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Use a test image
+	imagePath := testutil.GetTestImagePath(t, "simple_text.png")
+	if !testutil.FileExists(imagePath) {
+		t.Skip("Test image not found")
 	}
 
 	// Create temporary directory for overlays
 	overlayDir := testutil.CreateTempDir(t)
 
 	config := &Config{
-		ModelsDir:        modelsDir,
+		ModelsDir:        testutil.GetTestDataDir(t),
 		Workers:          1,
 		Confidence:       0.3,
 		MinRecConf:       0.0,
@@ -148,12 +150,6 @@ func TestProcessBatch_WithOverlay(t *testing.T) {
 		ShowProgress:     false,
 		Quiet:            true,
 		ProgressInterval: time.Millisecond * 100,
-	}
-
-	// Use a test image
-	imagePath := filepath.Join(modelsDir, "images", "simple_text.png")
-	if !testutil.FileExists(imagePath) {
-		t.Skip("Test image not found")
 	}
 
 	result, err := ProcessBatch([]string{imagePath}, config)
@@ -167,26 +163,24 @@ func TestProcessBatch_WithOverlay(t *testing.T) {
 }
 
 func TestProcessBatch_WithConfidenceFilters(t *testing.T) {
-	// Skip if models directory doesn't exist (ONNX runtime not set up)
-	modelsDir := testutil.GetTestDataDir(t)
-	if !testutil.DirExists(filepath.Join(modelsDir, "models")) {
-		t.Skip("Models directory not found, skipping integration test")
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Use a test image
+	imagePath := testutil.GetTestImagePath(t, "simple_text.png")
+	if !testutil.FileExists(imagePath) {
+		t.Skip("Test image not found")
 	}
 
 	config := &Config{
-		ModelsDir:        modelsDir,
+		ModelsDir:        testutil.GetTestDataDir(t),
 		Workers:          1,
 		Confidence:       0.8, // High confidence threshold
 		MinRecConf:       0.8, // High recognition confidence threshold
 		ShowProgress:     false,
 		Quiet:            true,
 		ProgressInterval: time.Millisecond * 100,
-	}
-
-	// Use a test image
-	imagePath := filepath.Join(modelsDir, "images", "simple_text.png")
-	if !testutil.FileExists(imagePath) {
-		t.Skip("Test image not found")
 	}
 
 	result, err := ProcessBatch([]string{imagePath}, config)

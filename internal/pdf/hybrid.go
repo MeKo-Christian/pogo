@@ -5,6 +5,8 @@ import (
 	"math"
 	"sort"
 	"strings"
+
+	"github.com/MeKo-Tech/pogo/internal/detector"
 )
 
 // HybridResult represents the combined result of vector text extraction and OCR.
@@ -257,6 +259,9 @@ type TextElement struct {
 
 // mergeBySpatialLayout merges text based on spatial positioning.
 func (h *HybridProcessor) mergeBySpatialLayout(result *HybridResult, pageWidth, pageHeight float64) {
+	_ = pageWidth  // Reserved for future scaling/normalization logic
+	_ = pageHeight // Reserved for future scaling/normalization logic
+
 	elements := h.collectAllTextElements(result)
 	h.sortElementsByReadingOrder(elements)
 	mergedElements := h.mergeOverlappingElements(elements)

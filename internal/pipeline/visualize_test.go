@@ -81,8 +81,8 @@ func TestTransformCoordinates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			x, y := transformCoordinates(tt.x, tt.y, tt.angle, tt.w0, tt.h0)
-			assert.InEpsilon(t, tt.expectedX, x, 1e-9, "x coordinate mismatch")
-			assert.InEpsilon(t, tt.expectedY, y, 1e-9, "y coordinate mismatch")
+			assert.InDelta(t, tt.expectedX, x, 1e-9, "x coordinate mismatch")
+			assert.InDelta(t, tt.expectedY, y, 1e-9, "y coordinate mismatch")
 		})
 	}
 }
