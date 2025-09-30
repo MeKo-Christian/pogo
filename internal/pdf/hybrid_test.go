@@ -1256,3 +1256,360 @@ func TestHybridProcessor_EdgeCases(t *testing.T) {
 		require.NotNil(t, result)
 	})
 }
+
+// TestHybridProcessor_CollectDetectedRegions tests collectDetectedRegions function.
+func TestHybridProcessor_CollectDetectedRegions(t *testing.T) {
+	processor := NewHybridProcessor(&HybridConfig{
+		MinOCRConfidence: 0.5,
+	})
+
+	t.Run("convert detected regions to text elements", func(t *testing.T) {
+		regions := []detector.DetectedRegion{
+			{
+				Box: utils.Box{
+					MinX: 10, MinY: 20,
+					MaxX: 110, MaxY: 70,
+				},
+				Confidence: 0.85,
+			},
+			{
+				Box: utils.Box{
+					MinX: 200, MinY: 100,
+					MaxX: 350, MaxY: 180,
+				},
+				Confidence: 0.92,
+			},
+		}
+
+		elements := processor.collectDetectedRegions(regions)
+
+		require.Len(t, elements, 2)
+
+		// Check first element
+		assert.Equal(t, "ocr", elements[0].Source)
+		assert.InDelta(t, 60.0, elements[0].X, 1e-9)   // Center X: (10+110)/2
+		assert.InDelta(t, 45.0, elements[0].Y, 1e-9)   // Center Y: (20+70)/2
+		assert.InDelta(t, 100.0, elements[0].Width, 1e-9)
+		assert.InDelta(t, 50.0, elements[0].Height, 1e-9)
+		assert.InDelta(t, 0.85, elements[0].Confidence, 1e-9)
+		assert.Empty(t, elements[0].Text)
+		assert.NotNil(t, elements[0].Region)
+		assert.Equal(t, 10, elements[0].Region.Box.X)
+		assert.Equal(t, 20, elements[0].Region.Box.Y)
+		assert.Equal(t, 100, elements[0].Region.Box.W)
+		assert.Equal(t, 50, elements[0].Region.Box.H)
+	})
+
+	t.Run("filter low confidence regions", func(t *testing.T) {
+		regions := []detector.DetectedRegion{
+			{
+				Box: utils.Box{
+					MinX: 10, MinY: 20,
+					MaxX: 110, MaxY: 70,
+				},
+				Confidence: 0.3, // Below threshold
+			},
+			{
+				Box: utils.Box{
+					MinX: 200, MinY: 100,
+					MaxX: 350, MaxY: 180,
+				},
+				Confidence: 0.6, // Above threshold
+			},
+		}
+
+		elements := processor.collectDetectedRegions(regions)
+
+		require.Len(t, elements, 1)
+		assert.InDelta(t, 0.6, elements[0].Confidence, 1e-9)
+	})
+
+	t.Run("empty regions", func(t *testing.T) {
+		elements := processor.collectDetectedRegions([]detector.DetectedRegion{})
+		assert.Empty(t, elements)
+	})
+}
+
+// TestHybridProcessor_SortElementsByReadingOrder tests sortElementsByReadingOrder function.
+func TestHybridProcessor_SortElementsByReadingOrder(t *testing.T) {
+	processor := NewHybridProcessor(nil)
+
+	t.Run("sort by Y coordinate first", func(t *testing.T) {
+		elements := []TextElement{
+			{Text: "bottom", X: 100, Y: 200, Height: 20},
+			{Text: "top", X: 100, Y: 50, Height: 20},
+			{Text: "middle", X: 100, Y: 125, Height: 20},
+		}
+
+		processor.sortElementsByReadingOrder(elements)
+
+		assert.Equal(t, "top", elements[0].Text)
+		assert.Equal(t, "middle", elements[1].Text)
+		assert.Equal(t, "bottom", elements[2].Text)
+	})
+
+	t.Run("sort by X coordinate for same line", func(t *testing.T) {
+		elements := []TextElement{
+			{Text: "right", X: 300, Y: 100, Height: 20},
+			{Text: "left", X: 50, Y: 105, Height: 20}, // Within height/2 threshold
+			{Text: "center", X: 150, Y: 102, Height: 20},
+		}
+
+		processor.sortElementsByReadingOrder(elements)
+
+		assert.Equal(t, "left", elements[0].Text)
+		assert.Equal(t, "center", elements[1].Text)
+		assert.Equal(t, "right", elements[2].Text)
+	})
+
+	t.Run("empty elements", func(t *testing.T) {
+		elements := []TextElement{}
+		processor.sortElementsByReadingOrder(elements)
+		assert.Empty(t, elements)
+	})
+}
+
+// TestHybridProcessor_IsBetterThanExisting tests isBetterThanExisting function.
+func TestHybridProcessor_IsBetterThanExisting(t *testing.T) {
+	tests := []struct {
+		name            string
+		preferVectorText bool
+		newElement      TextElement
+		existingElement TextElement
+		want            bool
+	}{
+		{
+			name:            "prefer vector text - existing is vector",
+			preferVectorText: true,
+			newElement:      TextElement{Source: "ocr", Confidence: 0.95},
+			existingElement: TextElement{Source: "vector", Confidence: 0.8},
+			want:            false,
+		},
+		{
+			name:            "prefer vector text - existing is OCR",
+			preferVectorText: true,
+			newElement:      TextElement{Source: "vector", Confidence: 0.7},
+			existingElement: TextElement{Source: "ocr", Confidence: 0.9},
+			want:            true,
+		},
+		{
+			name:            "prefer confidence - new has lower confidence",
+			preferVectorText: false,
+			newElement:      TextElement{Source: "ocr", Confidence: 0.7},
+			existingElement: TextElement{Source: "ocr", Confidence: 0.9},
+			want:            false,
+		},
+		{
+			name:            "prefer confidence - new has higher confidence",
+			preferVectorText: false,
+			newElement:      TextElement{Source: "ocr", Confidence: 0.95},
+			existingElement: TextElement{Source: "ocr", Confidence: 0.7},
+			want:            true,
+		},
+		{
+			name:            "prefer confidence - equal confidence",
+			preferVectorText: false,
+			newElement:      TextElement{Source: "ocr", Confidence: 0.8},
+			existingElement: TextElement{Source: "ocr", Confidence: 0.8},
+			want:            true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processor := NewHybridProcessor(&HybridConfig{
+				PreferVectorText: tt.preferVectorText,
+			})
+
+			result := processor.isBetterThanExisting(tt.newElement, tt.existingElement)
+			assert.Equal(t, tt.want, result)
+		})
+	}
+}
+
+// TestHybridProcessor_ProcessOCRResultForEnhancement tests processOCRResultForEnhancement function.
+func TestHybridProcessor_ProcessOCRResultForEnhancement(t *testing.T) {
+	processor := NewHybridProcessor(&HybridConfig{
+		ConfidenceThreshold: 0.7,
+	})
+
+	t.Run("add high confidence regions not already included", func(t *testing.T) {
+		result := &HybridResult{
+			CombinedText: "Existing text",
+		}
+
+		ocrResult := ImageResult{
+			OCRRegions: []OCRRegion{
+				{Text: "New text", RecConfidence: 0.85},
+				{Text: "Another new text", RecConfidence: 0.92},
+			},
+		}
+
+		additionalTexts := []string{"Existing text"}
+		processor.processOCRResultForEnhancement(ocrResult, result, &additionalTexts)
+
+		require.Len(t, additionalTexts, 3)
+		assert.Contains(t, additionalTexts, "New text")
+		assert.Contains(t, additionalTexts, "Another new text")
+		assert.Len(t, result.MergedRegions, 2)
+	})
+
+	t.Run("skip low confidence regions", func(t *testing.T) {
+		result := &HybridResult{
+			CombinedText: "Existing text",
+		}
+
+		ocrResult := ImageResult{
+			OCRRegions: []OCRRegion{
+				{Text: "Low confidence", RecConfidence: 0.5},
+			},
+		}
+
+		additionalTexts := []string{"Existing text"}
+		processor.processOCRResultForEnhancement(ocrResult, result, &additionalTexts)
+
+		require.Len(t, additionalTexts, 1)
+		assert.Empty(t, result.MergedRegions)
+	})
+
+	t.Run("skip already included text", func(t *testing.T) {
+		result := &HybridResult{
+			CombinedText: "Existing text",
+		}
+
+		ocrResult := ImageResult{
+			OCRRegions: []OCRRegion{
+				{Text: "Existing", RecConfidence: 0.9},
+			},
+		}
+
+		additionalTexts := []string{"Existing text"}
+		processor.processOCRResultForEnhancement(ocrResult, result, &additionalTexts)
+
+		require.Len(t, additionalTexts, 1)
+		assert.Empty(t, result.MergedRegions)
+	})
+
+	t.Run("empty OCR regions", func(t *testing.T) {
+		result := &HybridResult{
+			CombinedText: "Existing text",
+		}
+
+		ocrResult := ImageResult{
+			OCRRegions: []OCRRegion{},
+		}
+
+		additionalTexts := []string{"Existing text"}
+		processor.processOCRResultForEnhancement(ocrResult, result, &additionalTexts)
+
+		require.Len(t, additionalTexts, 1)
+		assert.Empty(t, result.MergedRegions)
+	})
+}
+
+// TestHybridProcessor_CollectOCRElements_WithDetectedRegions tests OCR collection with DetectedRegions.
+func TestHybridProcessor_CollectOCRElements_WithDetectedRegions(t *testing.T) {
+	processor := NewHybridProcessor(&HybridConfig{
+		MinOCRConfidence: 0.5,
+	})
+
+	t.Run("collect from DetectedRegions when OCRRegions empty", func(t *testing.T) {
+		result := &HybridResult{
+			OCRResults: []ImageResult{
+				{
+					ImageIndex: 0,
+					Regions: []detector.DetectedRegion{
+						{
+							Box: utils.Box{
+								MinX: 10, MinY: 20,
+								MaxX: 110, MaxY: 70,
+							},
+							Confidence: 0.85,
+						},
+					},
+				},
+			},
+		}
+
+		elements := processor.collectOCRElements(result)
+
+		require.Len(t, elements, 1)
+		assert.Equal(t, "ocr", elements[0].Source)
+		assert.InDelta(t, 60.0, elements[0].X, 1e-9)
+		assert.InDelta(t, 45.0, elements[0].Y, 1e-9)
+	})
+}
+
+// TestHybridProcessor_PerformMerge_DefaultStrategy tests default strategy fallback.
+func TestHybridProcessor_PerformMerge_DefaultStrategy(t *testing.T) {
+	processor := NewHybridProcessor(&HybridConfig{
+		MergeStrategy: MergeStrategy(999), // Invalid strategy
+	})
+
+	result := &HybridResult{
+		VectorText: &TextExtraction{
+			PageNumber: 1,
+			Text:       "Test text",
+			Quality:    TextQuality{HasText: true, Score: 0.9},
+		},
+	}
+
+	processor.performMerge(result, 800, 600)
+
+	// Should fall back to append strategy
+	assert.Equal(t, "Test text", result.CombinedText)
+}
+
+// TestHybridProcessor_MergeByConfidence_NoOCRRegions tests confidence merging without OCRRegions.
+func TestHybridProcessor_MergeByConfidence_NoOCRRegions(t *testing.T) {
+	processor := NewHybridProcessor(&HybridConfig{
+		MergeStrategy:       MergeStrategyConfidence,
+		ConfidenceThreshold: 0.7,
+	})
+
+	t.Run("OCR results with only DetectedRegions", func(t *testing.T) {
+		result := &HybridResult{
+			OCRResults: []ImageResult{
+				{
+					ImageIndex: 0,
+					Regions: []detector.DetectedRegion{
+						{
+							Box: utils.Box{
+								MinX: 10, MinY: 20,
+								MaxX: 110, MaxY: 70,
+							},
+							Confidence: 0.85,
+						},
+					},
+				},
+			},
+		}
+
+		processor.mergeByConfidence(result)
+
+		// Should have empty combined text since DetectedRegions have no text
+		assert.Empty(t, result.CombinedText)
+	})
+}
+
+// TestHybridProcessor_TextSimilarity_EdgeCases tests text similarity edge cases.
+func TestHybridProcessor_TextSimilarity_EdgeCases(t *testing.T) {
+	processor := NewHybridProcessor(nil)
+
+	t.Run("whitespace only strings", func(t *testing.T) {
+		similarity := processor.textSimilarity("   ", "   ")
+		assert.InDelta(t, 1.0, similarity, 0.01)
+	})
+
+	t.Run("single character strings", func(t *testing.T) {
+		similarity := processor.textSimilarity("a", "a")
+		assert.InDelta(t, 1.0, similarity, 0.01)
+	})
+
+	t.Run("very long strings", func(t *testing.T) {
+		longText1 := strings.Repeat("word ", 1000)
+		longText2 := strings.Repeat("word ", 1000)
+		similarity := processor.textSimilarity(longText1, longText2)
+		assert.GreaterOrEqual(t, similarity, 0.99)
+	})
+}
