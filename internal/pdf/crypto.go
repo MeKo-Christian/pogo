@@ -66,14 +66,36 @@ func (h *PasswordHandler) DecryptPDF(filename string, creds *PasswordCredentials
 	}
 
 	if !encrypted {
-		// File is not encrypted, return original filename
 		return filename, nil
 	}
 
-	// Create configuration with passwords
+	config := h.createDecryptionConfig(creds)
+	tempFileName, err := h.createTempFile()
+	if err != nil {
+		return "", err
+	}
+
+	// Try to decrypt with current credentials
+	if err := h.tryDecryptWithConfig(filename, tempFileName, config); err == nil {
+		return tempFileName, nil
+	}
+
+	// If decryption failed and we allow prompting, try to get password from user
+	if h.allowPasswordPrompt {
+		if tempFileName, err := h.tryDecryptWithPrompt(filename, tempFileName, config); err == nil {
+			return tempFileName, nil
+		}
+	}
+
+	// Clean up temp file if decryption failed
+	_ = os.Remove(tempFileName)
+	return "", fmt.Errorf("failed to decrypt PDF: %w", err)
+}
+
+// createDecryptionConfig creates a configuration with the provided credentials.
+func (h *PasswordHandler) createDecryptionConfig(creds *PasswordCredentials) *model.Configuration {
 	config := model.NewDefaultConfiguration()
 
-	// Set passwords from credentials
 	if creds != nil {
 		if creds.UserPassword != "" {
 			config.UserPW = creds.UserPassword
@@ -81,51 +103,47 @@ func (h *PasswordHandler) DecryptPDF(filename string, creds *PasswordCredentials
 		if creds.OwnerPassword != "" {
 			config.OwnerPW = creds.OwnerPassword
 		}
-	}
-
-	// Try default credentials first if available
-	if creds == nil && h.defaultCredentials != nil {
+	} else if h.defaultCredentials != nil {
 		config.UserPW = h.defaultCredentials.UserPassword
 		config.OwnerPW = h.defaultCredentials.OwnerPassword
 	}
 
-	// Create temporary file for decrypted PDF
+	return config
+}
+
+// createTempFile creates a temporary file for decrypted PDF.
+func (h *PasswordHandler) createTempFile() (string, error) {
 	tempFile, err := os.CreateTemp("", "decrypted-*.pdf")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary file: %w", err)
 	}
 	_ = tempFile.Close() // Close file handle, keep path
+	return tempFile.Name(), nil
+}
 
-	// Try to decrypt with current credentials
-	err = h.tryDecryptWithConfig(filename, tempFile.Name(), config)
-	if err == nil {
-		return tempFile.Name(), nil
+// tryDecryptWithPrompt attempts to decrypt using prompted passwords.
+func (h *PasswordHandler) tryDecryptWithPrompt(filename, tempFileName string,
+	config *model.Configuration) (string, error) {
+	promptCreds, promptErr := h.promptForPasswords()
+	if promptErr != nil || promptCreds == nil {
+		return "", fmt.Errorf("password prompting failed: %w", promptErr)
 	}
 
-	// If decryption failed and we allow prompting, try to get password from user
-	if h.allowPasswordPrompt {
-		promptCreds, promptErr := h.promptForPasswords()
-		if promptErr == nil && promptCreds != nil {
-			// Update config with prompted passwords
-			if promptCreds.UserPassword != "" {
-				config.UserPW = promptCreds.UserPassword
-			}
-			if promptCreds.OwnerPassword != "" {
-				config.OwnerPW = promptCreds.OwnerPassword
-			}
-
-			// Try decryption again with prompted passwords
-			err = h.tryDecryptWithConfig(filename, tempFile.Name(), config)
-			if err == nil {
-				return tempFile.Name(), nil
-			}
-		}
+	// Update config with prompted passwords
+	if promptCreds.UserPassword != "" {
+		config.UserPW = promptCreds.UserPassword
+	}
+	if promptCreds.OwnerPassword != "" {
+		config.OwnerPW = promptCreds.OwnerPassword
 	}
 
-	// Clean up temp file if decryption failed
-	_ = os.Remove(tempFile.Name())
+	// Try decryption again with prompted passwords
+	err := h.tryDecryptWithConfig(filename, tempFileName, config)
+	if err != nil {
+		return "", err
+	}
 
-	return "", fmt.Errorf("failed to decrypt PDF: %w", err)
+	return tempFileName, nil
 }
 
 // tryDecryptWithConfig attempts to decrypt a PDF with the given configuration.
@@ -175,6 +193,27 @@ func (h *PasswordHandler) readPassword() (string, error) {
 	return h.readPasswordVisible()
 }
 
+// handlePasswordChar processes a single character for password input.
+func handlePasswordChar(char byte, password *strings.Builder) {
+	switch {
+	case char == '\n' || char == '\r':
+		fmt.Println() // New line
+	case char == '\b' || char == 127: // Backspace or DEL
+		if password.Len() > 0 {
+			// Convert to string, remove last character, and recreate builder
+			currentPassword := password.String()
+			if len(currentPassword) > 0 {
+				password.Reset()
+				password.WriteString(currentPassword[:len(currentPassword)-1])
+				fmt.Print("\b \b") // Erase character
+			}
+		}
+	case char >= 32 && char <= 126: // Printable characters
+		password.WriteByte(char)
+		fmt.Print("*")
+	}
+}
+
 // readPasswordMasked reads a password with character masking.
 func (h *PasswordHandler) readPasswordMasked() (string, error) {
 	// This is a simplified implementation
@@ -185,7 +224,6 @@ func (h *PasswordHandler) readPasswordMasked() (string, error) {
 
 	// Read character by character and mask with *
 	var password strings.Builder
-inputLoop:
 	for {
 		var b [1]byte
 		_, err := os.Stdin.Read(b[:])
@@ -194,24 +232,11 @@ inputLoop:
 		}
 
 		char := b[0]
-		switch {
-		case char == '\n' || char == '\r':
-			fmt.Println() // New line
-			break inputLoop
-		case char == '\b' || char == 127: // Backspace or DEL
-			if password.Len() > 0 {
-				// Convert to string, remove last character, and recreate builder
-				currentPassword := password.String()
-				if len(currentPassword) > 0 {
-					password.Reset()
-					password.WriteString(currentPassword[:len(currentPassword)-1])
-					fmt.Print("\b \b") // Erase character
-				}
-			}
-			continue // Continue to next iteration instead of break
-		case char >= 32 && char <= 126: // Printable characters
-			password.WriteByte(char)
-			fmt.Print("*")
+		handlePasswordChar(char, &password)
+
+		// Check if we should break (newline characters)
+		if char == '\n' || char == '\r' {
+			break
 		}
 	}
 

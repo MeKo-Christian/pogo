@@ -82,35 +82,7 @@ func (r *Rectifier) processDocTROutput(outData []float32, oh, ow int) ([]utils.P
 		return nil, false
 	}
 
-	// Extract corner coordinates from the first 8 values
-	// Assuming output format: [x1, y1, x2, y2, x3, y3, x4, y4]
-	corners := make([]utils.Point, 4)
-	for i := range 4 {
-		x := float64(outData[i*2])
-		y := float64(outData[i*2+1])
-
-		// Normalize coordinates if they are in [0,1] range
-		if x >= 0 && x <= 1 && y >= 0 && y <= 1 {
-			x *= float64(ow)
-			y *= float64(oh)
-		}
-
-		// Clamp to image bounds
-		if x < 0 {
-			x = 0
-		}
-		if x >= float64(ow) {
-			x = float64(ow - 1)
-		}
-		if y < 0 {
-			y = 0
-		}
-		if y >= float64(oh) {
-			y = float64(oh - 1)
-		}
-
-		corners[i] = utils.Point{X: x, Y: y}
-	}
+	corners := r.extractCornerCoordinates(outData, oh, ow)
 
 	// Validate that we have a reasonable quadrilateral
 	if !r.validateDocTRCorners(corners, oh, ow) {
@@ -118,6 +90,48 @@ func (r *Rectifier) processDocTROutput(outData []float32, oh, ow int) ([]utils.P
 	}
 
 	return corners, true
+}
+
+// extractCornerCoordinates extracts and processes corner coordinates from DocTR output.
+func (r *Rectifier) extractCornerCoordinates(outData []float32, oh, ow int) []utils.Point {
+	// Extract corner coordinates from the first 8 values
+	// Assuming output format: [x1, y1, x2, y2, x3, y3, x4, y4]
+	corners := make([]utils.Point, 4)
+	for i := range 4 {
+		x := float64(outData[i*2])
+		y := float64(outData[i*2+1])
+
+		x, y = r.normalizeAndClampCoordinates(x, y, oh, ow)
+
+		corners[i] = utils.Point{X: x, Y: y}
+	}
+	return corners
+}
+
+// normalizeAndClampCoordinates normalizes coordinates if in [0,1] range and clamps to image bounds.
+func (r *Rectifier) normalizeAndClampCoordinates(x, y float64, oh, ow int) (float64, float64) {
+	// Normalize coordinates if they are in [0,1] range
+	if x >= 0 && x <= 1 && y >= 0 && y <= 1 {
+		x *= float64(ow)
+		y *= float64(oh)
+	}
+
+	// Clamp to image bounds
+	x = r.clampCoordinate(x, 0, float64(ow-1))
+	y = r.clampCoordinate(y, 0, float64(oh-1))
+
+	return x, y
+}
+
+// clampCoordinate clamps a coordinate to the specified min and max bounds.
+func (r *Rectifier) clampCoordinate(coord, minVal, maxVal float64) float64 {
+	if coord < minVal {
+		return minVal
+	}
+	if coord > maxVal {
+		return maxVal
+	}
+	return coord
 }
 
 // validateDocTRCorners validates that the predicted corners form a reasonable document quadrilateral.

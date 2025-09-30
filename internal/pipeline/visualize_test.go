@@ -13,67 +13,67 @@ import (
 // TestTransformCoordinates tests coordinate transformation for all rotation angles.
 func TestTransformCoordinates(t *testing.T) {
 	tests := []struct {
-		name       string
-		x, y       float64
-		angle      int
-		w0, h0     int
-		expectedX  float64
-		expectedY  float64
+		name      string
+		x, y      float64
+		angle     int
+		w0, h0    int
+		expectedX float64
+		expectedY float64
 	}{
 		{
-			name:      "no rotation",
-			x:         10, y: 20,
-			angle:     0,
-			w0:        100, h0: 200,
+			name: "no rotation",
+			x:    10, y: 20,
+			angle: 0,
+			w0:    100, h0: 200,
 			expectedX: 10, expectedY: 20,
 		},
 		{
-			name:      "90 degree rotation - top left",
-			x:         0, y: 0,
-			angle:     90,
-			w0:        100, h0: 200,
+			name: "90 degree rotation - top left",
+			x:    0, y: 0,
+			angle: 90,
+			w0:    100, h0: 200,
 			expectedX: 99, expectedY: 0, // w0-1 - y, x
 		},
 		{
-			name:      "90 degree rotation - center",
-			x:         50, y: 25,
-			angle:     90,
-			w0:        100, h0: 200,
+			name: "90 degree rotation - center",
+			x:    50, y: 25,
+			angle: 90,
+			w0:    100, h0: 200,
 			expectedX: 74, expectedY: 50, // w0-1 - y, x
 		},
 		{
-			name:      "180 degree rotation - top left",
-			x:         0, y: 0,
-			angle:     180,
-			w0:        100, h0: 200,
+			name: "180 degree rotation - top left",
+			x:    0, y: 0,
+			angle: 180,
+			w0:    100, h0: 200,
 			expectedX: 99, expectedY: 199, // w0-1 - x, h0-1 - y
 		},
 		{
-			name:      "180 degree rotation - center",
-			x:         50, y: 100,
-			angle:     180,
-			w0:        100, h0: 200,
+			name: "180 degree rotation - center",
+			x:    50, y: 100,
+			angle: 180,
+			w0:    100, h0: 200,
 			expectedX: 49, expectedY: 99, // w0-1 - x, h0-1 - y
 		},
 		{
-			name:      "270 degree rotation - top left",
-			x:         0, y: 0,
-			angle:     270,
-			w0:        100, h0: 200,
+			name: "270 degree rotation - top left",
+			x:    0, y: 0,
+			angle: 270,
+			w0:    100, h0: 200,
 			expectedX: 0, expectedY: 199, // y, h0-1 - x
 		},
 		{
-			name:      "270 degree rotation - center",
-			x:         50, y: 25,
-			angle:     270,
-			w0:        100, h0: 200,
+			name: "270 degree rotation - center",
+			x:    50, y: 25,
+			angle: 270,
+			w0:    100, h0: 200,
 			expectedX: 25, expectedY: 149, // y, h0-1 - x
 		},
 		{
-			name:      "invalid angle treated as no rotation",
-			x:         10, y: 20,
-			angle:     45,
-			w0:        100, h0: 200,
+			name: "invalid angle treated as no rotation",
+			x:    10, y: 20,
+			angle: 45,
+			w0:    100, h0: 200,
 			expectedX: 10, expectedY: 20,
 		},
 	}
@@ -81,8 +81,8 @@ func TestTransformCoordinates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			x, y := transformCoordinates(tt.x, tt.y, tt.angle, tt.w0, tt.h0)
-			assert.Equal(t, tt.expectedX, x, "x coordinate mismatch")
-			assert.Equal(t, tt.expectedY, y, "y coordinate mismatch")
+			assert.InEpsilon(t, tt.expectedX, x, 1e-9, "x coordinate mismatch")
+			assert.InEpsilon(t, tt.expectedY, y, 1e-9, "y coordinate mismatch")
 		})
 	}
 }
@@ -90,43 +90,43 @@ func TestTransformCoordinates(t *testing.T) {
 // TestMin4 tests the min4 helper function.
 func TestMin4(t *testing.T) {
 	tests := []struct {
-		name     string
+		name       string
 		a, b, c, d float64
-		expected float64
+		expected   float64
 	}{
 		{
-			name:     "first is minimum",
-			a:        1.0, b: 2.0, c: 3.0, d: 4.0,
+			name: "first is minimum",
+			a:    1.0, b: 2.0, c: 3.0, d: 4.0,
 			expected: 1.0,
 		},
 		{
-			name:     "second is minimum",
-			a:        2.0, b: 1.0, c: 3.0, d: 4.0,
+			name: "second is minimum",
+			a:    2.0, b: 1.0, c: 3.0, d: 4.0,
 			expected: 1.0,
 		},
 		{
-			name:     "third is minimum",
-			a:        3.0, b: 2.0, c: 1.0, d: 4.0,
+			name: "third is minimum",
+			a:    3.0, b: 2.0, c: 1.0, d: 4.0,
 			expected: 1.0,
 		},
 		{
-			name:     "fourth is minimum",
-			a:        4.0, b: 3.0, c: 2.0, d: 1.0,
+			name: "fourth is minimum",
+			a:    4.0, b: 3.0, c: 2.0, d: 1.0,
 			expected: 1.0,
 		},
 		{
-			name:     "all equal",
-			a:        5.0, b: 5.0, c: 5.0, d: 5.0,
+			name: "all equal",
+			a:    5.0, b: 5.0, c: 5.0, d: 5.0,
 			expected: 5.0,
 		},
 		{
-			name:     "negative values",
-			a:        -1.0, b: -2.0, c: -3.0, d: -4.0,
+			name: "negative values",
+			a:    -1.0, b: -2.0, c: -3.0, d: -4.0,
 			expected: -4.0,
 		},
 		{
-			name:     "mixed positive and negative",
-			a:        10.0, b: -5.0, c: 0.0, d: 3.0,
+			name: "mixed positive and negative",
+			a:    10.0, b: -5.0, c: 0.0, d: 3.0,
 			expected: -5.0,
 		},
 	}
@@ -134,7 +134,7 @@ func TestMin4(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := min4(tt.a, tt.b, tt.c, tt.d)
-			assert.Equal(t, tt.expected, result)
+			assert.InEpsilon(t, tt.expected, result, 1e-9)
 		})
 	}
 }
@@ -142,43 +142,43 @@ func TestMin4(t *testing.T) {
 // TestMax4 tests the max4 helper function.
 func TestMax4(t *testing.T) {
 	tests := []struct {
-		name     string
+		name       string
 		a, b, c, d float64
-		expected float64
+		expected   float64
 	}{
 		{
-			name:     "first is maximum",
-			a:        4.0, b: 3.0, c: 2.0, d: 1.0,
+			name: "first is maximum",
+			a:    4.0, b: 3.0, c: 2.0, d: 1.0,
 			expected: 4.0,
 		},
 		{
-			name:     "second is maximum",
-			a:        3.0, b: 4.0, c: 2.0, d: 1.0,
+			name: "second is maximum",
+			a:    3.0, b: 4.0, c: 2.0, d: 1.0,
 			expected: 4.0,
 		},
 		{
-			name:     "third is maximum",
-			a:        2.0, b: 3.0, c: 4.0, d: 1.0,
+			name: "third is maximum",
+			a:    2.0, b: 3.0, c: 4.0, d: 1.0,
 			expected: 4.0,
 		},
 		{
-			name:     "fourth is maximum",
-			a:        1.0, b: 2.0, c: 3.0, d: 4.0,
+			name: "fourth is maximum",
+			a:    1.0, b: 2.0, c: 3.0, d: 4.0,
 			expected: 4.0,
 		},
 		{
-			name:     "all equal",
-			a:        5.0, b: 5.0, c: 5.0, d: 5.0,
+			name: "all equal",
+			a:    5.0, b: 5.0, c: 5.0, d: 5.0,
 			expected: 5.0,
 		},
 		{
-			name:     "negative values",
-			a:        -1.0, b: -2.0, c: -3.0, d: -4.0,
+			name: "negative values",
+			a:    -1.0, b: -2.0, c: -3.0, d: -4.0,
 			expected: -1.0,
 		},
 		{
-			name:     "mixed positive and negative",
-			a:        10.0, b: -5.0, c: 0.0, d: 3.0,
+			name: "mixed positive and negative",
+			a:    10.0, b: -5.0, c: 0.0, d: 3.0,
 			expected: 10.0,
 		},
 	}
@@ -186,7 +186,7 @@ func TestMax4(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := max4(tt.a, tt.b, tt.c, tt.d)
-			assert.Equal(t, tt.expected, result)
+			assert.InEpsilon(t, tt.expected, result, 1e-9)
 		})
 	}
 }
@@ -263,8 +263,8 @@ func TestDrawRegionBox(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dst := image.NewRGBA(image.Rect(0, 0, tt.imgWidth, tt.imgHeight))
 			// Fill with white background
-			for y := 0; y < tt.imgHeight; y++ {
-				for x := 0; x < tt.imgWidth; x++ {
+			for y := range tt.imgHeight {
+				for x := range tt.imgWidth {
 					dst.Set(x, y, color.White)
 				}
 			}
@@ -274,8 +274,8 @@ func TestDrawRegionBox(t *testing.T) {
 			if tt.shouldDraw {
 				// Verify that at least some pixels have been colored
 				coloredPixels := 0
-				for y := 0; y < tt.imgHeight; y++ {
-					for x := 0; x < tt.imgWidth; x++ {
+				for y := range tt.imgHeight {
+					for x := range tt.imgWidth {
 						r, g, b, a := dst.At(x, y).RGBA()
 						// Check if pixel is not white (255, 255, 255, 255)
 						if r != 65535 || g != 65535 || b != 65535 || a != 65535 {
@@ -283,9 +283,38 @@ func TestDrawRegionBox(t *testing.T) {
 						}
 					}
 				}
-				assert.Greater(t, coloredPixels, 0, "expected some pixels to be drawn")
+				assert.Positive(t, coloredPixels, "expected some pixels to be drawn")
 			}
 		})
+	}
+}
+
+// countColoredPixels counts pixels that are not white in the given image.
+func countColoredPixels(img image.Image, width, height int) int {
+	coloredPixels := 0
+	for y := range height {
+		for x := range width {
+			r, g, b, a := img.At(x, y).RGBA()
+			// Check if pixel is not white (255, 255, 255, 255)
+			if r != 65535 || g != 65535 || b != 65535 || a != 65535 {
+				coloredPixels++
+			}
+		}
+	}
+	return coloredPixels
+}
+
+// verifyAllPixelsWhite verifies that all pixels in the image are white.
+func verifyAllPixelsWhite(t *testing.T, img image.Image, width, height int) {
+	t.Helper()
+	for y := range height {
+		for x := range width {
+			r, g, b, a := img.At(x, y).RGBA()
+			assert.Equal(t, uint32(65535), r, "pixel should be white at (%d, %d)", x, y)
+			assert.Equal(t, uint32(65535), g, "pixel should be white at (%d, %d)", x, y)
+			assert.Equal(t, uint32(65535), b, "pixel should be white at (%d, %d)", x, y)
+			assert.Equal(t, uint32(65535), a, "pixel should be white at (%d, %d)", x, y)
+		}
 	}
 }
 
@@ -393,8 +422,8 @@ func TestDrawRegionPolygon(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dst := image.NewRGBA(image.Rect(0, 0, tt.imgWidth, tt.imgHeight))
 			// Fill with white background
-			for y := 0; y < tt.imgHeight; y++ {
-				for x := 0; x < tt.imgWidth; x++ {
+			for y := range tt.imgHeight {
+				for x := range tt.imgWidth {
 					dst.Set(x, y, color.White)
 				}
 			}
@@ -402,29 +431,10 @@ func TestDrawRegionPolygon(t *testing.T) {
 			drawRegionPolygon(dst, tt.region, tt.angle, tt.imgWidth, tt.imgHeight, tt.polyColor)
 
 			if tt.shouldDraw {
-				// Verify that at least some pixels have been colored
-				coloredPixels := 0
-				for y := 0; y < tt.imgHeight; y++ {
-					for x := 0; x < tt.imgWidth; x++ {
-						r, g, b, a := dst.At(x, y).RGBA()
-						// Check if pixel is not white (255, 255, 255, 255)
-						if r != 65535 || g != 65535 || b != 65535 || a != 65535 {
-							coloredPixels++
-						}
-					}
-				}
-				assert.Greater(t, coloredPixels, 0, "expected some pixels to be drawn")
+				coloredPixels := countColoredPixels(dst, tt.imgWidth, tt.imgHeight)
+				assert.Positive(t, coloredPixels, "expected some pixels to be drawn")
 			} else {
-				// Verify all pixels remain white
-				for y := 0; y < tt.imgHeight; y++ {
-					for x := 0; x < tt.imgWidth; x++ {
-						r, g, b, a := dst.At(x, y).RGBA()
-						assert.Equal(t, uint32(65535), r, "pixel should be white at (%d, %d)", x, y)
-						assert.Equal(t, uint32(65535), g, "pixel should be white at (%d, %d)", x, y)
-						assert.Equal(t, uint32(65535), b, "pixel should be white at (%d, %d)", x, y)
-						assert.Equal(t, uint32(65535), a, "pixel should be white at (%d, %d)", x, y)
-					}
-				}
+				verifyAllPixelsWhite(t, dst, tt.imgWidth, tt.imgHeight)
 			}
 		})
 	}
@@ -493,8 +503,8 @@ func TestRenderOverlay_AllRotationAngles(t *testing.T) {
 
 			// Verify that some drawing occurred
 			coloredPixels := 0
-			for y := 0; y < 100; y++ {
-				for x := 0; x < 100; x++ {
+			for y := range 100 {
+				for x := range 100 {
 					r, g, b, _ := overlay.At(x, y).RGBA()
 					// Check for red or green pixels (box or polygon)
 					if r > 30000 || g > 30000 || b > 30000 {
@@ -502,7 +512,7 @@ func TestRenderOverlay_AllRotationAngles(t *testing.T) {
 					}
 				}
 			}
-			assert.Greater(t, coloredPixels, 0, "expected some pixels to be drawn for angle %d", angle)
+			assert.Positive(t, coloredPixels, "expected some pixels to be drawn for angle %d", angle)
 		})
 	}
 }
@@ -511,8 +521,8 @@ func TestRenderOverlay_AllRotationAngles(t *testing.T) {
 func TestRenderOverlay_BoxAndPolygon(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 200, 100))
 	// Fill with black background
-	for y := 0; y < 100; y++ {
-		for x := 0; x < 200; x++ {
+	for y := range 100 {
+		for x := range 200 {
 			img.Set(x, y, color.Black)
 		}
 	}
@@ -542,8 +552,8 @@ func TestRenderOverlay_BoxAndPolygon(t *testing.T) {
 	// Count red and green pixels
 	redPixels := 0
 	greenPixels := 0
-	for y := 0; y < 100; y++ {
-		for x := 0; x < 200; x++ {
+	for y := range 100 {
+		for x := range 200 {
 			r, g, b, _ := overlay.At(x, y).RGBA()
 			// Red pixel (box)
 			if r > 50000 && g < 10000 && b < 10000 {
@@ -556,8 +566,8 @@ func TestRenderOverlay_BoxAndPolygon(t *testing.T) {
 		}
 	}
 
-	assert.Greater(t, redPixels, 0, "expected red pixels for box")
-	assert.Greater(t, greenPixels, 0, "expected green pixels for polygon")
+	assert.Positive(t, redPixels, "expected red pixels for box")
+	assert.Positive(t, greenPixels, "expected green pixels for polygon")
 }
 
 // TestRenderOverlay_NonZeroBounds tests RenderOverlay with non-zero bounded images.
@@ -648,15 +658,15 @@ func TestRenderOverlay_CoordinateAccuracy(t *testing.T) {
 
 			// Verify that drawing occurred within image bounds
 			coloredPixels := 0
-			for y := 0; y < tt.imgH; y++ {
-				for x := 0; x < tt.imgW; x++ {
+			for y := range tt.imgH {
+				for x := range tt.imgW {
 					r, g, b, _ := overlay.At(x, y).RGBA()
 					if r > 30000 || g > 30000 || b > 30000 {
 						coloredPixels++
 					}
 				}
 			}
-			assert.Greater(t, coloredPixels, 0, "expected pixels to be drawn within bounds")
+			assert.Positive(t, coloredPixels, "expected pixels to be drawn within bounds")
 		})
 	}
 }

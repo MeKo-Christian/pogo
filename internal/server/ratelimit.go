@@ -56,6 +56,26 @@ func (rl *RateLimiter) CheckRateLimit(userID string, dataSize int64) error {
 	now := time.Now()
 	usage := rl.getOrCreateUserUsage(userID, now)
 
+	rl.resetCountersIfNeeded(usage, now)
+
+	// Check rate limits
+	if err := rl.checkRateLimits(usage, now); err != nil {
+		return err
+	}
+
+	// Check daily quotas
+	if err := rl.checkDailyQuotas(usage, dataSize, now); err != nil {
+		return err
+	}
+
+	// Update usage counters
+	rl.updateUsageCounters(usage, dataSize, now)
+
+	return nil
+}
+
+// resetCountersIfNeeded resets usage counters when time periods change.
+func (rl *RateLimiter) resetCountersIfNeeded(usage *UserUsage, now time.Time) {
 	// Reset counters if day has changed
 	if now.Day() != usage.dayStartTime.Day() || now.Month() != usage.dayStartTime.Month() {
 		usage.requestsToday = 0
@@ -70,8 +90,10 @@ func (rl *RateLimiter) CheckRateLimit(userID string, dataSize int64) error {
 	if now.Sub(usage.lastRequestTime) >= time.Hour {
 		usage.requestsLastHour = 0
 	}
+}
 
-	// Check rate limits
+// checkRateLimits checks minute and hour rate limits.
+func (rl *RateLimiter) checkRateLimits(usage *UserUsage, now time.Time) error {
 	if rl.requestsPerMinute > 0 && usage.requestsLastMinute >= rl.requestsPerMinute {
 		return &RateLimitError{
 			Type:       "minute",
@@ -88,7 +110,11 @@ func (rl *RateLimiter) CheckRateLimit(userID string, dataSize int64) error {
 		}
 	}
 
-	// Check daily quotas
+	return nil
+}
+
+// checkDailyQuotas checks daily request and data quotas.
+func (rl *RateLimiter) checkDailyQuotas(usage *UserUsage, dataSize int64, now time.Time) error {
 	if rl.maxRequestsPerDay > 0 && usage.requestsToday >= rl.maxRequestsPerDay {
 		return &QuotaExceededError{
 			Type:   "requests",
@@ -107,14 +133,16 @@ func (rl *RateLimiter) CheckRateLimit(userID string, dataSize int64) error {
 		}
 	}
 
-	// Update usage counters
+	return nil
+}
+
+// updateUsageCounters increments usage counters after a successful request.
+func (rl *RateLimiter) updateUsageCounters(usage *UserUsage, dataSize int64, now time.Time) {
 	usage.requestsLastMinute++
 	usage.requestsLastHour++
 	usage.requestsToday++
 	usage.dataToday += dataSize
 	usage.lastRequestTime = now
-
-	return nil
 }
 
 // getOrCreateUserUsage gets or creates usage tracking for a user.

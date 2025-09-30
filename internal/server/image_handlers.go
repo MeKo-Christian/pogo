@@ -34,18 +34,38 @@ type RequestConfig struct {
 	QualityThreshold float64 `json:"quality_threshold,omitempty"`
 }
 
+// validateLanguageCode validates a language code format.
+func validateLanguageCode(code string) error {
+	if len(code) > 10 {
+		return fmt.Errorf("language code too long: %s", code)
+	}
+	// Basic validation - should be letters (case insensitive), optionally with numbers/hyphens/underscores
+	for _, r := range strings.ToLower(code) {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_' {
+			return fmt.Errorf("invalid language code format: %s", code)
+		}
+	}
+	return nil
+}
+
+// validatePath validates a file path for basic security.
+func validatePath(path string, fieldName string) error {
+	if len(path) > 500 {
+		return fmt.Errorf("%s path too long", fieldName)
+	}
+	// Check for obviously dangerous characters
+	if strings.Contains(path, "..") || strings.Contains(path, "\n") || strings.Contains(path, "\r") {
+		return fmt.Errorf("invalid %s path", fieldName)
+	}
+	return nil
+}
+
 // Validate validates the request configuration parameters.
 func (c *RequestConfig) Validate() error {
 	// Validate language code
 	if c.Language != "" {
-		if len(c.Language) > 10 {
-			return fmt.Errorf("language code too long: %s", c.Language)
-		}
-		// Basic validation - should be letters (case insensitive), optionally with numbers/hyphens/underscores
-		for _, r := range strings.ToLower(c.Language) {
-			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_' {
-				return fmt.Errorf("invalid language code format: %s", c.Language)
-			}
+		if err := validateLanguageCode(c.Language); err != nil {
+			return err
 		}
 	}
 
@@ -54,46 +74,26 @@ func (c *RequestConfig) Validate() error {
 		if lang == "" {
 			continue
 		}
-		if len(lang) > 10 {
-			return fmt.Errorf("dictionary language code too long: %s", lang)
-		}
-		// Basic validation - should be letters (case insensitive), optionally with numbers/hyphens/underscores
-		for _, r := range strings.ToLower(lang) {
-			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_' {
-				return fmt.Errorf("invalid dictionary language code format: %s", lang)
-			}
+		if err := validateLanguageCode(lang); err != nil {
+			return fmt.Errorf("dictionary %s", err.Error())
 		}
 	}
 
 	// Validate model paths - basic sanity checks
-	if c.DetModel != "" {
-		if len(c.DetModel) > 500 {
-			return errors.New("detector model path too long")
-		}
-		// Check for obviously dangerous characters
-		if strings.Contains(c.DetModel, "..") || strings.Contains(c.DetModel, "\n") || strings.Contains(c.DetModel, "\r") {
-			return errors.New("invalid detector model path")
-		}
+	validations := []struct {
+		value string
+		name  string
+	}{
+		{c.DetModel, "detector model"},
+		{c.RecModel, "recognizer model"},
+		{c.DictPath, "dictionary"},
 	}
 
-	if c.RecModel != "" {
-		if len(c.RecModel) > 500 {
-			return errors.New("recognizer model path too long")
-		}
-		// Check for obviously dangerous characters
-		if strings.Contains(c.RecModel, "..") || strings.Contains(c.RecModel, "\n") || strings.Contains(c.RecModel, "\r") {
-			return errors.New("invalid recognizer model path")
-		}
-	}
-
-	// Validate dict path
-	if c.DictPath != "" {
-		if len(c.DictPath) > 500 {
-			return errors.New("dictionary path too long")
-		}
-		// Check for obviously dangerous characters
-		if strings.Contains(c.DictPath, "..") || strings.Contains(c.DictPath, "\n") || strings.Contains(c.DictPath, "\r") {
-			return errors.New("invalid dictionary path")
+	for _, v := range validations {
+		if v.value != "" {
+			if err := validatePath(v.value, v.name); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -352,8 +352,16 @@ func (s *Server) getPipelineForRequest(reqConfig *RequestConfig) (pipelineInterf
 		return nil, errors.New("OCR pipeline not initialized")
 	}
 
-	// Start with base configuration
-	config := s.baseConfig
+	// Start with base configuration and apply overrides
+	config := s.applyRequestOverrides(s.baseConfig, reqConfig)
+
+	// Get or create cached pipeline
+	return s.pipelineCache.GetOrCreate(config)
+}
+
+// applyRequestOverrides applies request-specific configuration overrides to the base config.
+func (s *Server) applyRequestOverrides(baseConfig pipeline.Config, reqConfig *RequestConfig) pipeline.Config {
+	config := baseConfig
 
 	// Override detector model if specified
 	if reqConfig.DetModel != "" {
@@ -385,6 +393,5 @@ func (s *Server) getPipelineForRequest(reqConfig *RequestConfig) (pipelineInterf
 		}
 	}
 
-	// Get or create cached pipeline
-	return s.pipelineCache.GetOrCreate(config)
+	return config
 }

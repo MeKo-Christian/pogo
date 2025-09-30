@@ -284,20 +284,35 @@ func (s *Server) extractBatchConfig(options map[string]interface{}) *RequestConf
 	}
 
 	// Extract string values
-	if val, ok := options["language"].(string); ok {
-		config.Language = val
+	stringFields := map[string]*string{
+		"language":  &config.Language,
+		"dict":      &config.DictPath,
+		"det-model": &config.DetModel,
+		"rec-model": &config.RecModel,
 	}
-	if val, ok := options["dict"].(string); ok {
-		config.DictPath = val
-	}
-	if val, ok := options["det-model"].(string); ok {
-		config.DetModel = val
-	}
-	if val, ok := options["rec-model"].(string); ok {
-		config.RecModel = val
+
+	for key, field := range stringFields {
+		if val, ok := options[key].(string); ok {
+			*field = val
+		}
 	}
 
 	// Extract dict-langs as string or []string
+	s.extractDictLangs(options, config)
+
+	// Validate the configuration (ignore validation errors in batch processing to avoid failing entire batch)
+	// The individual item processing will handle validation errors appropriately
+	if err := config.Validate(); err != nil {
+		// For batch processing, we'll log the validation error but continue
+		// Individual item validation will be handled in the processing functions
+		fmt.Fprintf(os.Stderr, "Warning: invalid batch configuration: %v\n", err)
+	}
+
+	return config
+}
+
+// extractDictLangs extracts dictionary languages from batch options.
+func (s *Server) extractDictLangs(options map[string]interface{}, config *RequestConfig) {
 	if val, ok := options["dict-langs"].(string); ok {
 		config.DictLangs = strings.Split(val, ",")
 		for i, lang := range config.DictLangs {
@@ -311,14 +326,4 @@ func (s *Server) extractBatchConfig(options map[string]interface{}) *RequestConf
 			}
 		}
 	}
-
-	// Validate the configuration (ignore validation errors in batch processing to avoid failing entire batch)
-	// The individual item processing will handle validation errors appropriately
-	if err := config.Validate(); err != nil {
-		// For batch processing, we'll log the validation error but continue
-		// Individual item validation will be handled in the processing functions
-		fmt.Fprintf(os.Stderr, "Warning: invalid batch configuration: %v\n", err)
-	}
-
-	return config
 }

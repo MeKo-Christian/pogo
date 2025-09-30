@@ -18,7 +18,7 @@ import (
 // OCRRegionResult combines detection geometry with recognition output.
 type OCRRegionResult struct {
 	// Geometry and detection
-	Polygon       []struct{ X, Y float64 } `json:"polygon"`
+	Polygon []struct{ X, Y float64 } `json:"polygon"`
 	Box           struct{ X, Y, W, H int } `json:"box"`
 	DetConfidence float64                  `json:"det_confidence"`
 
@@ -361,89 +361,105 @@ func (p *Pipeline) ProcessImagesContext(ctx context.Context, images []image.Imag
 		return nil, errors.New("no images provided")
 	}
 
-	// Pre-process orientation detection for all images if enabled
-	var orientationResults []orientation.Result
-	var workingImages []image.Image
-	if p.Orienter != nil && (p.cfg.Orientation.Enabled || p.cfg.EnableOrientation) {
-		// Use batch orientation detection for better performance
-		results, err := p.Orienter.BatchPredict(images)
-		if err != nil {
-			slog.Debug("Batch orientation detection failed, falling back to individual processing", "error", err)
-			// Fall back to individual processing
-			return p.processImagesIndividual(ctx, images)
-		}
-		orientationResults = results
-
-		// Apply rotations to create working images
-		workingImages = make([]image.Image, len(images))
-		for i, img := range images {
-			result := results[i]
-			switch result.Angle {
-			case 90:
-				workingImages[i] = utils.Rotate90(img)
-			case 180:
-				workingImages[i] = utils.Rotate180(img)
-			case 270:
-				workingImages[i] = utils.Rotate270(img)
-			default:
-				workingImages[i] = img
-			}
-		}
-	} else {
-		// No orientation processing needed
-		workingImages = images
-		orientationResults = make([]orientation.Result, len(images)) // All zero values
+	orientationResults, workingImages, err := p.prepareOrientation(ctx, images)
+	if err != nil {
+		return nil, err
 	}
 
-	// Process each image with its pre-rotated working image
-	results := make([]*OCRImageResult, len(images))
+	return p.processImagesWithOrientation(ctx, images, orientationResults, workingImages)
+}
+
+// prepareOrientation handles orientation detection and image rotation preparation.
+func (p *Pipeline) prepareOrientation(ctx context.Context,
+	images []image.Image) ([]orientation.Result, []image.Image, error) {
+	if p.Orienter == nil || (!p.cfg.Orientation.Enabled && !p.cfg.EnableOrientation) {
+		// No orientation processing needed
+		orientationResults := make([]orientation.Result, len(images)) // All zero values
+		return orientationResults, images, nil
+	}
+
+	// Check for cancellation before expensive operation
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	// Use batch orientation detection for better performance
+	results, err := p.Orienter.BatchPredict(images)
+	if err != nil {
+		slog.Debug("Batch orientation detection failed, falling back to individual processing", "error", err)
+		// Fall back to individual processing
+		return nil, nil, fmt.Errorf("orientation detection failed: %w", err)
+	}
+
+	// Apply rotations to create working images
+	workingImages := make([]image.Image, len(images))
+	for i, img := range images {
+		workingImages[i] = p.applyOrientationRotation(img, results[i].Angle)
+	}
+
+	return results, workingImages, nil
+}
+
+// applyOrientationRotation applies the appropriate rotation based on detected angle.
+func (p *Pipeline) applyOrientationRotation(img image.Image, angle int) image.Image {
+	switch angle {
+	case 90:
+		return utils.Rotate90(img)
+	case 180:
+		return utils.Rotate180(img)
+	case 270:
+		return utils.Rotate270(img)
+	default:
+		return img
+	}
+}
+
+// processImagesWithOrientation processes images that have been prepared with orientation.
+func (p *Pipeline) processImagesWithOrientation(ctx context.Context, originalImages []image.Image,
+	orientationResults []orientation.Result, workingImages []image.Image) ([]*OCRImageResult, error) {
+	results := make([]*OCRImageResult, len(originalImages))
 	for i, workingImg := range workingImages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 
-		// Apply rectification to working image
-		rectifiedImg, err := p.applyRectification(ctx, workingImg)
+		result, err := p.processSingleImage(ctx, originalImages[i], workingImg, orientationResults[i])
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("image %d: %w", i, err)
 		}
 
-		// Perform detection
-		regions, detNs, err := p.performDetection(ctx, rectifiedImg)
-		if err != nil {
-			return nil, fmt.Errorf("image %d detection: %w", i, err)
-		}
-
-		// Perform recognition
-		recResults, recNs, err := p.performRecognition(ctx, rectifiedImg, regions)
-		if err != nil {
-			return nil, fmt.Errorf("image %d recognition: %w", i, err)
-		}
-
-		// Build result with orientation info
-		totalNs := detNs + recNs // Simplified total for batch processing
-		appliedAngle := orientationResults[i].Angle
-		appliedConf := orientationResults[i].Confidence
-		results[i] = p.buildImageResult(images[i], regions, recResults, appliedAngle, appliedConf, detNs, recNs, totalNs)
+		results[i] = result
 	}
 
 	return results, nil
 }
 
-// processImagesIndividual processes images one by one (fallback method).
-func (p *Pipeline) processImagesIndividual(ctx context.Context, images []image.Image) ([]*OCRImageResult, error) {
-	results := make([]*OCRImageResult, len(images))
-	for i, img := range images {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		res, err := p.ProcessImageContext(ctx, img)
-		if err != nil {
-			return nil, fmt.Errorf("image %d: %w", i, err)
-		}
-		results[i] = res
+// processSingleImage processes a single image through the full OCR pipeline.
+func (p *Pipeline) processSingleImage(ctx context.Context, originalImg, workingImg image.Image,
+	orientationResult orientation.Result) (*OCRImageResult, error) {
+	// Apply rectification to working image
+	rectifiedImg, err := p.applyRectification(ctx, workingImg)
+	if err != nil {
+		return nil, err
 	}
-	return results, nil
+
+	// Perform detection
+	regions, detNs, err := p.performDetection(ctx, rectifiedImg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Perform recognition
+	recResults, recNs, err := p.performRecognition(ctx, rectifiedImg, regions)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build result with orientation info
+	totalNs := detNs + recNs // Simplified total for batch processing
+	appliedAngle := orientationResult.Angle
+	appliedConf := orientationResult.Confidence
+	return p.buildImageResult(originalImg, regions, recResults, appliedAngle, appliedConf, detNs, recNs, totalNs), nil
 }
 
 // ProcessPDF processes a PDF file and returns OCR results for all pages.

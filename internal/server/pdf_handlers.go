@@ -41,12 +41,20 @@ func (s *Server) ocrPdfHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = os.Remove(tempFile) }() // Clean up temp file
 
+	// Process PDF and handle response
+	s.processPdfAndRespond(w, r, tempFile, pageRange, reqConfig)
+}
+
+// processPdfAndRespond handles PDF processing and response formatting.
+func (s *Server) processPdfAndRespond(w http.ResponseWriter, r *http.Request,
+	tempFile, pageRange string, reqConfig *RequestConfig) {
 	// Check if we need enhanced PDF processing (passwords or vector text)
 	needsEnhanced := reqConfig.UserPassword != "" || reqConfig.OwnerPassword != "" ||
 		reqConfig.EnableVectorText || reqConfig.EnableHybrid
 
 	var res *pipeline.OCRPDFResult
 	var duration time.Duration
+	var err error
 
 	if needsEnhanced {
 		// Use enhanced PDF processor
@@ -128,7 +136,18 @@ func (s *Server) parsePdfRequest(
 	// Get page range parameter
 	pageRange := r.FormValue("pages")
 
-	// Extract request configuration
+	// Extract and validate request configuration
+	reqConfig, err := s.parseRequestConfig(r)
+	if err != nil {
+		s.writeErrorResponse(w, fmt.Sprintf("Invalid request parameters: %v", err), http.StatusBadRequest)
+		return nil, nil, "", nil, err
+	}
+
+	return file, header, pageRange, reqConfig, nil
+}
+
+// parseRequestConfig extracts and validates request configuration from form values.
+func (s *Server) parseRequestConfig(r *http.Request) (*RequestConfig, error) {
 	reqConfig := &RequestConfig{
 		Language: r.FormValue("language"),
 		DictPath: r.FormValue("dict"),
@@ -162,11 +181,10 @@ func (s *Server) parsePdfRequest(
 
 	// Validate request configuration
 	if err := reqConfig.Validate(); err != nil {
-		s.writeErrorResponse(w, fmt.Sprintf("Invalid request parameters: %v", err), http.StatusBadRequest)
-		return nil, nil, "", nil, err
+		return nil, err
 	}
 
-	return file, header, pageRange, reqConfig, nil
+	return reqConfig, nil
 }
 
 func (s *Server) handleFormParseError(w http.ResponseWriter, err error) {

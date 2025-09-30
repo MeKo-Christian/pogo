@@ -395,20 +395,47 @@ func (c *Classifier) BatchPredict(images []image.Image) ([]Result, error) {
 
 	results := make([]Result, len(images))
 
-	if c.heuristic || c.session == nil {
-		// Use heuristic for all images
-		for i, img := range images {
-			results[i] = c.predictWithHeuristicSingle(img)
-		}
-		return results, nil
+	if c.shouldUseHeuristic() {
+		return c.processAllWithHeuristic(images), nil
 	}
 
-	// Separate images that should skip orientation detection
+	return c.processBatchWithONNX(images, results)
+}
+
+// shouldUseHeuristic determines if heuristic mode should be used.
+func (c *Classifier) shouldUseHeuristic() bool {
+	return c.heuristic || c.session == nil
+}
+
+// processAllWithHeuristic processes all images using heuristic method.
+func (c *Classifier) processAllWithHeuristic(images []image.Image) []Result {
+	results := make([]Result, len(images))
+	for i, img := range images {
+		results[i] = c.predictWithHeuristicSingle(img)
+	}
+	return results
+}
+
+// processBatchWithONNX processes images using ONNX, skipping some if configured.
+func (c *Classifier) processBatchWithONNX(images []image.Image, results []Result) ([]Result, error) {
+	processImages, processIndices := c.separateImagesToProcess(images, results)
+
+	if len(processImages) > 0 {
+		if err := c.processImagesWithONNX(processImages, processIndices, results); err != nil {
+			return nil, err
+		}
+	}
+
+	return results, nil
+}
+
+// separateImagesToProcess separates images into those to process and those to skip.
+func (c *Classifier) separateImagesToProcess(images []image.Image, results []Result) ([]image.Image, []int) {
 	var processImages []image.Image
 	var processIndices []int
 
 	for i, img := range images {
-		if c.cfg.SkipSquareImages && c.shouldSkipOrientation(img) {
+		if c.shouldSkipImage(img) {
 			results[i] = Result{Angle: 0, Confidence: 1.0}
 		} else {
 			processImages = append(processImages, img)
@@ -416,20 +443,27 @@ func (c *Classifier) BatchPredict(images []image.Image) ([]Result, error) {
 		}
 	}
 
-	// Process remaining images with ONNX
-	if len(processImages) > 0 {
-		onnxResults, err := c.batchPredictWithONNX(processImages)
-		if err != nil {
-			return nil, err
-		}
+	return processImages, processIndices
+}
 
-		// Fill in ONNX results
-		for i, result := range onnxResults {
-			results[processIndices[i]] = result
-		}
+// shouldSkipImage determines if an image should skip orientation detection.
+func (c *Classifier) shouldSkipImage(img image.Image) bool {
+	return c.cfg.SkipSquareImages && c.shouldSkipOrientation(img)
+}
+
+// processImagesWithONNX processes the given images with ONNX and fills results.
+func (c *Classifier) processImagesWithONNX(images []image.Image, indices []int, results []Result) error {
+	onnxResults, err := c.batchPredictWithONNX(images)
+	if err != nil {
+		return err
 	}
 
-	return results, nil
+	// Fill in ONNX results
+	for i, result := range onnxResults {
+		results[indices[i]] = result
+	}
+
+	return nil
 }
 
 // predictWithHeuristicSingle is a single-image version that returns Result directly.

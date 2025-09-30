@@ -115,12 +115,34 @@ func (h *HybridProcessor) MergeResults(
 	ocrResults []ImageResult,
 	pageWidth, pageHeight float64,
 ) (*HybridResult, error) {
-	// Validate inputs
-	if vectorText == nil && len(ocrResults) == 0 {
-		return nil, errors.New("no input data provided for hybrid processing")
+	if err := h.validateInputs(vectorText, ocrResults); err != nil {
+		return nil, err
 	}
 
-	result := &HybridResult{
+	result := h.createHybridResult(vectorText, ocrResults)
+	h.setPageNumber(result, vectorText, ocrResults)
+
+	h.performMerge(result, pageWidth, pageHeight)
+
+	if h.config.DeduplicationEnabled {
+		h.deduplicateText(result)
+	}
+
+	h.calculateQualityMetrics(result)
+	return result, nil
+}
+
+// validateInputs checks that we have valid input data.
+func (h *HybridProcessor) validateInputs(vectorText *TextExtraction, ocrResults []ImageResult) error {
+	if vectorText == nil && len(ocrResults) == 0 {
+		return errors.New("no input data provided for hybrid processing")
+	}
+	return nil
+}
+
+// createHybridResult initializes the hybrid result structure.
+func (h *HybridProcessor) createHybridResult(vectorText *TextExtraction, ocrResults []ImageResult) *HybridResult {
+	return &HybridResult{
 		VectorText: vectorText,
 		OCRResults: ocrResults,
 		ProcessingInfo: HybridProcessingInfo{
@@ -134,15 +156,19 @@ func (h *HybridProcessor) MergeResults(
 			DeduplicationApplied: h.config.DeduplicationEnabled,
 		},
 	}
+}
 
+// setPageNumber sets the page number from available data.
+func (h *HybridProcessor) setPageNumber(result *HybridResult, vectorText *TextExtraction, ocrResults []ImageResult) {
 	if vectorText != nil {
 		result.PageNumber = vectorText.PageNumber
 	} else if len(ocrResults) > 0 {
-		// Assume all OCR results are from the same page
 		result.PageNumber = 1 // Default page number
 	}
+}
 
-	// Perform the merge based on strategy
+// performMerge executes the appropriate merge strategy.
+func (h *HybridProcessor) performMerge(result *HybridResult, pageWidth, pageHeight float64) {
 	switch h.config.MergeStrategy {
 	case MergeStrategyAppend:
 		h.mergeByAppending(result)
@@ -155,16 +181,6 @@ func (h *HybridProcessor) MergeResults(
 	default:
 		h.mergeByAppending(result)
 	}
-
-	// Apply deduplication if enabled
-	if h.config.DeduplicationEnabled {
-		h.deduplicateText(result)
-	}
-
-	// Calculate quality metrics
-	h.calculateQualityMetrics(result)
-
-	return result, nil
 }
 
 // determineStrategy determines the processing strategy based on available data.
@@ -241,11 +257,29 @@ type TextElement struct {
 
 // mergeBySpatialLayout merges text based on spatial positioning.
 func (h *HybridProcessor) mergeBySpatialLayout(result *HybridResult, pageWidth, pageHeight float64) {
-	// Create a list of all text elements with positions
+	elements := h.collectAllTextElements(result)
+	h.sortElementsByReadingOrder(elements)
+	mergedElements := h.mergeOverlappingElements(elements)
+	h.buildFinalResult(result, mergedElements)
+}
 
+// collectAllTextElements collects all text elements from vector text and OCR results.
+func (h *HybridProcessor) collectAllTextElements(result *HybridResult) []TextElement {
 	var elements []TextElement
 
 	// Add vector text elements
+	elements = append(elements, h.collectVectorTextElements(result)...)
+
+	// Add OCR elements
+	elements = append(elements, h.collectOCRElements(result)...)
+
+	return elements
+}
+
+// collectVectorTextElements collects text elements from vector text.
+func (h *HybridProcessor) collectVectorTextElements(result *HybridResult) []TextElement {
+	var elements []TextElement
+
 	if result.VectorText != nil {
 		for _, pos := range result.VectorText.Positions {
 			elements = append(elements, TextElement{
@@ -260,68 +294,93 @@ func (h *HybridProcessor) mergeBySpatialLayout(result *HybridResult, pageWidth, 
 		}
 	}
 
-	// Add OCR elements
+	return elements
+}
+
+// collectOCRElements collects text elements from OCR results.
+func (h *HybridProcessor) collectOCRElements(result *HybridResult) []TextElement {
+	var elements []TextElement
+
 	for _, ocrResult := range result.OCRResults {
-		// Use OCRRegions if available (from full pipeline)
 		if len(ocrResult.OCRRegions) > 0 {
-			for _, region := range ocrResult.OCRRegions {
-				if region.RecConfidence >= h.config.MinOCRConfidence {
-					// Convert region coordinates to text element
-					centerX := float64(region.Box.X + region.Box.W/2)
-					centerY := float64(region.Box.Y + region.Box.H/2)
-					width := float64(region.Box.W)
-					height := float64(region.Box.H)
-
-					elements = append(elements, TextElement{
-						Text:       region.Text,
-						X:          centerX,
-						Y:          centerY,
-						Width:      width,
-						Height:     height,
-						Confidence: region.RecConfidence,
-						Source:     "ocr",
-						Region:     &region,
-					})
-				}
-			}
+			elements = append(elements, h.collectOCRRegions(ocrResult.OCRRegions)...)
 		} else {
-			// Fallback: use DetectedRegions (no text available)
-			for _, detRegion := range ocrResult.Regions {
-				if detRegion.Confidence >= h.config.MinOCRConfidence {
-					centerX := (detRegion.Box.MinX + detRegion.Box.MaxX) / 2
-					centerY := (detRegion.Box.MinY + detRegion.Box.MaxY) / 2
-					width := detRegion.Box.MaxX - detRegion.Box.MinX
-					height := detRegion.Box.MaxY - detRegion.Box.MinY
-
-					// Create OCRRegion from DetectedRegion
-					ocrRegion := OCRRegion{
-						Box: struct{ X, Y, W, H int }{
-							X: int(detRegion.Box.MinX),
-							Y: int(detRegion.Box.MinY),
-							W: int(width),
-							H: int(height),
-						},
-						DetConfidence: detRegion.Confidence,
-						Text:          "", // No text available
-						RecConfidence: 0,
-					}
-
-					elements = append(elements, TextElement{
-						Text:       "", // No text available from detector only
-						X:          centerX,
-						Y:          centerY,
-						Width:      width,
-						Height:     height,
-						Confidence: detRegion.Confidence,
-						Source:     "ocr",
-						Region:     &ocrRegion,
-					})
-				}
-			}
+			elements = append(elements, h.collectDetectedRegions(ocrResult.Regions)...)
 		}
 	}
 
-	// Sort elements by reading order (top to bottom, left to right)
+	return elements
+}
+
+// collectOCRRegions collects text elements from OCR regions.
+func (h *HybridProcessor) collectOCRRegions(regions []OCRRegion) []TextElement {
+	var elements []TextElement
+
+	for _, region := range regions {
+		if region.RecConfidence >= h.config.MinOCRConfidence {
+			centerX := float64(region.Box.X + region.Box.W/2)
+			centerY := float64(region.Box.Y + region.Box.H/2)
+			width := float64(region.Box.W)
+			height := float64(region.Box.H)
+
+			elements = append(elements, TextElement{
+				Text:       region.Text,
+				X:          centerX,
+				Y:          centerY,
+				Width:      width,
+				Height:     height,
+				Confidence: region.RecConfidence,
+				Source:     "ocr",
+				Region:     &region,
+			})
+		}
+	}
+
+	return elements
+}
+
+// collectDetectedRegions collects text elements from detected regions (fallback).
+func (h *HybridProcessor) collectDetectedRegions(regions []detector.DetectedRegion) []TextElement {
+	var elements []TextElement
+
+	for _, detRegion := range regions {
+		if detRegion.Confidence >= h.config.MinOCRConfidence {
+			centerX := (detRegion.Box.MinX + detRegion.Box.MaxX) / 2
+			centerY := (detRegion.Box.MinY + detRegion.Box.MaxY) / 2
+			width := detRegion.Box.MaxX - detRegion.Box.MinX
+			height := detRegion.Box.MaxY - detRegion.Box.MinY
+
+			// Create OCRRegion from DetectedRegion
+			ocrRegion := OCRRegion{
+				Box: struct{ X, Y, W, H int }{
+					X: int(detRegion.Box.MinX),
+					Y: int(detRegion.Box.MinY),
+					W: int(width),
+					H: int(height),
+				},
+				DetConfidence: detRegion.Confidence,
+				Text:          "", // No text available
+				RecConfidence: 0,
+			}
+
+			elements = append(elements, TextElement{
+				Text:       "", // No text available from detector only
+				X:          centerX,
+				Y:          centerY,
+				Width:      width,
+				Height:     height,
+				Confidence: detRegion.Confidence,
+				Source:     "ocr",
+				Region:     &ocrRegion,
+			})
+		}
+	}
+
+	return elements
+}
+
+// sortElementsByReadingOrder sorts elements by reading order (top to bottom, left to right).
+func (h *HybridProcessor) sortElementsByReadingOrder(elements []TextElement) {
 	sort.Slice(elements, func(i, j int) bool {
 		// Primary sort by Y coordinate (top to bottom)
 		if math.Abs(elements[i].Y-elements[j].Y) > elements[i].Height/2 {
@@ -330,39 +389,60 @@ func (h *HybridProcessor) mergeBySpatialLayout(result *HybridResult, pageWidth, 
 		// Secondary sort by X coordinate (left to right)
 		return elements[i].X < elements[j].X
 	})
+}
 
-	// Merge elements, avoiding duplicates in overlapping areas
+// mergeOverlappingElements merges elements, avoiding duplicates in overlapping areas.
+func (h *HybridProcessor) mergeOverlappingElements(elements []TextElement) []TextElement {
 	var mergedElements []TextElement
+
 	for _, element := range elements {
-		shouldAdd := true
-
-		// Check for spatial overlap with existing elements
-		for _, existing := range mergedElements {
-			if h.elementsOverlap(element, existing) {
-				// If elements overlap, prefer vector text or higher confidence
-				if (h.config.PreferVectorText && existing.Source == "vector") ||
-					(!h.config.PreferVectorText && existing.Confidence > element.Confidence) {
-					shouldAdd = false
-					break
-				} else {
-					// Replace existing element with current one
-					for i, e := range mergedElements {
-						if e.X == existing.X && e.Y == existing.Y {
-							mergedElements[i] = element
-							shouldAdd = false
-							break
-						}
-					}
-				}
-			}
-		}
-
-		if shouldAdd {
+		if h.shouldAddElement(element, mergedElements) {
 			mergedElements = append(mergedElements, element)
+		} else {
+			mergedElements = h.replaceIfBetter(element, mergedElements)
 		}
 	}
 
-	// Build combined text and regions
+	return mergedElements
+}
+
+// shouldAddElement determines if an element should be added (no overlap with existing).
+func (h *HybridProcessor) shouldAddElement(element TextElement, existingElements []TextElement) bool {
+	for _, existing := range existingElements {
+		if h.elementsOverlap(element, existing) {
+			return false
+		}
+	}
+	return true
+}
+
+// replaceIfBetter replaces an existing element if the new one is better.
+func (h *HybridProcessor) replaceIfBetter(element TextElement, mergedElements []TextElement) []TextElement {
+	for i, existing := range mergedElements {
+		if h.elementsOverlap(element, existing) {
+			// If elements overlap, prefer vector text or higher confidence
+			if h.isBetterThanExisting(element, existing) {
+				mergedElements[i] = element
+			}
+			break
+		}
+	}
+	return mergedElements
+}
+
+// isBetterThanExisting determines if the new element is better than the existing one.
+func (h *HybridProcessor) isBetterThanExisting(newElement, existingElement TextElement) bool {
+	if h.config.PreferVectorText && existingElement.Source == "vector" {
+		return false
+	}
+	if !h.config.PreferVectorText && existingElement.Confidence > newElement.Confidence {
+		return false
+	}
+	return true
+}
+
+// buildFinalResult builds the final combined text and regions from merged elements.
+func (h *HybridProcessor) buildFinalResult(result *HybridResult, mergedElements []TextElement) {
 	texts := make([]string, 0, len(mergedElements))
 	for _, element := range mergedElements {
 		texts = append(texts, element.Text)
@@ -405,28 +485,41 @@ func (h *HybridProcessor) mergeWithSmartStrategy(result *HybridResult, pageWidth
 	h.mergeBySpatialLayout(result, pageWidth, pageHeight)
 
 	// Then apply confidence filtering
-	if result.VectorText == nil || result.VectorText.Quality.Score < 0.8 {
-		// If vector text quality is poor, enhance with high-confidence OCR
-		additionalTexts := []string{result.CombinedText}
+	if h.shouldEnhanceWithOCR(result) {
+		h.enhanceWithHighConfidenceOCR(result)
+	}
+}
 
-		for _, ocrResult := range result.OCRResults {
-			// Use OCRRegions if available (from full pipeline)
-			if len(ocrResult.OCRRegions) > 0 {
-				for _, region := range ocrResult.OCRRegions {
-					if region.RecConfidence >= h.config.ConfidenceThreshold {
-						// Check if this text is already included
-						if !h.textAlreadyIncluded(region.Text, result.CombinedText) {
-							additionalTexts = append(additionalTexts, region.Text)
-							if !h.regionAlreadyIncluded(region, result.MergedRegions) {
-								result.MergedRegions = append(result.MergedRegions, region)
-							}
-						}
-					}
-				}
+// shouldEnhanceWithOCR determines if OCR enhancement is needed.
+func (h *HybridProcessor) shouldEnhanceWithOCR(result *HybridResult) bool {
+	return result.VectorText == nil || result.VectorText.Quality.Score < 0.8
+}
+
+// enhanceWithHighConfidenceOCR enhances result with high-confidence OCR text.
+func (h *HybridProcessor) enhanceWithHighConfidenceOCR(result *HybridResult) {
+	additionalTexts := []string{result.CombinedText}
+
+	for _, ocrResult := range result.OCRResults {
+		h.processOCRResultForEnhancement(ocrResult, result, &additionalTexts)
+	}
+
+	result.CombinedText = strings.Join(additionalTexts, " ")
+}
+
+// processOCRResultForEnhancement processes a single OCR result for enhancement.
+func (h *HybridProcessor) processOCRResultForEnhancement(ocrResult ImageResult, result *HybridResult,
+	additionalTexts *[]string) {
+	if len(ocrResult.OCRRegions) == 0 {
+		return
+	}
+
+	for _, region := range ocrResult.OCRRegions {
+		if region.RecConfidence >= h.config.ConfidenceThreshold && !h.textAlreadyIncluded(region.Text, result.CombinedText) {
+			*additionalTexts = append(*additionalTexts, region.Text)
+			if !h.regionAlreadyIncluded(region, result.MergedRegions) {
+				result.MergedRegions = append(result.MergedRegions, region)
 			}
 		}
-
-		result.CombinedText = strings.Join(additionalTexts, " ")
 	}
 }
 

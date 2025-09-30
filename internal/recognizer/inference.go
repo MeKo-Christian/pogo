@@ -366,6 +366,31 @@ func (r *Recognizer) runBatchInference(tensor onnx.Tensor) (*modelOutput, error)
 	}, nil
 }
 
+// extractSequenceData extracts collapsed indices, character probabilities, and confidence from a sequence.
+func extractSequenceData(seq interface{}) ([]int, []float64, float64) {
+	switch s := seq.(type) {
+	case DecodedSequence:
+		return s.Collapsed, s.CollapsedProb, SequenceConfidence(s.CollapsedProb)
+	case BeamSearchResult:
+		return s.Sequence, s.CharProbs, SequenceConfidence(s.CharProbs)
+	default:
+		return nil, nil, 0.0
+	}
+}
+
+// convertIndicesToRunes converts token indices to runes using the charset.
+func convertIndicesToRunes(indices []int, charset *Charset) []rune {
+	runes := make([]rune, 0, len(indices))
+	for _, idx := range indices {
+		ch := charset.LookupToken(idx - 1)
+		if ch == "" {
+			continue
+		}
+		runes = append(runes, []rune(ch)...)
+	}
+	return runes
+}
+
 // buildBatchResults constructs Result structs from decoded sequences.
 func (r *Recognizer) buildBatchResults(decoded interface{}, prepped []preprocessedBatchRegion) []Result {
 	out := make([]Result, len(prepped))
@@ -391,30 +416,12 @@ func (r *Recognizer) buildBatchResults(decoded interface{}, prepped []preprocess
 			continue
 		}
 
-		// Extract sequence data based on type
-		var collapsed []int
-		var charProbs []float64
-		var confidence float64
-
-		switch s := seq.(type) {
-		case DecodedSequence:
-			collapsed = s.Collapsed
-			charProbs = s.CollapsedProb
-			confidence = SequenceConfidence(s.CollapsedProb)
-		case BeamSearchResult:
-			collapsed = s.Sequence
-			charProbs = s.CharProbs
-			confidence = SequenceConfidence(s.CharProbs)
+		collapsed, charProbs, confidence := extractSequenceData(seq)
+		if collapsed == nil {
+			continue
 		}
 
-		runes := make([]rune, 0, len(collapsed))
-		for _, idx := range collapsed {
-			ch := charset.LookupToken(idx - 1)
-			if ch == "" {
-				continue
-			}
-			runes = append(runes, []rune(ch)...)
-		}
+		runes := convertIndicesToRunes(collapsed, charset)
 		out[i] = Result{
 			Text:            string(runes),
 			Confidence:      confidence,

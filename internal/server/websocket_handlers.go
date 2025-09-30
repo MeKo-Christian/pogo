@@ -299,20 +299,27 @@ func (s *Server) extractWebSocketConfig(options map[string]interface{}) *Request
 	}
 
 	// Extract string values
-	if val, ok := options["language"].(string); ok {
-		config.Language = val
+	stringFields := map[string]*string{
+		"language":  &config.Language,
+		"dict":      &config.DictPath,
+		"det-model": &config.DetModel,
+		"rec-model": &config.RecModel,
 	}
-	if val, ok := options["dict"].(string); ok {
-		config.DictPath = val
-	}
-	if val, ok := options["det-model"].(string); ok {
-		config.DetModel = val
-	}
-	if val, ok := options["rec-model"].(string); ok {
-		config.RecModel = val
+
+	for key, field := range stringFields {
+		if val, ok := options[key].(string); ok {
+			*field = val
+		}
 	}
 
 	// Extract dict-langs as string or []string
+	s.extractWebSocketDictLangs(options, config)
+
+	return config
+}
+
+// extractWebSocketDictLangs extracts dictionary languages from WebSocket options.
+func (s *Server) extractWebSocketDictLangs(options map[string]interface{}, config *RequestConfig) {
 	if val, ok := options["dict-langs"].(string); ok {
 		config.DictLangs = strings.Split(val, ",")
 		for i, lang := range config.DictLangs {
@@ -326,8 +333,6 @@ func (s *Server) extractWebSocketConfig(options map[string]interface{}) *Request
 			}
 		}
 	}
-
-	return config
 }
 
 // sendWebSocketError sends an error message over WebSocket.

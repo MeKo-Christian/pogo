@@ -181,48 +181,74 @@ func (a *PageAnalyzer) AnalyzePages(filename string, pageRange string) (map[int]
 }
 
 // determineStrategy determines the best processing strategy based on analysis.
-func (a *PageAnalyzer) determineStrategy(extraction *TextExtraction, hasImages bool, imageCount int) (ProcessingStrategy, float64, string) {
-	// If no vector text extraction was possible
+func (a *PageAnalyzer) determineStrategy(extraction *TextExtraction, hasImages bool,
+	_ int) (ProcessingStrategy, float64, string) {
 	if extraction == nil {
-		if hasImages {
-			return StrategyOCR, 0.8, "No vector text found, but images present - recommend OCR"
-		}
-		return StrategySkip, 0.1, "No vector text or images found - recommend skipping"
+		return a.handleNoVectorText(hasImages)
 	}
 
 	quality := extraction.Quality.Score
 	coverage := extraction.Coverage
 
-	// High-quality vector text with good coverage
-	if quality >= a.config.VectorTextQualityThreshold && coverage >= a.config.VectorTextCoverageThreshold {
-		if hasImages && a.config.HybridModeEnabled {
-			return StrategyHybrid, 0.9, "High-quality vector text with images - recommend hybrid processing"
-		}
-		return StrategyVectorText, 0.95, "High-quality vector text with good coverage - recommend vector text extraction"
+	if a.isHighQualityVectorText(quality, coverage) {
+		return a.handleHighQualityVectorText(hasImages)
 	}
 
-	// Moderate vector text quality
-	if quality >= 0.5 && quality < a.config.VectorTextQualityThreshold {
-		if hasImages && a.config.HybridModeEnabled {
-			return StrategyHybrid, 0.7, "Moderate vector text quality with images - recommend hybrid processing"
-		}
-		if a.config.OCRFallbackEnabled && hasImages {
-			return StrategyOCR, 0.6, "Moderate vector text quality, OCR may provide better results"
-		}
-		return StrategyVectorText, 0.5, "Moderate vector text quality - use vector text extraction"
+	if a.isModerateQualityVectorText(quality) {
+		return a.handleModerateQualityVectorText(hasImages)
 	}
 
-	// Poor vector text quality
+	return a.handlePoorQualityVectorText(extraction, hasImages)
+}
+
+// handleNoVectorText handles the case when no vector text extraction was possible.
+func (a *PageAnalyzer) handleNoVectorText(hasImages bool) (ProcessingStrategy, float64, string) {
+	if hasImages {
+		return StrategyOCR, 0.8, "No vector text found, but images present - recommend OCR"
+	}
+	return StrategySkip, 0.1, "No vector text or images found - recommend skipping"
+}
+
+// isHighQualityVectorText checks if vector text meets high quality thresholds.
+func (a *PageAnalyzer) isHighQualityVectorText(quality, coverage float64) bool {
+	return quality >= a.config.VectorTextQualityThreshold && coverage >= a.config.VectorTextCoverageThreshold
+}
+
+// handleHighQualityVectorText handles high-quality vector text cases.
+func (a *PageAnalyzer) handleHighQualityVectorText(hasImages bool) (ProcessingStrategy, float64, string) {
+	if hasImages && a.config.HybridModeEnabled {
+		return StrategyHybrid, 0.9, "High-quality vector text with images - recommend hybrid processing"
+	}
+	return StrategyVectorText, 0.95, "High-quality vector text with good coverage - recommend vector text extraction"
+}
+
+// isModerateQualityVectorText checks if vector text has moderate quality.
+func (a *PageAnalyzer) isModerateQualityVectorText(quality float64) bool {
+	return quality >= 0.5 && quality < a.config.VectorTextQualityThreshold
+}
+
+// handleModerateQualityVectorText handles moderate quality vector text cases.
+func (a *PageAnalyzer) handleModerateQualityVectorText(hasImages bool) (ProcessingStrategy, float64, string) {
+	if hasImages && a.config.HybridModeEnabled {
+		return StrategyHybrid, 0.7, "Moderate vector text quality with images - recommend hybrid processing"
+	}
+	if a.config.OCRFallbackEnabled && hasImages {
+		return StrategyOCR, 0.6, "Moderate vector text quality, OCR may provide better results"
+	}
+	return StrategyVectorText, 0.5, "Moderate vector text quality - use vector text extraction"
+}
+
+// handlePoorQualityVectorText handles poor quality vector text cases.
+func (a *PageAnalyzer) handlePoorQualityVectorText(extraction *TextExtraction,
+	hasImages bool) (ProcessingStrategy, float64, string) {
 	if hasImages && a.config.OCRFallbackEnabled {
 		return StrategyOCR, 0.7, "Poor vector text quality but images present - recommend OCR"
 	}
 
-	// Vector text exists but quality is poor, no images
 	if extraction.Quality.HasText {
 		return StrategyVectorText, 0.3, "Poor quality vector text but no images - use vector text extraction"
 	}
 
-	// No useful content found
 	return StrategySkip, 0.1, "No useful content found - recommend skipping"
 }
 
