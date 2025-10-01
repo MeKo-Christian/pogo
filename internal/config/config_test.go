@@ -806,6 +806,399 @@ func TestConfigConversionIntegration(t *testing.T) {
 	}
 }
 
+// TestToOrientationConfig_AllFields tests all orientation config fields are converted.
+func TestToOrientationConfig_AllFields(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Features.OrientationEnabled = true
+	cfg.Features.OrientationThreshold = 0.85
+	cfg.Features.OrientationModelPath = "/custom/orientation.onnx"
+	cfg.ModelsDir = "/custom/models"
+
+	orientCfg := cfg.toOrientationConfig()
+
+	if !orientCfg.Enabled {
+		t.Error("Expected orientation to be enabled")
+	}
+	if orientCfg.ConfidenceThreshold != 0.85 {
+		t.Errorf("Expected confidence threshold 0.85, got %f", orientCfg.ConfidenceThreshold)
+	}
+	if orientCfg.ModelPath != "/custom/orientation.onnx" {
+		t.Errorf("Expected model path '/custom/orientation.onnx', got %s", orientCfg.ModelPath)
+	}
+	// Verify defaults are preserved for non-configured fields
+	if orientCfg.UseHeuristicFallback != true {
+		t.Error("Expected UseHeuristicFallback to be true (default)")
+	}
+	if orientCfg.SkipSquareImages != true {
+		t.Error("Expected SkipSquareImages to be true (default)")
+	}
+	if orientCfg.SquareThreshold != 1.2 {
+		t.Errorf("Expected SquareThreshold 1.2 (default), got %f", orientCfg.SquareThreshold)
+	}
+}
+
+// TestToOrientationConfig_EmptyModelPath tests orientation config with empty model path.
+func TestToOrientationConfig_EmptyModelPath(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Features.OrientationEnabled = true
+	cfg.Features.OrientationModelPath = "" // Empty, should use default
+
+	orientCfg := cfg.toOrientationConfig()
+
+	if !orientCfg.Enabled {
+		t.Error("Expected orientation to be enabled")
+	}
+	// Should have the default model path from orientation.DefaultConfig()
+	if orientCfg.ModelPath == "" {
+		t.Error("Expected non-empty model path (default should be used)")
+	}
+}
+
+// TestToTextLineOrientationConfig_AllFields tests all textline config fields are converted.
+func TestToTextLineOrientationConfig_AllFields(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Features.TextlineEnabled = true
+	cfg.Features.TextlineThreshold = 0.55
+	cfg.Features.TextlineModelPath = "/custom/textline.onnx"
+
+	textlineCfg := cfg.toTextLineOrientationConfig()
+
+	if !textlineCfg.Enabled {
+		t.Error("Expected textline orientation to be enabled")
+	}
+	if textlineCfg.ConfidenceThreshold != 0.55 {
+		t.Errorf("Expected confidence threshold 0.55, got %f", textlineCfg.ConfidenceThreshold)
+	}
+	if textlineCfg.ModelPath != "/custom/textline.onnx" {
+		t.Errorf("Expected model path '/custom/textline.onnx', got %s", textlineCfg.ModelPath)
+	}
+	// Verify textline-specific defaults
+	if textlineCfg.UseHeuristicFallback != true {
+		t.Error("Expected UseHeuristicFallback to be true (default)")
+	}
+}
+
+// TestToOrientationConfig_DisabledState tests disabled orientation config.
+func TestToOrientationConfig_DisabledState(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Features.OrientationEnabled = false
+	cfg.Features.OrientationThreshold = 0.9
+
+	orientCfg := cfg.toOrientationConfig()
+
+	if orientCfg.Enabled {
+		t.Error("Expected orientation to be disabled")
+	}
+	// Other settings should still be passed through
+	if orientCfg.ConfidenceThreshold != 0.9 {
+		t.Errorf("Expected confidence threshold 0.9, got %f", orientCfg.ConfidenceThreshold)
+	}
+}
+
+// TestToTextLineOrientationConfig_DisabledState tests disabled textline config.
+func TestToTextLineOrientationConfig_DisabledState(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Features.TextlineEnabled = false
+	cfg.Features.TextlineThreshold = 0.65
+
+	textlineCfg := cfg.toTextLineOrientationConfig()
+
+	if textlineCfg.Enabled {
+		t.Error("Expected textline orientation to be disabled")
+	}
+	if textlineCfg.ConfidenceThreshold != 0.65 {
+		t.Errorf("Expected confidence threshold 0.65, got %f", textlineCfg.ConfidenceThreshold)
+	}
+}
+
+// TestOrientationConfigThresholds tests various threshold values.
+func TestOrientationConfigThresholds(t *testing.T) {
+	tests := []struct {
+		name      string
+		threshold float64
+		wantValid bool
+	}{
+		{"minimum threshold 0.0", 0.0, true},
+		{"low threshold 0.3", 0.3, true},
+		{"medium threshold 0.5", 0.5, true},
+		{"default threshold 0.7", 0.7, true},
+		{"high threshold 0.9", 0.9, true},
+		{"maximum threshold 1.0", 1.0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Features.OrientationThreshold = tt.threshold
+
+			// Validate should pass for valid thresholds
+			err := cfg.validateThresholds()
+			if tt.wantValid && err != nil {
+				t.Errorf("Expected valid threshold %f, got error: %v", tt.threshold, err)
+			}
+
+			// Conversion should preserve threshold
+			orientCfg := cfg.toOrientationConfig()
+			if orientCfg.ConfidenceThreshold != tt.threshold {
+				t.Errorf("Expected threshold %f, got %f", tt.threshold, orientCfg.ConfidenceThreshold)
+			}
+		})
+	}
+}
+
+// TestTextLineConfigThresholds tests various textline threshold values.
+func TestTextLineConfigThresholds(t *testing.T) {
+	tests := []struct {
+		name      string
+		threshold float64
+	}{
+		{"low threshold 0.4", 0.4},
+		{"default threshold 0.6", 0.6},
+		{"high threshold 0.8", 0.8},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Features.TextlineThreshold = tt.threshold
+
+			textlineCfg := cfg.toTextLineOrientationConfig()
+			if textlineCfg.ConfidenceThreshold != tt.threshold {
+				t.Errorf("Expected threshold %f, got %f", tt.threshold, textlineCfg.ConfidenceThreshold)
+			}
+		})
+	}
+}
+
+// TestOrientationConfigModelPaths tests custom model path handling.
+func TestOrientationConfigModelPaths(t *testing.T) {
+	tests := []struct {
+		name      string
+		modelPath string
+	}{
+		{"absolute path", "/absolute/path/to/model.onnx"},
+		{"relative path", "models/orientation.onnx"},
+		{"with spaces", "/path with spaces/model.onnx"},
+		{"long path", "/very/long/path/to/models/directory/orientation_model_v2.onnx"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Features.OrientationModelPath = tt.modelPath
+
+			orientCfg := cfg.toOrientationConfig()
+			if orientCfg.ModelPath != tt.modelPath {
+				t.Errorf("Expected model path '%s', got '%s'", tt.modelPath, orientCfg.ModelPath)
+			}
+		})
+	}
+}
+
+// TestToPipelineConfig_OrientationIntegration tests full pipeline config with orientation.
+func TestToPipelineConfig_OrientationIntegration(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Features.OrientationEnabled = true
+	cfg.Features.OrientationThreshold = 0.75
+	cfg.Features.OrientationModelPath = "/test/orient.onnx"
+	cfg.Features.TextlineEnabled = true
+	cfg.Features.TextlineThreshold = 0.65
+	cfg.Features.TextlineModelPath = "/test/textline.onnx"
+
+	pipelineCfg := cfg.ToPipelineConfig()
+
+	// Verify orientation is properly configured in pipeline
+	if !pipelineCfg.EnableOrientation {
+		t.Error("Expected orientation to be enabled in pipeline config")
+	}
+	if !pipelineCfg.Orientation.Enabled {
+		t.Error("Expected orientation config to be enabled")
+	}
+	if pipelineCfg.Orientation.ConfidenceThreshold != 0.75 {
+		t.Errorf("Expected orientation threshold 0.75, got %f", pipelineCfg.Orientation.ConfidenceThreshold)
+	}
+	if pipelineCfg.Orientation.ModelPath != "/test/orient.onnx" {
+		t.Errorf("Expected orientation model path '/test/orient.onnx', got %s", pipelineCfg.Orientation.ModelPath)
+	}
+
+	// Verify textline orientation
+	if !pipelineCfg.TextLineOrientation.Enabled {
+		t.Error("Expected textline orientation to be enabled")
+	}
+	if pipelineCfg.TextLineOrientation.ConfidenceThreshold != 0.65 {
+		t.Errorf("Expected textline threshold 0.65, got %f", pipelineCfg.TextLineOrientation.ConfidenceThreshold)
+	}
+	if pipelineCfg.TextLineOrientation.ModelPath != "/test/textline.onnx" {
+		t.Errorf("Expected textline model path '/test/textline.onnx', got %s", pipelineCfg.TextLineOrientation.ModelPath)
+	}
+}
+
+// TestOrientationConfigConversionDefaults tests defaults are preserved during conversion.
+func TestOrientationConfigConversionDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+	// Only enable orientation, don't set other fields
+	cfg.Features.OrientationEnabled = true
+
+	orientCfg := cfg.toOrientationConfig()
+
+	// Check that defaults from orientation.DefaultConfig() are used
+	defaultOrient := orientation.DefaultConfig()
+	if orientCfg.ConfidenceThreshold != defaultOrient.ConfidenceThreshold {
+		t.Errorf("Expected default confidence threshold %f, got %f",
+			defaultOrient.ConfidenceThreshold, orientCfg.ConfidenceThreshold)
+	}
+	if orientCfg.UseHeuristicFallback != defaultOrient.UseHeuristicFallback {
+		t.Errorf("Expected default UseHeuristicFallback %v, got %v",
+			defaultOrient.UseHeuristicFallback, orientCfg.UseHeuristicFallback)
+	}
+	if orientCfg.SkipSquareImages != defaultOrient.SkipSquareImages {
+		t.Errorf("Expected default SkipSquareImages %v, got %v",
+			defaultOrient.SkipSquareImages, orientCfg.SkipSquareImages)
+	}
+}
+
+// TestOrientationConfig_GPUDefaults tests GPU defaults in orientation config.
+func TestOrientationConfig_GPUDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Features.OrientationEnabled = true
+
+	orientCfg := cfg.toOrientationConfig()
+
+	// Verify GPU config has proper defaults from orientation.DefaultConfig
+	if orientCfg.GPU.UseGPU {
+		t.Error("Expected GPU to be disabled by default")
+	}
+	if orientCfg.GPU.DeviceID != 0 {
+		t.Errorf("Expected GPU device ID 0, got %d", orientCfg.GPU.DeviceID)
+	}
+}
+
+// TestTextLineOrientationConfig_GPUDefaults tests GPU defaults in textline config.
+func TestTextLineOrientationConfig_GPUDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Features.TextlineEnabled = true
+
+	textlineCfg := cfg.toTextLineOrientationConfig()
+
+	// Verify GPU config has proper defaults
+	if textlineCfg.GPU.UseGPU {
+		t.Error("Expected GPU to be disabled by default for textline")
+	}
+	if textlineCfg.GPU.DeviceID != 0 {
+		t.Errorf("Expected GPU device ID 0, got %d", textlineCfg.GPU.DeviceID)
+	}
+}
+
+// TestConfigIntegration_OrientationWithOtherFeatures tests orientation works with other features.
+func TestConfigIntegration_OrientationWithOtherFeatures(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Features.OrientationEnabled = true
+	cfg.Features.OrientationThreshold = 0.8
+	cfg.Features.TextlineEnabled = true
+	cfg.Features.RectificationEnabled = true
+
+	pipelineCfg := cfg.ToPipelineConfig()
+
+	// All features should be enabled
+	if !pipelineCfg.EnableOrientation {
+		t.Error("Expected orientation to be enabled")
+	}
+	if !pipelineCfg.Orientation.Enabled {
+		t.Error("Expected orientation config to be enabled")
+	}
+	if !pipelineCfg.TextLineOrientation.Enabled {
+		t.Error("Expected textline orientation to be enabled")
+	}
+	if !pipelineCfg.Rectification.Enabled {
+		t.Error("Expected rectification to be enabled")
+	}
+}
+
+// TestOrientationConfig_EdgeCaseThresholds tests edge case threshold values.
+func TestOrientationConfig_EdgeCaseThresholds(t *testing.T) {
+	tests := []struct {
+		name        string
+		orientThresh float64
+		textlineThresh float64
+		rectifyThresh float64
+	}{
+		{"all minimum", 0.0, 0.0, 0.0},
+		{"all maximum", 1.0, 1.0, 1.0},
+		{"mixed values", 0.5, 0.75, 0.25},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Features.OrientationThreshold = tt.orientThresh
+			cfg.Features.TextlineThreshold = tt.textlineThresh
+			cfg.Features.RectificationThreshold = tt.rectifyThresh
+
+			// Should pass validation
+			err := cfg.validateThresholds()
+			if err != nil {
+				t.Errorf("Expected valid config, got error: %v", err)
+			}
+
+			pipelineCfg := cfg.ToPipelineConfig()
+			if pipelineCfg.Orientation.ConfidenceThreshold != tt.orientThresh {
+				t.Errorf("Expected orientation threshold %f, got %f",
+					tt.orientThresh, pipelineCfg.Orientation.ConfidenceThreshold)
+			}
+			if pipelineCfg.TextLineOrientation.ConfidenceThreshold != tt.textlineThresh {
+				t.Errorf("Expected textline threshold %f, got %f",
+					tt.textlineThresh, pipelineCfg.TextLineOrientation.ConfidenceThreshold)
+			}
+		})
+	}
+}
+
+// TestOrientationConfig_OnlyOrientationEnabled tests when only orientation is enabled.
+func TestOrientationConfig_OnlyOrientationEnabled(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Features.OrientationEnabled = true
+	cfg.Features.TextlineEnabled = false
+	cfg.Features.RectificationEnabled = false
+
+	pipelineCfg := cfg.ToPipelineConfig()
+
+	if !pipelineCfg.EnableOrientation {
+		t.Error("Expected orientation to be enabled in pipeline")
+	}
+	if !pipelineCfg.Orientation.Enabled {
+		t.Error("Expected orientation config to be enabled")
+	}
+	if pipelineCfg.TextLineOrientation.Enabled {
+		t.Error("Expected textline orientation to be disabled")
+	}
+	if pipelineCfg.Rectification.Enabled {
+		t.Error("Expected rectification to be disabled")
+	}
+}
+
+// TestOrientationConfig_OnlyTextlineEnabled tests when only textline is enabled.
+func TestOrientationConfig_OnlyTextlineEnabled(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Features.OrientationEnabled = false
+	cfg.Features.TextlineEnabled = true
+	cfg.Features.RectificationEnabled = false
+
+	pipelineCfg := cfg.ToPipelineConfig()
+
+	if pipelineCfg.EnableOrientation {
+		t.Error("Expected orientation to be disabled in pipeline")
+	}
+	if pipelineCfg.Orientation.Enabled {
+		t.Error("Expected orientation config to be disabled")
+	}
+	if !pipelineCfg.TextLineOrientation.Enabled {
+		t.Error("Expected textline orientation to be enabled")
+	}
+	if pipelineCfg.Rectification.Enabled {
+		t.Error("Expected rectification to be disabled")
+	}
+}
+
 // Ensure we're importing the necessary packages.
 var (
 	_ = orientation.Config{}

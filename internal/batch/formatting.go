@@ -102,10 +102,11 @@ func formatText(results []*pipeline.OCRImageResult, imagePaths []string) (string
 		if i > 0 {
 			output.WriteString("\n")
 		}
-		output.WriteString(fmt.Sprintf("# %s\n", imagePaths[i]))
+		output.WriteString("# " + imagePaths[i])
 		if res == nil {
 			continue
 		}
+		output.WriteString("\n")
 		pipeline.SortRegionsTopLeft(res)
 		text, err := pipeline.ToPlainTextImage(res)
 		if err != nil {

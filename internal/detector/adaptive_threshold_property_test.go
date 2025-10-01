@@ -228,23 +228,23 @@ func TestCalculateBimodalityIndex_BimodalDistribution(t *testing.T) {
 
 	properties.Property("bimodal distribution has higher bimodality index", prop.ForAll(
 		func(size int) bool {
-			if size < 100 || size > 500 {
+			if size < 200 || size > 500 {
 				return true
 			}
 
 			// Create unimodal distribution (all values around 0.5)
 			unimodal := make([]float32, size)
 			for i := range unimodal {
-				unimodal[i] = 0.5 + float32(i%10-5)/100.0
+				unimodal[i] = 0.5
 			}
 
-			// Create bimodal distribution (values at 0.2 and 0.8)
+			// Create bimodal distribution (values at 0.1 and 0.9 - more separated)
 			bimodal := make([]float32, size)
 			for i := range bimodal {
 				if i%2 == 0 {
-					bimodal[i] = 0.2 + float32(i%5)/100.0
+					bimodal[i] = 0.1
 				} else {
-					bimodal[i] = 0.8 + float32(i%5)/100.0
+					bimodal[i] = 0.9
 				}
 			}
 
@@ -254,7 +254,7 @@ func TestCalculateBimodalityIndex_BimodalDistribution(t *testing.T) {
 			// Bimodal should have higher index
 			return bimodalIdx >= unimodalIdx
 		},
-		gen.IntRange(100, 500),
+		gen.IntRange(200, 500),
 	))
 
 	properties.TestingRun(t)

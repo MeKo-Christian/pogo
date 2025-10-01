@@ -649,6 +649,259 @@ func TestBatchPredict_MixedSkipAndProcess(t *testing.T) {
 	}
 }
 
+// TestDefaultConfig_AllFields verifies all fields in DefaultConfig are set correctly.
+func TestDefaultConfig_AllFields(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// Basic settings
+	assert.False(t, cfg.Enabled, "Expected Enabled to be false by default")
+	assert.NotEmpty(t, cfg.ModelPath, "Expected ModelPath to be set")
+	assert.InDelta(t, 0.7, cfg.ConfidenceThreshold, 1e-6, "Expected default confidence threshold 0.7")
+	assert.Equal(t, 0, cfg.NumThreads, "Expected NumThreads to be 0 (auto)")
+
+	// Fallback and optimization settings
+	assert.True(t, cfg.UseHeuristicFallback, "Expected UseHeuristicFallback to be true")
+	assert.True(t, cfg.SkipSquareImages, "Expected SkipSquareImages to be true")
+	assert.InDelta(t, 1.2, cfg.SquareThreshold, 1e-6, "Expected SquareThreshold to be 1.2")
+	assert.False(t, cfg.EnableWarmup, "Expected EnableWarmup to be false")
+	assert.False(t, cfg.HeuristicOnly, "Expected HeuristicOnly to be false")
+
+	// GPU settings
+	assert.False(t, cfg.GPU.UseGPU, "Expected GPU to be disabled by default")
+	assert.Equal(t, 0, cfg.GPU.DeviceID, "Expected GPU device 0")
+}
+
+// TestDefaultTextLineConfig_AllFields verifies all fields in DefaultTextLineConfig.
+func TestDefaultTextLineConfig_AllFields(t *testing.T) {
+	cfg := DefaultTextLineConfig()
+
+	// Should have different defaults than document config
+	assert.False(t, cfg.Enabled, "Expected Enabled to be false by default")
+	assert.NotEmpty(t, cfg.ModelPath, "Expected ModelPath to be set")
+	assert.InDelta(t, 0.6, cfg.ConfidenceThreshold, 1e-6, "Expected textline confidence threshold 0.6")
+
+	// Should still have common defaults
+	assert.True(t, cfg.UseHeuristicFallback, "Expected UseHeuristicFallback to be true")
+	assert.False(t, cfg.EnableWarmup, "Expected EnableWarmup to be false")
+	assert.False(t, cfg.HeuristicOnly, "Expected HeuristicOnly to be false")
+	assert.False(t, cfg.GPU.UseGPU, "Expected GPU to be disabled")
+}
+
+// TestConfig_ConfidenceThresholdRange tests various confidence threshold values.
+func TestConfig_ConfidenceThresholdRange(t *testing.T) {
+	tests := []struct {
+		name      string
+		threshold float64
+	}{
+		{"minimum", 0.0},
+		{"low", 0.3},
+		{"medium", 0.5},
+		{"default", 0.7},
+		{"high", 0.9},
+		{"maximum", 1.0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.ConfidenceThreshold = tt.threshold
+			cfg.Enabled = false
+			cfg.UseHeuristicFallback = true
+
+			cls, err := NewClassifier(cfg)
+			require.NoError(t, err)
+			assert.Equal(t, tt.threshold, cls.cfg.ConfidenceThreshold)
+		})
+	}
+}
+
+// TestConfig_SquareThresholdRange tests various square threshold values.
+func TestConfig_SquareThresholdRange(t *testing.T) {
+	tests := []struct {
+		name      string
+		threshold float64
+		imgWidth  int
+		imgHeight int
+		shouldSkip bool
+	}{
+		{"threshold 1.1 with square", 1.1, 100, 100, true},   // aspect=1.0, 1.0 <= 1.1 = skip
+		{"threshold 1.1 with slight landscape", 1.1, 110, 100, true}, // aspect=1.1, 1.1 <= 1.1 = skip
+		{"threshold 1.5 with moderate landscape", 1.5, 150, 100, true}, // aspect=1.5, 1.5 <= 1.5 = skip
+		{"threshold 1.5 with large landscape", 1.5, 200, 100, false}, // aspect=2.0, 2.0 > 1.5 = no skip
+		{"threshold 2.0 with very wide", 2.0, 300, 100, false}, // aspect=3.0, 3.0 > 2.0 = no skip
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.SkipSquareImages = true
+			cfg.SquareThreshold = tt.threshold
+			cfg.Enabled = false
+
+			cls, err := NewClassifier(cfg)
+			require.NoError(t, err)
+
+			img := image.NewRGBA(image.Rect(0, 0, tt.imgWidth, tt.imgHeight))
+			shouldSkip := cls.shouldSkipOrientation(img)
+			assert.Equal(t, tt.shouldSkip, shouldSkip,
+				"Image %dx%d with threshold %f", tt.imgWidth, tt.imgHeight, tt.threshold)
+		})
+	}
+}
+
+// TestConfig_NumThreadsSettings tests NumThreads configuration.
+func TestConfig_NumThreadsSettings(t *testing.T) {
+	tests := []struct {
+		name       string
+		numThreads int
+	}{
+		{"auto (0)", 0},
+		{"single thread", 1},
+		{"dual thread", 2},
+		{"quad thread", 4},
+		{"many threads", 16},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.NumThreads = tt.numThreads
+			cfg.Enabled = false
+
+			cls, err := NewClassifier(cfg)
+			require.NoError(t, err)
+			assert.Equal(t, tt.numThreads, cls.cfg.NumThreads)
+		})
+	}
+}
+
+// TestConfig_SkipSquareImagesFlag tests SkipSquareImages flag behavior.
+func TestConfig_SkipSquareImagesFlag(t *testing.T) {
+	tests := []struct {
+		name             string
+		skipSquare       bool
+		imgSize          image.Rectangle
+		expectWouldSkip  bool
+	}{
+		{"skip enabled, square image", true, image.Rect(0, 0, 100, 100), true},
+		{"skip disabled, square image", false, image.Rect(0, 0, 100, 100), true}, // shouldSkipOrientation still returns true based on aspect
+		{"skip enabled, landscape", true, image.Rect(0, 0, 200, 100), false},
+		{"skip disabled, landscape", false, image.Rect(0, 0, 200, 100), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.SkipSquareImages = tt.skipSquare
+			cfg.SquareThreshold = 1.2
+			cfg.Enabled = false
+
+			cls, err := NewClassifier(cfg)
+			require.NoError(t, err)
+			assert.Equal(t, tt.skipSquare, cls.cfg.SkipSquareImages)
+
+			img := image.NewRGBA(tt.imgSize)
+
+			// shouldSkipOrientation is based on aspect ratio regardless of SkipSquareImages flag
+			wouldSkip := cls.shouldSkipOrientation(img)
+			assert.Equal(t, tt.expectWouldSkip, wouldSkip,
+				"shouldSkipOrientation should return %v for this aspect ratio", tt.expectWouldSkip)
+		})
+	}
+}
+
+// TestConfig_GPUSettings tests GPU configuration fields.
+func TestConfig_GPUSettings(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// Test default GPU config
+	assert.False(t, cfg.GPU.UseGPU, "GPU should be disabled by default")
+	assert.Equal(t, 0, cfg.GPU.DeviceID, "GPU device should be 0 by default")
+
+	// Test modifying GPU config
+	cfg.GPU.UseGPU = true
+	cfg.GPU.DeviceID = 1
+	cfg.GPU.GPUMemLimit = 1024 * 1024 * 1024 // 1GB
+
+	assert.True(t, cfg.GPU.UseGPU)
+	assert.Equal(t, 1, cfg.GPU.DeviceID)
+	assert.Equal(t, uint64(1024*1024*1024), cfg.GPU.GPUMemLimit)
+}
+
+// TestConfig_EnableWarmupFlag tests EnableWarmup configuration.
+func TestConfig_EnableWarmupFlag(t *testing.T) {
+	tests := []struct {
+		name         string
+		enableWarmup bool
+	}{
+		{"warmup disabled", false},
+		{"warmup enabled", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.EnableWarmup = tt.enableWarmup
+			cfg.Enabled = false
+
+			cls, err := NewClassifier(cfg)
+			require.NoError(t, err)
+			assert.Equal(t, tt.enableWarmup, cls.cfg.EnableWarmup)
+		})
+	}
+}
+
+// TestConfig_HeuristicOnlyMode tests HeuristicOnly flag forces heuristic mode.
+func TestConfig_HeuristicOnlyMode(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.HeuristicOnly = true
+	cfg.Enabled = true // Even with enabled, should use heuristic
+
+	cls, err := NewClassifier(cfg)
+	require.NoError(t, err)
+
+	// Should be in heuristic mode
+	assert.True(t, cls.heuristic, "Classifier should be in heuristic mode when HeuristicOnly is true")
+	assert.Nil(t, cls.session, "Session should be nil in heuristic-only mode")
+}
+
+// TestConfig_UseHeuristicFallbackBehavior tests UseHeuristicFallback flag.
+func TestConfig_UseHeuristicFallbackBehavior(t *testing.T) {
+	tests := []struct {
+		name             string
+		useFallback      bool
+		modelPath        string
+		expectError      bool
+		expectHeuristic  bool
+	}{
+		{"with fallback, invalid model", true, "/nonexistent/model.onnx", false, true},
+		{"without fallback, invalid model", false, "/nonexistent/model.onnx", true, false},
+		{"with fallback, empty model", true, "", false, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Enabled = true
+			cfg.UseHeuristicFallback = tt.useFallback
+			cfg.ModelPath = tt.modelPath
+
+			cls, err := NewClassifier(cfg)
+
+			if tt.expectError {
+				assert.Error(t, err, "Expected error for invalid config without fallback")
+				assert.Nil(t, cls, "Classifier should be nil on error")
+			} else {
+				require.NoError(t, err, "Should not error with fallback enabled")
+				require.NotNil(t, cls)
+				if tt.expectHeuristic {
+					assert.True(t, cls.heuristic, "Should fall back to heuristic mode")
+				}
+			}
+		})
+	}
+}
+
 func TestComputeOrientationFromLogits_Coverage(t *testing.T) {
 	cfg := Config{Enabled: false, UseHeuristicFallback: true}
 	cls, err := NewClassifier(cfg)

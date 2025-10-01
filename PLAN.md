@@ -18,7 +18,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
   - [ ] Complete detection model management testing (DetectRegions 0% coverage)
   - [ ] Finish recognition model lifecycle testing (warmup, configuration getters)
   - [ ] Complete pipeline core processing testing (ProcessImagesParallelContext, ProcessPDFContext, applyOrientationDetection, applyRectification)
-  - [ ] Add orientation configuration testing
+  - [x] Add orientation configuration testing (24 new tests covering config conversion, GPU integration, thresholds, defaults, and field validation)
 - [x] Implement property-based testing for algorithms:
   - [x] Detection post-processing algorithms
   - [x] Recognition CTC decoding
