@@ -182,7 +182,8 @@ func (a *PageAnalyzer) AnalyzePages(filename string, pageRange string) (map[int]
 
 // determineStrategy determines the best processing strategy based on analysis.
 func (a *PageAnalyzer) determineStrategy(extraction *TextExtraction, hasImages bool,
-	_ int) (ProcessingStrategy, float64, string) {
+	_ int,
+) (ProcessingStrategy, float64, string) {
 	if extraction == nil {
 		return a.handleNoVectorText(hasImages)
 	}
@@ -240,7 +241,8 @@ func (a *PageAnalyzer) handleModerateQualityVectorText(hasImages bool) (Processi
 
 // handlePoorQualityVectorText handles poor quality vector text cases.
 func (a *PageAnalyzer) handlePoorQualityVectorText(extraction *TextExtraction,
-	hasImages bool) (ProcessingStrategy, float64, string) {
+	hasImages bool,
+) (ProcessingStrategy, float64, string) {
 	if hasImages && a.config.OCRFallbackEnabled {
 		return StrategyOCR, 0.7, "Poor vector text quality but images present - recommend OCR"
 	}

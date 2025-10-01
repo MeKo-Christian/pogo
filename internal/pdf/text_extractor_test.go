@@ -401,7 +401,7 @@ func TestHasReasonableCharacterDistribution(t *testing.T) {
 		{
 			name:     "unicode characters",
 			text:     "Привет мир", // Actual Cyrillic text
-			expected: false,   // Unicode chars not counted as alphanumeric by ASCII-only check
+			expected: false,        // Unicode chars not counted as alphanumeric by ASCII-only check
 		},
 		{
 			name:     "normal sentence",

@@ -513,7 +513,8 @@ func (h *HybridProcessor) enhanceWithHighConfidenceOCR(result *HybridResult) {
 
 // processOCRResultForEnhancement processes a single OCR result for enhancement.
 func (h *HybridProcessor) processOCRResultForEnhancement(ocrResult ImageResult, result *HybridResult,
-	additionalTexts *[]string) {
+	additionalTexts *[]string,
+) {
 	if len(ocrResult.OCRRegions) == 0 {
 		return
 	}

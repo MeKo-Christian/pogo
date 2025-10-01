@@ -15,7 +15,12 @@ func genPoint() gopter.Gen {
 		gen.Float64Range(-100, 100),
 		gen.Float64Range(-100, 100),
 	).Map(func(vals []interface{}) Point {
-		return Point{X: vals[0].(float64), Y: vals[1].(float64)}
+		x, ok0 := vals[0].(float64)
+		y, ok1 := vals[1].(float64)
+		if !ok0 || !ok1 {
+			return Point{X: 0, Y: 0} // fallback values
+		}
+		return Point{X: x, Y: y}
 	})
 }
 
@@ -374,8 +379,8 @@ func TestCross_ZeroForCollinear(t *testing.T) {
 			}
 
 			o := Point{ox, oy}
-			a := Point{ox + t1, oy + t1}   // on line y=x
-			b := Point{ox + t2, oy + t2}   // also on line y=x
+			a := Point{ox + t1, oy + t1} // on line y=x
+			b := Point{ox + t2, oy + t2} // also on line y=x
 
 			crossProd := cross(o, a, b)
 

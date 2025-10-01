@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"math"
 
+	"github.com/MeKo-Tech/pogo/internal/mempool"
 	"github.com/disintegration/imaging"
 )
 
@@ -223,6 +224,54 @@ func NormalizeImageIntoBuffer(img image.Image, buf []float32) ([]float32, int, i
 		}
 	}
 	return data, width, height, nil
+}
+
+// NormalizeImagePooled normalizes an image using memory pooling for the output buffer.
+// The caller should return the buffer to the pool via mempool.PutFloat32 when done.
+// Converts to RGB (removes alpha channel), scales pixel values from 0-255 to 0-1,
+// and reorders channels from RGB to NCHW format for ONNX.
+func NormalizeImagePooled(img image.Image) ([]float32, int, int, error) {
+	if img == nil {
+		return nil, 0, 0, &ImageProcessingError{Operation: "normalize", Err: errors.New("input image is nil")}
+	}
+
+	// Convert to NRGBA to ensure we have RGB channels
+	nrgba := imaging.Clone(img)
+	bounds := nrgba.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+
+	if width <= 0 || height <= 0 {
+		return nil, 0, 0, &ImageProcessingError{Operation: "normalize", Err: errors.New("invalid image dimensions")}
+	}
+
+	// Allocate buffer from pool
+	needed := 3 * width * height
+	tensor := mempool.GetFloat32(needed)
+
+	// Convert and normalize pixels
+	for y := range height {
+		for x := range width {
+			r, g, b, _ := nrgba.At(x+bounds.Min.X, y+bounds.Min.Y).RGBA()
+
+			// Convert from 0-65535 to 0-255, then to 0-1
+			rFloat := float32(r>>8) / 255.0
+			gFloat := float32(g>>8) / 255.0
+			bFloat := float32(b>>8) / 255.0
+
+			// Store in NCHW format: [batch=0, channel, y, x]
+			// Channel 0: Red, Channel 1: Green, Channel 2: Blue
+			rIdx := 0*height*width + y*width + x
+			gIdx := 1*height*width + y*width + x
+			bIdx := 2*height*width + y*width + x
+
+			tensor[rIdx] = rFloat
+			tensor[gIdx] = gFloat
+			tensor[bIdx] = bFloat
+		}
+	}
+
+	return tensor, width, height, nil
 }
 
 // AssessImageQuality performs basic quality assessment of an image.

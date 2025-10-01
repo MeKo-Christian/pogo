@@ -67,7 +67,8 @@ func (p *Pipeline) applyRectification(ctx context.Context, img image.Image) (ima
 
 // prepareOrientation handles orientation detection and image rotation preparation.
 func (p *Pipeline) prepareOrientation(ctx context.Context,
-	images []image.Image) ([]orientation.Result, []image.Image, error) {
+	images []image.Image,
+) ([]orientation.Result, []image.Image, error) {
 	if p.Orienter == nil || (!p.cfg.Orientation.Enabled && !p.cfg.EnableOrientation) {
 		// No orientation processing needed
 		orientationResults := make([]orientation.Result, len(images)) // All zero values
@@ -112,7 +113,8 @@ func (p *Pipeline) applyOrientationRotation(img image.Image, angle int) image.Im
 
 // processImagesWithOrientation processes images that have been prepared with orientation.
 func (p *Pipeline) processImagesWithOrientation(ctx context.Context, originalImages []image.Image,
-	orientationResults []orientation.Result, workingImages []image.Image) ([]*OCRImageResult, error) {
+	orientationResults []orientation.Result, workingImages []image.Image,
+) ([]*OCRImageResult, error) {
 	results := make([]*OCRImageResult, len(originalImages))
 	for i, workingImg := range workingImages {
 		if err := ctx.Err(); err != nil {
@@ -132,7 +134,8 @@ func (p *Pipeline) processImagesWithOrientation(ctx context.Context, originalIma
 
 // processSingleImage processes a single image through the full OCR pipeline.
 func (p *Pipeline) processSingleImage(ctx context.Context, originalImg, workingImg image.Image,
-	orientationResult orientation.Result) (*OCRImageResult, error) {
+	orientationResult orientation.Result,
+) (*OCRImageResult, error) {
 	// Apply rectification to working image
 	rectifiedImg, err := p.applyRectification(ctx, workingImg)
 	if err != nil {

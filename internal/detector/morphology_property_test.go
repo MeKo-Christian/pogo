@@ -176,11 +176,12 @@ func TestErodeFloat32_MonotonicDecrease(t *testing.T) {
 	properties.TestingRun(t)
 }
 
-// TestMorphOpening_Idempotence verifies opening is idempotent.
-func TestMorphOpening_Idempotence(t *testing.T) {
+// testMorphologicalIdempotence is a helper function for testing idempotence of morphological operations.
+func testMorphologicalIdempotence(t *testing.T, operation MorphologicalOp, description string) {
+	t.Helper()
 	properties := gopter.NewProperties(nil)
 
-	properties.Property("morphological opening is idempotent", prop.ForAll(
+	properties.Property(description, prop.ForAll(
 		func(width, height int) bool {
 			if width < 10 || height < 10 || width > 30 || height > 30 {
 				return true
@@ -192,7 +193,7 @@ func TestMorphOpening_Idempotence(t *testing.T) {
 			}
 
 			config := MorphConfig{
-				Operation:  MorphOpening,
+				Operation:  operation,
 				KernelSize: 3,
 				Iterations: 1,
 			}
@@ -219,47 +220,14 @@ func TestMorphOpening_Idempotence(t *testing.T) {
 	properties.TestingRun(t)
 }
 
+// TestMorphOpening_Idempotence verifies opening is idempotent.
+func TestMorphOpening_Idempotence(t *testing.T) {
+	testMorphologicalIdempotence(t, MorphOpening, "morphological opening is idempotent")
+}
+
 // TestMorphClosing_Idempotence verifies closing is idempotent.
 func TestMorphClosing_Idempotence(t *testing.T) {
-	properties := gopter.NewProperties(nil)
-
-	properties.Property("morphological closing is idempotent", prop.ForAll(
-		func(width, height int) bool {
-			if width < 10 || height < 10 || width > 30 || height > 30 {
-				return true
-			}
-
-			probMap := make([]float32, width*height)
-			for i := range probMap {
-				probMap[i] = float32(i%2) * 0.8
-			}
-
-			config := MorphConfig{
-				Operation:  MorphClosing,
-				KernelSize: 3,
-				Iterations: 1,
-			}
-
-			result1 := ApplyMorphologicalOperation(probMap, width, height, config)
-			result2 := ApplyMorphologicalOperation(result1, width, height, config)
-
-			// Second application should not change result significantly
-			for i := range result1 {
-				if result1[i] != result2[i] {
-					// Allow small floating point differences
-					diff := result1[i] - result2[i]
-					if diff < -1e-6 || diff > 1e-6 {
-						return false
-					}
-				}
-			}
-			return true
-		},
-		gen.IntRange(10, 30),
-		gen.IntRange(10, 30),
-	))
-
-	properties.TestingRun(t)
+	testMorphologicalIdempotence(t, MorphClosing, "morphological closing is idempotent")
 }
 
 // TestSmoothFloat32_ReducesVariance verifies smoothing reduces variance.

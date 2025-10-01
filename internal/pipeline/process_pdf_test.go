@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestProcessPDF tests the ProcessPDF method
+// TestProcessPDF tests the ProcessPDF method.
 func TestProcessPDF(t *testing.T) {
 	// Check if we have a test PDF file
 	testPDFPath := filepath.Join("testdata", "test.pdf")
@@ -83,13 +83,13 @@ func TestProcessPDF(t *testing.T) {
 
 			require.NoError(t, err)
 			require.NotNil(t, result)
-			assert.Greater(t, result.TotalPages, 0)
+			assert.Positive(t, result.TotalPages)
 			assert.NotEmpty(t, result.Pages)
 		})
 	}
 }
 
-// TestProcessPDFContext tests ProcessPDFContext with context handling
+// TestProcessPDFContext tests ProcessPDFContext with context handling.
 func TestProcessPDFContext(t *testing.T) {
 	testPDFPath := filepath.Join("testdata", "test.pdf")
 	if _, err := os.Stat(testPDFPath); os.IsNotExist(err) {
@@ -106,9 +106,9 @@ func TestProcessPDFContext(t *testing.T) {
 	}()
 
 	tests := []struct {
-		name          string
-		setupContext  func() (context.Context, context.CancelFunc)
-		expectError   bool
+		name         string
+		setupContext func() (context.Context, context.CancelFunc)
+		expectError  bool
 	}{
 		{
 			name: "successful processing with timeout",
@@ -121,7 +121,7 @@ func TestProcessPDFContext(t *testing.T) {
 			name: "context cancellation",
 			setupContext: func() (context.Context, context.CancelFunc) {
 				ctx, cancel := context.WithCancel(context.Background())
-				cancel() // Cancel immediately
+				cancel()              // Cancel immediately
 				return ctx, func() {} // Dummy cancel
 			},
 			expectError: true,
@@ -150,7 +150,7 @@ func TestProcessPDFContext(t *testing.T) {
 	}
 }
 
-// TestProcessPDFContext_NilChecks tests nil validation
+// TestProcessPDFContext_NilChecks tests nil validation.
 func TestProcessPDFContext_NilChecks(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -185,7 +185,7 @@ func TestProcessPDFContext_NilChecks(t *testing.T) {
 	}
 }
 
-// TestProcessPDFPage tests the processPDFPage method
+// TestProcessPDFPage tests the processPDFPage method.
 func TestProcessPDFPage(t *testing.T) {
 	b := NewBuilder()
 	p, err := b.Build()
@@ -232,7 +232,7 @@ func TestProcessPDFPage(t *testing.T) {
 			// Create synthetic images for testing
 			// In real PDF processing, these would come from PDF extraction
 			images := make([]image.Image, tt.imageCount)
-			for i := 0; i < tt.imageCount; i++ {
+			for i := range tt.imageCount {
 				cfg := testutil.DefaultTestImageConfig()
 				cfg.Text = "Page Text"
 				img, err := testutil.GenerateTextImage(cfg)
@@ -261,20 +261,20 @@ func TestProcessPDFPage(t *testing.T) {
 
 			// Verify timing information
 			if tt.imageCount > 0 {
-				assert.Greater(t, result.Processing.TotalNs, int64(0))
+				assert.Positive(t, result.Processing.TotalNs)
 			}
 
 			// Verify each image result
 			for i, imgResult := range result.Images {
 				assert.Equal(t, i, imgResult.ImageIndex)
-				assert.Greater(t, imgResult.Width, 0)
-				assert.Greater(t, imgResult.Height, 0)
+				assert.Positive(t, imgResult.Width)
+				assert.Positive(t, imgResult.Height)
 			}
 		})
 	}
 }
 
-// TestProcessPDFPage_ContextCancellation tests context cancellation during page processing
+// TestProcessPDFPage_ContextCancellation tests context cancellation during page processing.
 func TestProcessPDFPage_ContextCancellation(t *testing.T) {
 	b := NewBuilder()
 	p, err := b.Build()
@@ -304,7 +304,7 @@ func TestProcessPDFPage_ContextCancellation(t *testing.T) {
 	assert.Contains(t, err.Error(), "context")
 }
 
-// TestProcessPDFPage_EmptyImages tests processing with no images
+// TestProcessPDFPage_EmptyImages tests processing with no images.
 func TestProcessPDFPage_EmptyImages(t *testing.T) {
 	b := NewBuilder()
 	p, err := b.Build()
@@ -317,7 +317,6 @@ func TestProcessPDFPage_EmptyImages(t *testing.T) {
 
 	ctx := context.Background()
 	result, err := p.processPDFPage(ctx, 1, []image.Image{})
-
 	if err != nil {
 		t.Skipf("page processing failed (runtime deps): %v", err)
 	}
@@ -328,7 +327,7 @@ func TestProcessPDFPage_EmptyImages(t *testing.T) {
 	assert.Empty(t, result.Images)
 }
 
-// TestProcessImagesWithOrientation tests the processImagesWithOrientation method
+// TestProcessImagesWithOrientation tests the processImagesWithOrientation method.
 func TestProcessImagesWithOrientation(t *testing.T) {
 	b := NewBuilder()
 
@@ -382,7 +381,7 @@ func TestProcessImagesWithOrientation(t *testing.T) {
 	}
 }
 
-// TestProcessSingleImage tests the processSingleImage method
+// TestProcessSingleImage tests the processSingleImage method.
 func TestProcessSingleImage(t *testing.T) {
 	b := NewBuilder()
 	p, err := b.Build()
@@ -418,7 +417,7 @@ func TestProcessSingleImage(t *testing.T) {
 	assert.False(t, result.Orientation.Applied)
 }
 
-// TestProcessSingleImage_WithRotation tests processing with rotation applied
+// TestProcessSingleImage_WithRotation tests processing with rotation applied.
 func TestProcessSingleImage_WithRotation(t *testing.T) {
 	b := NewBuilder()
 	p, err := b.Build()
@@ -458,5 +457,5 @@ func TestProcessSingleImage_WithRotation(t *testing.T) {
 	// Orientation info should reflect the rotation
 	assert.Equal(t, 90, result.Orientation.Angle)
 	assert.True(t, result.Orientation.Applied)
-	assert.Equal(t, 0.92, result.Orientation.Confidence)
+	assert.InDelta(t, 0.92, result.Orientation.Confidence, 0.001)
 }

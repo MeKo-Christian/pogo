@@ -1020,8 +1020,10 @@ func TestHybridProcessor_MergeWithSmartStrategy(t *testing.T) {
 		ocrResults := []ImageResult{
 			{
 				OCRRegions: []OCRRegion{
-					{Text: "Additional OCR", RecConfidence: 0.8,
-						Box: struct{ X, Y, W, H int }{X: 300, Y: 100, W: 150, H: 40}},
+					{
+						Text: "Additional OCR", RecConfidence: 0.8,
+						Box: struct{ X, Y, W, H int }{X: 300, Y: 100, W: 150, H: 40},
+					},
 				},
 			},
 		}
@@ -1047,9 +1049,11 @@ func TestHybridProcessor_MergeWithSmartStrategy(t *testing.T) {
 		ocrResults := []ImageResult{
 			{
 				OCRRegions: []OCRRegion{
-					{Text: "High confidence OCR enhancement",
+					{
+						Text:          "High confidence OCR enhancement",
 						RecConfidence: 0.95,
-						Box:           struct{ X, Y, W, H int }{X: 300, Y: 100, W: 250, H: 40}},
+						Box:           struct{ X, Y, W, H int }{X: 300, Y: 100, W: 250, H: 40},
+					},
 				},
 			},
 		}
@@ -1106,10 +1110,14 @@ func BenchmarkMergeResults_Spatial(b *testing.B) {
 	ocrResults := []ImageResult{
 		{
 			OCRRegions: []OCRRegion{
-				{Text: "OCR 1", RecConfidence: 0.85,
-					Box: struct{ X, Y, W, H int }{X: 300, Y: 100, W: 150, H: 40}},
-				{Text: "OCR 2", RecConfidence: 0.75,
-					Box: struct{ X, Y, W, H int }{X: 300, Y: 150, W: 150, H: 40}},
+				{
+					Text: "OCR 1", RecConfidence: 0.85,
+					Box: struct{ X, Y, W, H int }{X: 300, Y: 100, W: 150, H: 40},
+				},
+				{
+					Text: "OCR 2", RecConfidence: 0.75,
+					Box: struct{ X, Y, W, H int }{X: 300, Y: 150, W: 150, H: 40},
+				},
 			},
 		},
 	}
@@ -1287,8 +1295,8 @@ func TestHybridProcessor_CollectDetectedRegions(t *testing.T) {
 
 		// Check first element
 		assert.Equal(t, "ocr", elements[0].Source)
-		assert.InDelta(t, 60.0, elements[0].X, 1e-9)   // Center X: (10+110)/2
-		assert.InDelta(t, 45.0, elements[0].Y, 1e-9)   // Center Y: (20+70)/2
+		assert.InDelta(t, 60.0, elements[0].X, 1e-9) // Center X: (10+110)/2
+		assert.InDelta(t, 45.0, elements[0].Y, 1e-9) // Center Y: (20+70)/2
 		assert.InDelta(t, 100.0, elements[0].Width, 1e-9)
 		assert.InDelta(t, 50.0, elements[0].Height, 1e-9)
 		assert.InDelta(t, 0.85, elements[0].Confidence, 1e-9)
@@ -1372,46 +1380,46 @@ func TestHybridProcessor_SortElementsByReadingOrder(t *testing.T) {
 // TestHybridProcessor_IsBetterThanExisting tests isBetterThanExisting function.
 func TestHybridProcessor_IsBetterThanExisting(t *testing.T) {
 	tests := []struct {
-		name            string
+		name             string
 		preferVectorText bool
-		newElement      TextElement
-		existingElement TextElement
-		want            bool
+		newElement       TextElement
+		existingElement  TextElement
+		want             bool
 	}{
 		{
-			name:            "prefer vector text - existing is vector",
+			name:             "prefer vector text - existing is vector",
 			preferVectorText: true,
-			newElement:      TextElement{Source: "ocr", Confidence: 0.95},
-			existingElement: TextElement{Source: "vector", Confidence: 0.8},
-			want:            false,
+			newElement:       TextElement{Source: "ocr", Confidence: 0.95},
+			existingElement:  TextElement{Source: "vector", Confidence: 0.8},
+			want:             false,
 		},
 		{
-			name:            "prefer vector text - existing is OCR",
+			name:             "prefer vector text - existing is OCR",
 			preferVectorText: true,
-			newElement:      TextElement{Source: "vector", Confidence: 0.7},
-			existingElement: TextElement{Source: "ocr", Confidence: 0.9},
-			want:            true,
+			newElement:       TextElement{Source: "vector", Confidence: 0.7},
+			existingElement:  TextElement{Source: "ocr", Confidence: 0.9},
+			want:             true,
 		},
 		{
-			name:            "prefer confidence - new has lower confidence",
+			name:             "prefer confidence - new has lower confidence",
 			preferVectorText: false,
-			newElement:      TextElement{Source: "ocr", Confidence: 0.7},
-			existingElement: TextElement{Source: "ocr", Confidence: 0.9},
-			want:            false,
+			newElement:       TextElement{Source: "ocr", Confidence: 0.7},
+			existingElement:  TextElement{Source: "ocr", Confidence: 0.9},
+			want:             false,
 		},
 		{
-			name:            "prefer confidence - new has higher confidence",
+			name:             "prefer confidence - new has higher confidence",
 			preferVectorText: false,
-			newElement:      TextElement{Source: "ocr", Confidence: 0.95},
-			existingElement: TextElement{Source: "ocr", Confidence: 0.7},
-			want:            true,
+			newElement:       TextElement{Source: "ocr", Confidence: 0.95},
+			existingElement:  TextElement{Source: "ocr", Confidence: 0.7},
+			want:             true,
 		},
 		{
-			name:            "prefer confidence - equal confidence",
+			name:             "prefer confidence - equal confidence",
 			preferVectorText: false,
-			newElement:      TextElement{Source: "ocr", Confidence: 0.8},
-			existingElement: TextElement{Source: "ocr", Confidence: 0.8},
-			want:            true,
+			newElement:       TextElement{Source: "ocr", Confidence: 0.8},
+			existingElement:  TextElement{Source: "ocr", Confidence: 0.8},
+			want:             true,
 		},
 	}
 

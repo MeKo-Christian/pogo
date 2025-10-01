@@ -3,6 +3,8 @@ package detector
 import (
 	"math"
 	"sort"
+
+	"github.com/MeKo-Tech/pogo/internal/mempool"
 )
 
 // AdaptiveThresholdMethod represents different methods for calculating adaptive thresholds.
@@ -120,13 +122,15 @@ func CalculateAdaptiveThresholds(probMap []float32, width, height int,
 }
 
 // calculateProbabilityMapStats computes statistical measures of the probability map.
+// Uses memory pooling for temporary sort buffer.
 func calculateProbabilityMapStats(probMap []float32) AdaptiveThresholdStats {
 	if len(probMap) == 0 {
 		return AdaptiveThresholdStats{}
 	}
 
-	// Create a copy for sorting (to find median)
-	sortedProbs := make([]float32, len(probMap))
+	// Create a copy for sorting (to find median) using pool
+	sortedProbs := mempool.GetFloat32(len(probMap))
+	defer mempool.PutFloat32(sortedProbs)
 	copy(sortedProbs, probMap)
 	sort.Slice(sortedProbs, func(i, j int) bool {
 		return sortedProbs[i] < sortedProbs[j]
@@ -305,11 +309,13 @@ func calculateHistogramBasedThresholds(stats AdaptiveThresholdStats) (float32, f
 }
 
 // calculateDynamicThresholds uses dynamic range analysis for threshold calculation.
+// Uses memory pooling for temporary sort buffer.
 func calculateDynamicThresholds(probMap []float32, stats AdaptiveThresholdStats) (float32, float32, float32) {
 	// Dynamic method adapts to the specific characteristics of the probability map
 
-	// Use percentiles for robust threshold estimation
-	sortedProbs := make([]float32, len(probMap))
+	// Use percentiles for robust threshold estimation using pool
+	sortedProbs := mempool.GetFloat32(len(probMap))
+	defer mempool.PutFloat32(sortedProbs)
 	copy(sortedProbs, probMap)
 	sort.Slice(sortedProbs, func(i, j int) bool {
 		return sortedProbs[i] < sortedProbs[j]

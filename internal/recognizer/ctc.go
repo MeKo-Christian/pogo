@@ -195,7 +195,8 @@ func DecodeCTCGreedy(logits []float32, shape []int64, blank int, classesFirst bo
 // beamWidth controls how many candidates to keep at each step.
 // Returns the best candidate found.
 func DecodeCTCBeamSearch(logits []float32, shape []int64, blank int, beamWidth int,
-	classesFirst bool) []BeamSearchResult {
+	classesFirst bool,
+) []BeamSearchResult {
 	dims := normalizeShape(shape)
 	if dims == nil || beamWidth <= 0 {
 		return nil

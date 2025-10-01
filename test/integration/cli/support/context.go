@@ -211,3 +211,65 @@ func (testCtx *TestContext) getTestImagePath() (string, error) {
 
 	return imagePath, nil
 }
+
+// getTestPDFPath returns the absolute path to a test PDF file.
+func (testCtx *TestContext) getTestPDFPath() (string, error) {
+	projectRoot, err := testutil.GetProjectRoot()
+	if err != nil {
+		return "", fmt.Errorf("failed to find project root: %w", err)
+	}
+
+	pdfPath := filepath.Join(projectRoot, "testdata", "documents", "sample.pdf")
+
+	// Check if the PDF exists
+	if _, err := os.Stat(pdfPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("test PDF not found: %s", pdfPath)
+	}
+
+	return pdfPath, nil
+}
+
+// getTestMultiPagePDFPath returns the path to a multi-page test PDF.
+func (testCtx *TestContext) getTestMultiPagePDFPath() (string, error) {
+	projectRoot, err := testutil.GetProjectRoot()
+	if err != nil {
+		return "", fmt.Errorf("failed to find project root: %w", err)
+	}
+
+	pdfPath := filepath.Join(projectRoot, "testdata", "pdfs", "multipage.pdf")
+	if _, err := os.Stat(pdfPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("multi-page test PDF not found: %s", pdfPath)
+	}
+
+	return pdfPath, nil
+}
+
+// getTestPasswordProtectedPDFPath returns the path to a password-protected PDF.
+func (testCtx *TestContext) getTestPasswordProtectedPDFPath() (string, error) {
+	projectRoot, err := testutil.GetProjectRoot()
+	if err != nil {
+		return "", fmt.Errorf("failed to find project root: %w", err)
+	}
+
+	pdfPath := filepath.Join(projectRoot, "testdata", "pdfs", "password_protected.pdf")
+	if _, err := os.Stat(pdfPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("password-protected test PDF not found: %s", pdfPath)
+	}
+
+	return pdfPath, nil
+}
+
+// getTestEmptyPDFPath returns the path to an empty PDF.
+func (testCtx *TestContext) getTestEmptyPDFPath() (string, error) {
+	projectRoot, err := testutil.GetProjectRoot()
+	if err != nil {
+		return "", fmt.Errorf("failed to find project root: %w", err)
+	}
+
+	pdfPath := filepath.Join(projectRoot, "testdata", "pdfs", "empty.pdf")
+	if _, err := os.Stat(pdfPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("empty test PDF not found: %s", pdfPath)
+	}
+
+	return pdfPath, nil
+}

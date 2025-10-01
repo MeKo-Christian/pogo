@@ -153,7 +153,7 @@ func TestDiscoverInDirectory_WithFiles(t *testing.T) {
 }
 
 func TestMatchesPatterns_EmptyPatterns(t *testing.T) {
-	assert.False(t, matchesPatterns("test.png", []string{}))
+	assert.False(t, matchesAnyPattern("test.png", []string{}))
 }
 
 func TestMatchesPatterns_SinglePattern(t *testing.T) {
@@ -171,7 +171,7 @@ func TestMatchesPatterns_SinglePattern(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		result := matchesPatterns(tc.filename, []string{tc.pattern})
+		result := matchesAnyPattern(tc.filename, []string{tc.pattern})
 		assert.Equal(t, tc.expected, result, "filename=%s, pattern=%s", tc.filename, tc.pattern)
 	}
 }
@@ -191,14 +191,14 @@ func TestMatchesPatterns_MultiplePatterns(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		result := matchesPatterns(tc.filename, patterns)
+		result := matchesAnyPattern(tc.filename, patterns)
 		assert.Equal(t, tc.expected, result, "filename=%s", tc.filename)
 	}
 }
 
 func TestMatchesPatterns_WithExclude(t *testing.T) {
-	// Test that matchesPatterns only checks inclusion, not exclusion
-	// (exclusion is handled at a higher level)
-	assert.True(t, matchesPatterns("exclude.png", []string{"*.png"}))
-	assert.False(t, matchesPatterns("exclude.png", []string{"*.jpg"}))
+	// Test that matchesAnyPattern only checks patterns, not exclusion
+	// (exclusion is handled at a higher level in shouldIncludeFile)
+	assert.True(t, matchesAnyPattern("exclude.png", []string{"*.png"}))
+	assert.False(t, matchesAnyPattern("exclude.png", []string{"*.jpg"}))
 }

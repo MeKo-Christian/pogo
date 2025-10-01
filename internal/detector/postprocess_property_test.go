@@ -9,18 +9,18 @@ import (
 	"github.com/leanovate/gopter/prop"
 )
 
-// genProbabilityMap generates a probability map with values in [0, 1].
-func genProbabilityMap(width, height int) gopter.Gen {
-	return gen.SliceOfN(width*height, gen.Float32Range(0.0, 1.0))
-}
-
 // genValidDimensions generates valid width and height for probability maps.
 func genValidDimensions() gopter.Gen {
 	return gopter.CombineGens(
 		gen.IntRange(8, 64),
 		gen.IntRange(8, 64),
 	).Map(func(vals []interface{}) [2]int {
-		return [2]int{vals[0].(int), vals[1].(int)}
+		v0, ok0 := vals[0].(int)
+		v1, ok1 := vals[1].(int)
+		if !ok0 || !ok1 {
+			return [2]int{8, 8} // fallback values
+		}
+		return [2]int{v0, v1}
 	})
 }
 
@@ -201,10 +201,10 @@ func TestScaleRegionsToOriginal_ProportionalScaling(t *testing.T) {
 			ratio := origAspect / scaledAspect
 			return ratio > 0.99 && ratio < 1.01
 		},
-		gen.IntRange(32, 256),  // mapW
-		gen.IntRange(32, 256),  // mapH
-		gen.IntRange(64, 512),  // origW
-		gen.IntRange(64, 512),  // origH
+		gen.IntRange(32, 256), // mapW
+		gen.IntRange(32, 256), // mapH
+		gen.IntRange(64, 512), // origW
+		gen.IntRange(64, 512), // origH
 	))
 
 	properties.TestingRun(t)

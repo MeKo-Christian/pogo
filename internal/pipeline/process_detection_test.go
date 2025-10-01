@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestPerformDetection tests the performDetection method
+// TestPerformDetection tests the performDetection method.
 func TestPerformDetection(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -26,6 +26,7 @@ func TestPerformDetection(t *testing.T) {
 		{
 			name: "successful detection",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				b := NewBuilder()
 				p, err := b.Build()
 				if err != nil {
@@ -39,6 +40,7 @@ func TestPerformDetection(t *testing.T) {
 		{
 			name: "context cancellation",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				b := NewBuilder()
 				p, err := b.Build()
 				if err != nil {
@@ -93,11 +95,7 @@ func TestPerformDetection(t *testing.T) {
 
 			if tt.checkRegions {
 				// Detection timing should be recorded
-				assert.Greater(t, detNs, int64(0))
-
-				// For synthetic text image, we expect at least some regions
-				// (though this depends on the model)
-				assert.GreaterOrEqual(t, len(regions), 0)
+				assert.Positive(t, detNs)
 
 				// Verify region structure
 				for i, region := range regions {
@@ -110,7 +108,7 @@ func TestPerformDetection(t *testing.T) {
 	}
 }
 
-// TestPerformRecognition tests the performRecognition method
+// TestPerformRecognition tests the performRecognition method.
 func TestPerformRecognition(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -123,6 +121,7 @@ func TestPerformRecognition(t *testing.T) {
 		{
 			name: "successful recognition with regions",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				b := NewBuilder()
 				p, err := b.Build()
 				if err != nil {
@@ -155,6 +154,7 @@ func TestPerformRecognition(t *testing.T) {
 		{
 			name: "no regions to recognize",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				b := NewBuilder()
 				p, err := b.Build()
 				if err != nil {
@@ -171,6 +171,7 @@ func TestPerformRecognition(t *testing.T) {
 		{
 			name: "context cancellation",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				b := NewBuilder()
 				p, err := b.Build()
 				if err != nil {
@@ -239,7 +240,7 @@ func TestPerformRecognition(t *testing.T) {
 
 			if tt.checkResults {
 				// Recognition timing should be recorded
-				assert.Greater(t, recNs, int64(0))
+				assert.Positive(t, recNs)
 
 				// Should have same number of results as regions
 				assert.Len(t, recResults, len(regions))
@@ -260,7 +261,7 @@ func TestPerformRecognition(t *testing.T) {
 	}
 }
 
-// TestBuildImageResult tests the buildImageResult method
+// TestBuildImageResult tests the buildImageResult method.
 func TestBuildImageResult(t *testing.T) {
 	b := NewBuilder()
 	b.cfg.Recognizer.Language = "en"
@@ -315,21 +316,21 @@ func TestBuildImageResult(t *testing.T) {
 	// Here we're just testing the result building logic
 
 	tests := []struct {
-		name          string
-		appliedAngle  int
-		appliedConf   float64
-		detNs         int64
-		recNs         int64
-		totalNs       int64
-		checkFields   bool
+		name         string
+		appliedAngle int
+		appliedConf  float64
+		detNs        int64
+		recNs        int64
+		totalNs      int64
+		checkFields  bool
 	}{
 		{
 			name:         "no rotation applied",
 			appliedAngle: 0,
 			appliedConf:  0.0,
-			detNs:        1000000,  // 1ms
-			recNs:        2000000,  // 2ms
-			totalNs:      5000000,  // 5ms
+			detNs:        1000000, // 1ms
+			recNs:        2000000, // 2ms
+			totalNs:      5000000, // 5ms
 			checkFields:  true,
 		},
 		{
@@ -381,7 +382,7 @@ func TestBuildImageResult(t *testing.T) {
 				assert.Equal(t, tt.appliedAngle, result.Orientation.Angle)
 				if tt.appliedAngle != 0 {
 					assert.True(t, result.Orientation.Applied)
-					assert.Equal(t, tt.appliedConf, result.Orientation.Confidence)
+					assert.InDelta(t, tt.appliedConf, result.Orientation.Confidence, 0.001)
 				} else {
 					assert.False(t, result.Orientation.Applied)
 				}
@@ -399,7 +400,7 @@ func TestBuildImageResult(t *testing.T) {
 	}
 }
 
-// TestBuildImageResult_EmptyRegions tests buildImageResult with no regions
+// TestBuildImageResult_EmptyRegions tests buildImageResult with no regions.
 func TestBuildImageResult_EmptyRegions(t *testing.T) {
 	p := &Pipeline{
 		cfg: Config{},
@@ -422,12 +423,12 @@ func TestBuildImageResult_EmptyRegions(t *testing.T) {
 
 	require.NotNil(t, result)
 	assert.Empty(t, result.Regions)
-	assert.Equal(t, 0.0, result.AvgDetConf)
+	assert.InDelta(t, 0.0, result.AvgDetConf, 0.001)
 	assert.Equal(t, img.Bounds().Dx(), result.Width)
 	assert.Equal(t, img.Bounds().Dy(), result.Height)
 }
 
-// TestProcessImageContext_FullFlow tests the complete ProcessImageContext flow
+// TestProcessImageContext_FullFlow tests the complete ProcessImageContext flow.
 func TestProcessImageContext_FullFlow(t *testing.T) {
 	b := NewBuilder()
 
@@ -461,12 +462,12 @@ func TestProcessImageContext_FullFlow(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, img.Bounds().Dx(), result.Width)
 	assert.Equal(t, img.Bounds().Dy(), result.Height)
-	assert.Greater(t, result.Processing.TotalNs, int64(0))
-	assert.Greater(t, result.Processing.DetectionNs, int64(0))
+	assert.Positive(t, result.Processing.TotalNs)
+	assert.Positive(t, result.Processing.DetectionNs)
 	assert.GreaterOrEqual(t, result.Processing.RecognitionNs, int64(0))
 }
 
-// TestProcessImageContext_NilChecks tests nil input validation
+// TestProcessImageContext_NilChecks tests nil input validation.
 func TestProcessImageContext_NilChecks(t *testing.T) {
 	tests := []struct {
 		name        string

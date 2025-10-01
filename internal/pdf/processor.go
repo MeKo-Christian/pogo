@@ -89,7 +89,8 @@ func (p *Processor) ProcessFile(filename string, pageRange string) (*DocumentRes
 
 // ProcessFileWithCredentials processes a PDF file with optional password credentials.
 func (p *Processor) ProcessFileWithCredentials(filename string, pageRange string,
-	creds *PasswordCredentials) (*DocumentResult, error) {
+	creds *PasswordCredentials,
+) (*DocumentResult, error) {
 	startTime := time.Now()
 
 	workingFilename, err := p.handlePasswordProtection(filename, creds)
@@ -168,7 +169,8 @@ func (p *Processor) extractImagesFromPDF(filename, pageRange string) (map[int][]
 
 // processAllPages processes all pages combining images and analysis.
 func (p *Processor) processAllPages(pageImages map[int][]image.Image, pageAnalyses map[int]*PageAnalysis,
-	filename string) ([]PageResult, time.Duration, time.Duration, error) {
+	filename string,
+) ([]PageResult, time.Duration, time.Duration, error) {
 	pages := make([]PageResult, 0)
 	var totalDetectionTime, totalVectorTime time.Duration
 
@@ -193,7 +195,8 @@ func (p *Processor) processAllPages(pageImages map[int][]image.Image, pageAnalys
 
 // collectAllPageNumbers combines page numbers from images and analyses.
 func (p *Processor) collectAllPageNumbers(pageImages map[int][]image.Image,
-	pageAnalyses map[int]*PageAnalysis) map[int]bool {
+	pageAnalyses map[int]*PageAnalysis,
+) map[int]bool {
 	allPageNums := make(map[int]bool)
 	for pageNum := range pageImages {
 		allPageNums[pageNum] = true
@@ -206,7 +209,8 @@ func (p *Processor) collectAllPageNumbers(pageImages map[int][]image.Image,
 
 // createDocumentResult creates the final document result with timing information.
 func (p *Processor) createDocumentResult(filename string, pages []PageResult, extractTime,
-	totalDetectionTime, totalVectorTime time.Duration, startTime time.Time) *DocumentResult {
+	totalDetectionTime, totalVectorTime time.Duration, startTime time.Time,
+) *DocumentResult {
 	totalTime := time.Since(startTime)
 
 	return &DocumentResult{
@@ -224,7 +228,8 @@ func (p *Processor) createDocumentResult(filename string, pages []PageResult, ex
 
 // processPageEnhanced processes a single PDF page with enhanced capabilities (vector text + OCR).
 func (p *Processor) processPageEnhanced(pageNum int, images []image.Image, analysis *PageAnalysis,
-	filename string) (*PageResult, time.Duration, time.Duration, error) {
+	filename string,
+) (*PageResult, time.Duration, time.Duration, error) {
 	var totalDetectionTime, totalVectorTime time.Duration
 
 	// Determine processing strategy
@@ -259,7 +264,8 @@ func (p *Processor) processPageEnhanced(pageNum int, images []image.Image, analy
 
 // determineProcessingStrategy determines the appropriate processing strategy for the page.
 func (p *Processor) determineProcessingStrategy(analysis *PageAnalysis, filename string,
-	pageNum int) (ProcessingStrategy, *PageAnalysis) {
+	pageNum int,
+) (ProcessingStrategy, *PageAnalysis) {
 	strategy := StrategyOCR // Default to OCR
 	currentAnalysis := analysis
 
@@ -280,7 +286,8 @@ func (p *Processor) determineProcessingStrategy(analysis *PageAnalysis, filename
 // createPageResult creates the final page result with optional hybrid processing.
 func (p *Processor) createPageResult(pageNum, pageWidth, pageHeight int, imageResults []ImageResult,
 	totalDetectionTime, totalVectorTime time.Duration, strategy ProcessingStrategy,
-	vectorExtraction *TextExtraction) (*PageResult, time.Duration, time.Duration, error) {
+	vectorExtraction *TextExtraction,
+) (*PageResult, time.Duration, time.Duration, error) {
 	pageResult := &PageResult{
 		PageNumber: pageNum,
 		Width:      pageWidth,
@@ -318,7 +325,8 @@ func (p *Processor) ProcessFiles(filenames []string, pageRange string) ([]*Docum
 
 // ProcessFilesWithCredentials processes multiple PDF files with optional password credentials.
 func (p *Processor) ProcessFilesWithCredentials(filenames []string, pageRange string,
-	creds *PasswordCredentials) ([]*DocumentResult, error) {
+	creds *PasswordCredentials,
+) ([]*DocumentResult, error) {
 	results := make([]*DocumentResult, 0, len(filenames))
 
 	for _, filename := range filenames {
@@ -378,7 +386,8 @@ func (p *Processor) Close() error {
 
 // extractVectorTextIfNeeded extracts vector text if the strategy requires it.
 func (p *Processor) extractVectorTextIfNeeded(strategy ProcessingStrategy, analysis *PageAnalysis,
-	pageNum int, filename string) (*TextExtraction, time.Duration) {
+	pageNum int, filename string,
+) (*TextExtraction, time.Duration) {
 	if strategy != StrategyVectorText && strategy != StrategyHybrid {
 		return nil, 0
 	}
@@ -405,7 +414,8 @@ func (p *Processor) extractVectorTextIfNeeded(strategy ProcessingStrategy, analy
 
 // processImagesWithOCRIfNeeded processes images with OCR if the strategy requires it.
 func (p *Processor) processImagesWithOCRIfNeeded(strategy ProcessingStrategy, images []image.Image,
-	pageWidth, pageHeight int, totalDetectionTime time.Duration) ([]ImageResult, int, int, time.Duration) {
+	pageWidth, pageHeight int, totalDetectionTime time.Duration,
+) ([]ImageResult, int, int, time.Duration) {
 	if p.shouldSkipOCRProcessing(strategy, images) {
 		return nil, pageWidth, pageHeight, totalDetectionTime
 	}

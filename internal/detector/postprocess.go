@@ -1,6 +1,7 @@
 package detector
 
 import (
+	"github.com/MeKo-Tech/pogo/internal/mempool"
 	"github.com/MeKo-Tech/pogo/internal/utils"
 )
 
@@ -24,12 +25,18 @@ type PostProcessOptions struct {
 // 2) 4-connected components
 // 3) Compute average probability, bounding boxes, and polygons
 // 4) Filter by min box confidence.
+// Uses memory pooling to reduce allocations.
 func PostProcessDB(prob []float32, w, h int, dbThresh, boxMinConf float32) []DetectedRegion {
 	if len(prob) != w*h || w <= 0 || h <= 0 {
 		return nil
 	}
 	mask := binarize(prob, w, h, dbThresh)
+	defer mempool.PutBool(mask)
+
 	comps, labels := connectedComponents(mask, prob, w, h)
+	// labels is a slice of ints that will be collected by GC, no pooling needed
+	_ = labels
+
 	// Default behavior: use minimum-area rectangle for polygons
 	regions := regionsFromComponents(comps, labels, w, h, true)
 	regions = filterRegions(regions, float64(boxMinConf))
@@ -48,6 +55,7 @@ func PostProcessDBWithNMS(prob []float32, w, h int, dbThresh, boxMinConf float32
 }
 
 // PostProcessDBWithOptions is like PostProcessDB but allows selecting polygon mode.
+// Uses memory pooling to reduce allocations.
 func PostProcessDBWithOptions(prob []float32, w, h int, dbThresh, boxMinConf float32,
 	opts PostProcessOptions,
 ) []DetectedRegion {
@@ -55,6 +63,8 @@ func PostProcessDBWithOptions(prob []float32, w, h int, dbThresh, boxMinConf flo
 		return nil
 	}
 	mask := binarize(prob, w, h, dbThresh)
+	defer mempool.PutBool(mask)
+
 	comps, labels := connectedComponents(mask, prob, w, h)
 	regions := regionsFromComponents(comps, labels, w, h, opts.UseMinAreaRect)
 	regions = filterRegions(regions, float64(boxMinConf))

@@ -22,7 +22,7 @@ func discoverImageFiles(args []string, recursive bool, includePatterns, excludeP
 				return nil, err
 			}
 			imageFiles = append(imageFiles, files...)
-		} else if matchesPatterns(arg, includePatterns) && !matchesPatterns(arg, excludePatterns) {
+		} else if shouldIncludeFile(arg, includePatterns, excludePatterns) {
 			imageFiles = append(imageFiles, arg)
 		}
 	}
@@ -46,7 +46,7 @@ func discoverInDirectory(dir string, recursive bool, includePatterns, excludePat
 			return nil
 		}
 
-		if matchesPatterns(path, includePatterns) && !matchesPatterns(path, excludePatterns) {
+		if shouldIncludeFile(path, includePatterns, excludePatterns) {
 			files = append(files, path)
 		}
 
@@ -56,8 +56,24 @@ func discoverInDirectory(dir string, recursive bool, includePatterns, excludePat
 	return files, filepath.Walk(dir, walkFn)
 }
 
-// matchesPatterns checks if a file path matches any of the given patterns.
-func matchesPatterns(path string, patterns []string) bool {
+// shouldIncludeFile determines if a file should be included based on include/exclude patterns.
+func shouldIncludeFile(path string, includePatterns, excludePatterns []string) bool {
+	// Check exclude patterns first
+	if matchesAnyPattern(path, excludePatterns) {
+		return false
+	}
+
+	// If no include patterns, include all (that aren't excluded)
+	if len(includePatterns) == 0 {
+		return true
+	}
+
+	// Otherwise, must match at least one include pattern
+	return matchesAnyPattern(path, includePatterns)
+}
+
+// matchesAnyPattern checks if a file path matches any of the given patterns.
+func matchesAnyPattern(path string, patterns []string) bool {
 	if len(patterns) == 0 {
 		return false
 	}

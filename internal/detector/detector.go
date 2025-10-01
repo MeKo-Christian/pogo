@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MeKo-Tech/pogo/internal/mempool"
 	"github.com/MeKo-Tech/pogo/internal/onnx"
 	"github.com/MeKo-Tech/pogo/internal/utils"
 	"github.com/yalue/onnxruntime_go"
@@ -124,6 +125,7 @@ func (d *Detector) GetOutputShape() []int64 {
 }
 
 // preprocessImage prepares an image for detection inference.
+// Uses memory pooling for tensor data allocation.
 func (d *Detector) preprocessImage(img image.Image) (onnx.Tensor, error) {
 	// Resize image to fit within constraints while preserving aspect ratio
 	resized, err := utils.ResizeImage(img, d.imageConstraints)
@@ -131,8 +133,8 @@ func (d *Detector) preprocessImage(img image.Image) (onnx.Tensor, error) {
 		return onnx.Tensor{}, fmt.Errorf("failed to resize image: %w", err)
 	}
 
-	// Normalize image to float32 tensor in NCHW format
-	tensorData, width, height, err := utils.NormalizeImage(resized)
+	// Normalize image to float32 tensor in NCHW format using pooled buffer
+	tensorData, width, height, err := utils.NormalizeImagePooled(resized)
 	if err != nil {
 		return onnx.Tensor{}, fmt.Errorf("failed to normalize image: %w", err)
 	}
@@ -234,6 +236,8 @@ func (d *Detector) RunInference(img image.Image) (*DetectionResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("preprocessing failed: %w", err)
 	}
+	// Return tensor data to pool after inference
+	defer mempool.PutFloat32(tensor.Data)
 
 	outputData, width, height, err := d.runInferenceInternal(tensor)
 	if err != nil {

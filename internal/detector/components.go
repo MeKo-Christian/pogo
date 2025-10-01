@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"math"
 
+	"github.com/MeKo-Tech/pogo/internal/mempool"
 	"github.com/MeKo-Tech/pogo/internal/utils"
 )
 
@@ -18,8 +19,9 @@ type compStats struct {
 }
 
 // binarize creates a binary mask from a probability map with threshold t.
+// Uses memory pooling for the boolean mask.
 func binarize(prob []float32, w, h int, t float32) []bool {
-	mask := make([]bool, w*h)
+	mask := mempool.GetBool(w * h)
 	for i, p := range prob {
 		if p >= t {
 			mask[i] = true

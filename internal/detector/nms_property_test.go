@@ -10,6 +10,11 @@ import (
 	"github.com/leanovate/gopter/prop"
 )
 
+const (
+	nmsMethodGaussian = "gaussian"
+	nmsMethodHard     = "hard"
+)
+
 // genDetectedRegion generates a random detected region.
 func genDetectedRegion() gopter.Gen {
 	return gopter.CombineGens(
@@ -17,13 +22,22 @@ func genDetectedRegion() gopter.Gen {
 		gen.Float64Range(0, 190),
 		gen.Float64Range(0.1, 1.0),
 	).Map(func(vals []interface{}) DetectedRegion {
-		mx := vals[0].(float64)
-		my := vals[1].(float64)
-		conf := vals[2].(float64)
+		mx, ok := vals[0].(float64)
+		if !ok {
+			panic("expected float64")
+		}
+		my, ok := vals[1].(float64)
+		if !ok {
+			panic("expected float64")
+		}
+		conf, ok := vals[2].(float64)
+		if !ok {
+			panic("expected float64")
+		}
 		return DetectedRegion{
 			Box:        utils.NewBox(mx, my, mx+10, my+10),
 			Confidence: conf,
-			Polygon:    []utils.Point{{mx, my}, {mx + 10, my}, {mx + 10, my + 10}, {mx, my + 10}},
+			Polygon:    []utils.Point{{X: mx, Y: my}, {X: mx + 10, Y: my}, {X: mx + 10, Y: my + 10}, {X: mx, Y: my + 10}},
 		}
 	})
 }
@@ -210,7 +224,7 @@ func TestSoftNonMaxSuppression_PreservesAllRegions(t *testing.T) {
 				return true
 			}
 
-			kept := SoftNonMaxSuppression(regions, "gaussian", 0.5, 0.5, scoreThresh)
+			kept := SoftNonMaxSuppression(regions, nmsMethodGaussian, 0.5, 0.5, scoreThresh)
 
 			// Count input regions above threshold
 			countAbove := 0
@@ -238,8 +252,8 @@ func TestSoftNonMaxSuppression_ConfidenceDecay(t *testing.T) {
 	properties.Property("Soft-NMS confidence is non-increasing for overlapping regions", prop.ForAll(
 		func(method string, sigma float64) bool {
 			// Valid methods
-			if method != "linear" && method != "gaussian" && method != "hard" {
-				method = "gaussian"
+			if method != nmsMethodLinear && method != nmsMethodGaussian && method != nmsMethodHard {
+				method = nmsMethodGaussian
 			}
 
 			// Create overlapping regions with known confidences
@@ -264,7 +278,7 @@ func TestSoftNonMaxSuppression_ConfidenceDecay(t *testing.T) {
 			}
 			return true
 		},
-		gen.OneConstOf("linear", "gaussian", "hard"),
+		gen.OneConstOf(nmsMethodLinear, nmsMethodGaussian, nmsMethodHard),
 		gen.Float64Range(0.1, 1.0),
 	))
 
@@ -354,8 +368,8 @@ func TestCalculateSoftNMSWeight_Bounds(t *testing.T) {
 			if iou < 0 || iou > 1 {
 				return true
 			}
-			if method != "linear" && method != "gaussian" && method != "hard" {
-				method = "gaussian"
+			if method != nmsMethodLinear && method != nmsMethodGaussian && method != nmsMethodHard {
+				method = nmsMethodGaussian
 			}
 
 			weight := calculateSoftNMSWeight(iou, iouThreshold, sigma, method)
@@ -364,7 +378,7 @@ func TestCalculateSoftNMSWeight_Bounds(t *testing.T) {
 		gen.Float64Range(0.0, 1.0),
 		gen.Float64Range(0.1, 0.9),
 		gen.Float64Range(0.1, 1.0),
-		gen.OneConstOf("linear", "gaussian", "hard"),
+		gen.OneConstOf(nmsMethodLinear, nmsMethodGaussian, nmsMethodHard),
 	))
 
 	properties.TestingRun(t)

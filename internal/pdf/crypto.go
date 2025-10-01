@@ -123,7 +123,8 @@ func (h *PasswordHandler) createTempFile() (string, error) {
 
 // tryDecryptWithPrompt attempts to decrypt using prompted passwords.
 func (h *PasswordHandler) tryDecryptWithPrompt(filename, tempFileName string,
-	config *model.Configuration) (string, error) {
+	config *model.Configuration,
+) (string, error) {
 	promptCreds, promptErr := h.promptForPasswords()
 	if promptErr != nil || promptCreds == nil {
 		return "", fmt.Errorf("password prompting failed: %w", promptErr)

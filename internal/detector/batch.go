@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/MeKo-Tech/pogo/internal/mempool"
 	"github.com/MeKo-Tech/pogo/internal/onnx"
 	"github.com/yalue/onnxruntime_go"
 )
@@ -127,6 +128,7 @@ func (d *Detector) runBatchInferenceCore(batchTensor onnx.Tensor) ([]float32, in
 }
 
 // splitBatchOutput splits batch output data into individual results.
+// Uses memory pooling for per-image probability maps.
 func splitBatchOutput(outputData []float32, results []*DetectionResult,
 	batchSize, channels, outputHeight, outputWidth int,
 ) {
@@ -135,7 +137,7 @@ func splitBatchOutput(outputData []float32, results []*DetectionResult,
 		startIdx := i * elementsPerImage
 		endIdx := startIdx + elementsPerImage
 
-		probabilityMap := make([]float32, elementsPerImage)
+		probabilityMap := mempool.GetFloat32(elementsPerImage)
 		copy(probabilityMap, outputData[startIdx:endIdx])
 
 		results[i].ProbabilityMap = probabilityMap

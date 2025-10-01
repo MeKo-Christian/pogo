@@ -47,7 +47,8 @@ func (s *Server) ocrPdfHandler(w http.ResponseWriter, r *http.Request) {
 
 // processPdfAndRespond handles PDF processing and response formatting.
 func (s *Server) processPdfAndRespond(w http.ResponseWriter, r *http.Request,
-	tempFile, pageRange string, reqConfig *RequestConfig) {
+	tempFile, pageRange string, reqConfig *RequestConfig,
+) {
 	// Check if we need enhanced PDF processing (passwords or vector text)
 	needsEnhanced := reqConfig.UserPassword != "" || reqConfig.OwnerPassword != "" ||
 		reqConfig.EnableVectorText || reqConfig.EnableHybrid
@@ -277,7 +278,8 @@ func (s *Server) saveUploadedFile(file multipart.File, header *multipart.FileHea
 
 // processEnhancedPDF processes a PDF using the enhanced processor with password and vector text support.
 func (s *Server) processEnhancedPDF(filename, pageRange string,
-	reqConfig *RequestConfig) (*pipeline.OCRPDFResult, error) {
+	reqConfig *RequestConfig,
+) (*pipeline.OCRPDFResult, error) {
 	// Create detector for enhanced PDF processor
 	detectorConfig := detector.Config{
 		ModelPath:    s.baseConfig.Detector.ModelPath,

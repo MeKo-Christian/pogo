@@ -13,20 +13,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestApplyOrientationDetection tests the applyOrientationDetection method
+const testText = "Test"
+
+// TestApplyOrientationDetection tests the applyOrientationDetection method.
 func TestApplyOrientationDetection(t *testing.T) {
 	tests := []struct {
-		name              string
-		setupPipeline     func(*testing.T) *Pipeline
-		expectedAngle     int
-		expectError       bool
-		expectedConfMin   float64
-		checkRotated      bool
-		cancelContext     bool
+		name            string
+		setupPipeline   func(*testing.T) *Pipeline
+		expectedAngle   int
+		expectError     bool
+		expectedConfMin float64
+		checkRotated    bool
+		cancelContext   bool
 	}{
 		{
 			name: "no orientation detection when disabled",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				return &Pipeline{
 					cfg: Config{
 						Orientation: orientation.Config{
@@ -43,6 +46,7 @@ func TestApplyOrientationDetection(t *testing.T) {
 		{
 			name: "no orientation detection when orienter is nil",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				return &Pipeline{
 					cfg: Config{
 						Orientation: orientation.Config{
@@ -59,6 +63,7 @@ func TestApplyOrientationDetection(t *testing.T) {
 		{
 			name: "context cancellation",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				cfg := orientation.DefaultConfig()
 				cfg.Enabled = true
 				cfg.HeuristicOnly = true // Use heuristic to avoid model deps
@@ -81,6 +86,7 @@ func TestApplyOrientationDetection(t *testing.T) {
 		{
 			name: "orientation detection with heuristic mode",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				cfg := orientation.DefaultConfig()
 				cfg.Enabled = true
 				cfg.HeuristicOnly = true
@@ -111,7 +117,7 @@ func TestApplyOrientationDetection(t *testing.T) {
 			// Create test image
 			cfg := testutil.DefaultTestImageConfig()
 			cfg.Size = testutil.ImageSize{Width: 200, Height: 100}
-			cfg.Text = "Test"
+			cfg.Text = testText
 			cfg.Background = color.White
 			cfg.Foreground = color.Black
 			img, err := testutil.GenerateTextImage(cfg)
@@ -152,12 +158,12 @@ func TestApplyOrientationDetection(t *testing.T) {
 	}
 }
 
-// TestApplyOrientationRotation tests the applyOrientationRotation method
+// TestApplyOrientationRotation tests the applyOrientationRotation method.
 func TestApplyOrientationRotation(t *testing.T) {
 	// Create test image
 	cfg := testutil.DefaultTestImageConfig()
 	cfg.Size = testutil.ImageSize{Width: 200, Height: 100}
-	cfg.Text = "Test"
+	cfg.Text = testText
 	img, err := testutil.GenerateTextImage(cfg)
 	require.NoError(t, err)
 
@@ -166,10 +172,10 @@ func TestApplyOrientationRotation(t *testing.T) {
 	p := &Pipeline{}
 
 	tests := []struct {
-		name            string
-		angle           int
-		checkWidth      int
-		checkHeight     int
+		name        string
+		angle       int
+		checkWidth  int
+		checkHeight int
 	}{
 		{
 			name:        "no rotation (0 degrees)",
@@ -215,7 +221,7 @@ func TestApplyOrientationRotation(t *testing.T) {
 	}
 }
 
-// TestPrepareOrientation tests the prepareOrientation method
+// TestPrepareOrientation tests the prepareOrientation method.
 func TestPrepareOrientation(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -227,6 +233,7 @@ func TestPrepareOrientation(t *testing.T) {
 		{
 			name: "no orientation processing when disabled",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				return &Pipeline{
 					cfg: Config{
 						Orientation: orientation.Config{
@@ -242,6 +249,7 @@ func TestPrepareOrientation(t *testing.T) {
 		{
 			name: "no orientation processing when orienter is nil",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				return &Pipeline{
 					cfg: Config{
 						Orientation: orientation.Config{
@@ -257,6 +265,7 @@ func TestPrepareOrientation(t *testing.T) {
 		{
 			name: "context cancellation before orientation",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				cfg := orientation.DefaultConfig()
 				cfg.Enabled = true
 				cfg.HeuristicOnly = true
@@ -280,6 +289,7 @@ func TestPrepareOrientation(t *testing.T) {
 		{
 			name: "batch orientation processing",
 			setupPipeline: func(t *testing.T) *Pipeline {
+				t.Helper()
 				cfg := orientation.DefaultConfig()
 				cfg.Enabled = true
 				cfg.HeuristicOnly = true
@@ -312,10 +322,10 @@ func TestPrepareOrientation(t *testing.T) {
 
 			// Create test images
 			images := make([]image.Image, tt.imageCount)
-			for i := 0; i < tt.imageCount; i++ {
+			for i := range tt.imageCount {
 				cfg := testutil.DefaultTestImageConfig()
 				cfg.Size = testutil.ImageSize{Width: 150, Height: 100}
-				cfg.Text = "Test"
+				cfg.Text = testText
 				img, err := testutil.GenerateTextImage(cfg)
 				require.NoError(t, err)
 				images[i] = img
@@ -352,7 +362,7 @@ func TestPrepareOrientation(t *testing.T) {
 	}
 }
 
-// TestProcessImagesContext_WithOrientation tests ProcessImagesContext with orientation
+// TestProcessImagesContext_WithOrientation tests ProcessImagesContext with orientation.
 func TestProcessImagesContext_WithOrientation(t *testing.T) {
 	// This test requires models, so we'll skip if not available
 	b := NewBuilder()
@@ -401,7 +411,7 @@ func TestProcessImagesContext_WithOrientation(t *testing.T) {
 	}
 }
 
-// TestProcessImagesContext_Cancellation tests context cancellation during processing
+// TestProcessImagesContext_Cancellation tests context cancellation during processing.
 func TestProcessImagesContext_Cancellation(t *testing.T) {
 	b := NewBuilder()
 
@@ -417,7 +427,7 @@ func TestProcessImagesContext_Cancellation(t *testing.T) {
 	images := make([]image.Image, 2)
 	for i := range images {
 		cfg := testutil.DefaultTestImageConfig()
-		cfg.Text = "Test"
+		cfg.Text = testText
 		img, err := testutil.GenerateTextImage(cfg)
 		require.NoError(t, err)
 		images[i] = img
