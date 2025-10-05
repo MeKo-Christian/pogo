@@ -73,6 +73,16 @@ Examples:
 		rectifyMask := cfg.Features.RectificationThreshold
 		rectifyHeight := cfg.Features.RectificationHeight
 		rectifyDebugDir := cfg.Features.RectificationDebugDir
+		// Barcode options
+		barcodeEnabled := viper.GetBool("features.barcode_enabled") || cfg.Features.BarcodeEnabled
+		barcodeTypesCSV := viper.GetString("features.barcode_types")
+		if barcodeTypesCSV == "" {
+			barcodeTypesCSV = cfg.Features.BarcodeTypes
+		}
+		barcodeMinSize := viper.GetInt("features.barcode_min_size")
+		if barcodeMinSize == 0 {
+			barcodeMinSize = cfg.Features.BarcodeMinSize
+		}
 		useGPU := cfg.GPU.Enabled
 		gpuDevice := cfg.GPU.Device
 		gpuMemLimit := cfg.GPU.MemoryLimit
@@ -199,6 +209,53 @@ Examples:
 		if polyMode != "" {
 			b = b.WithDetectorPolygonMode(polyMode)
 		}
+
+		// Configure barcode detection
+		if barcodeEnabled || barcodeTypesCSV != "" || barcodeMinSize > 0 {
+			var bcTypes []string
+			if barcodeTypesCSV != "" {
+				bcTypes = strings.Split(barcodeTypesCSV, ",")
+			}
+			b = b.WithBarcodes(barcodeEnabled, bcTypes, barcodeMinSize)
+		}
+
+		// Multi-scale detection config
+		if viper.GetBool("pipeline.detector.multi_scale.enabled") || cfg.Pipeline.Detector.MultiScale.Enabled {
+			scales := cfg.Pipeline.Detector.MultiScale.Scales
+			if len(scales) == 0 {
+				// fetch from flags if provided
+				if cmd.Flags().Changed("det-scales") {
+					scales, _ = cmd.Flags().GetFloat64Slice("det-scales")
+				}
+			}
+			b = b.WithDetectorMultiScale(scales)
+			mergeIoU := cfg.Pipeline.Detector.MultiScale.MergeIoU
+			if cmd.Flags().Changed("det-merge-iou") {
+				mergeIoU, _ = cmd.Flags().GetFloat64("det-merge-iou")
+			}
+			if mergeIoU > 0 {
+				b = b.WithDetectorMultiScaleIoU(mergeIoU)
+			}
+			// Adaptive parameters
+			msAdaptive := viper.GetBool("pipeline.detector.multi_scale.adaptive") || cfg.Pipeline.Detector.MultiScale.Adaptive
+			msMaxLevels := cfg.Pipeline.Detector.MultiScale.MaxLevels
+			msMinSide := cfg.Pipeline.Detector.MultiScale.MinSide
+			if cmd.Flags().Changed("det-ms-max-levels") {
+				msMaxLevels, _ = cmd.Flags().GetInt("det-ms-max-levels")
+			}
+			if cmd.Flags().Changed("det-ms-min-side") {
+				msMinSide, _ = cmd.Flags().GetInt("det-ms-min-side")
+			}
+			b = b.WithDetectorMultiScaleAdaptive(msAdaptive, msMaxLevels, msMinSide)
+
+			// Incremental merge
+			msIncr := cfg.Pipeline.Detector.MultiScale.IncrementalMerge
+			if cmd.Flags().Changed("det-ms-incremental-merge") {
+				msIncr, _ = cmd.Flags().GetBool("det-ms-incremental-merge")
+			}
+			b = b.WithDetectorMultiScaleIncrementalMerge(msIncr)
+		}
+
 		pl, err := b.Build()
 		if err != nil {
 			return fmt.Errorf("failed to build OCR pipeline: %w", err)
@@ -412,6 +469,20 @@ func addImageFlags(cmd *cobra.Command) {
 	cmd.Flags().Float32("adaptive-thresh-max-db", 0.8, "maximum allowed db_thresh value")
 	cmd.Flags().Float32("adaptive-thresh-min-box", 0.3, "minimum allowed box_thresh value")
 	cmd.Flags().Float32("adaptive-thresh-max-box", 0.9, "maximum allowed box_thresh value")
+
+	// Multi-scale detection flags
+	cmd.Flags().Bool("det-multiscale", false, "enable multi-scale detection (pyramid)")
+	cmd.Flags().Float64Slice("det-scales", []float64{1.0, 0.75, 0.5}, "relative scales for multi-scale detection (e.g., 1.0,0.75,0.5)")
+	cmd.Flags().Float64("det-merge-iou", 0.3, "IoU threshold for merging regions across scales")
+	cmd.Flags().Bool("det-ms-adaptive", false, "enable adaptive pyramid scaling (auto scales based on image size)")
+	cmd.Flags().Int("det-ms-max-levels", 3, "maximum pyramid levels when adaptive is enabled (including 1.0)")
+	cmd.Flags().Int("det-ms-min-side", 320, "stop adaptive scaling when min(image side * scale) <= this value")
+	cmd.Flags().Bool("det-ms-incremental-merge", true, "incrementally merge detections after each scale to reduce memory")
+
+	// Barcode flags (optional; no-op unless barcode stage is wired)
+	cmd.Flags().Bool("barcodes", false, "enable barcode detection stage")
+	cmd.Flags().String("barcode-types", "", "comma-separated types to detect (e.g., qr,ean13,upca,code128,pdf417,datamatrix,aztec,ean8,upce,itf,codabar,code39)")
+	cmd.Flags().Int("barcode-min-size", 0, "minimum expected barcode size in pixels (hint)")
 }
 
 // bindImageFlags binds all flags to viper configuration keys.
@@ -453,6 +524,16 @@ func bindImageFlags(cmd *cobra.Command) {
 		{"pipeline.detector.adaptive_thresholds.max_db_thresh", "adaptive-thresh-max-db"},
 		{"pipeline.detector.adaptive_thresholds.min_box_thresh", "adaptive-thresh-min-box"},
 		{"pipeline.detector.adaptive_thresholds.max_box_thresh", "adaptive-thresh-max-box"},
+		{"pipeline.detector.multi_scale.enabled", "det-multiscale"},
+		{"pipeline.detector.multi_scale.scales", "det-scales"},
+		{"pipeline.detector.multi_scale.merge_iou", "det-merge-iou"},
+		{"pipeline.detector.multi_scale.adaptive", "det-ms-adaptive"},
+		{"pipeline.detector.multi_scale.max_levels", "det-ms-max-levels"},
+		{"pipeline.detector.multi_scale.min_side", "det-ms-min-side"},
+		{"pipeline.detector.multi_scale.incremental_merge", "det-ms-incremental-merge"},
+		{"features.barcode_enabled", "barcodes"},
+		{"features.barcode_types", "barcode-types"},
+		{"features.barcode_min_size", "barcode-min-size"},
 	}
 
 	for _, binding := range flagBindings {
@@ -480,6 +561,8 @@ func init() {
 		_, _ = fmt.Fprintln(out, cmd.UseLine())
 		_, _ = fmt.Fprintln(out, "Flags:")
 		_, _ = fmt.Fprintln(out, cmd.Flags().FlagUsages())
+		_, _ = fmt.Fprintln(out, "Docs:")
+		_, _ = fmt.Fprintln(out, "  See docs/multiscale.md for multi-scale detection options and tuning.")
 	})
 }
 

@@ -718,17 +718,17 @@ func TestConfig_ConfidenceThresholdRange(t *testing.T) {
 // TestConfig_SquareThresholdRange tests various square threshold values.
 func TestConfig_SquareThresholdRange(t *testing.T) {
 	tests := []struct {
-		name      string
-		threshold float64
-		imgWidth  int
-		imgHeight int
+		name       string
+		threshold  float64
+		imgWidth   int
+		imgHeight  int
 		shouldSkip bool
 	}{
-		{"threshold 1.1 with square", 1.1, 100, 100, true},   // aspect=1.0, 1.0 <= 1.1 = skip
-		{"threshold 1.1 with slight landscape", 1.1, 110, 100, true}, // aspect=1.1, 1.1 <= 1.1 = skip
+		{"threshold 1.1 with square", 1.1, 100, 100, true},             // aspect=1.0, 1.0 <= 1.1 = skip
+		{"threshold 1.1 with slight landscape", 1.1, 110, 100, true},   // aspect=1.1, 1.1 <= 1.1 = skip
 		{"threshold 1.5 with moderate landscape", 1.5, 150, 100, true}, // aspect=1.5, 1.5 <= 1.5 = skip
-		{"threshold 1.5 with large landscape", 1.5, 200, 100, false}, // aspect=2.0, 2.0 > 1.5 = no skip
-		{"threshold 2.0 with very wide", 2.0, 300, 100, false}, // aspect=3.0, 3.0 > 2.0 = no skip
+		{"threshold 1.5 with large landscape", 1.5, 200, 100, false},   // aspect=2.0, 2.0 > 1.5 = no skip
+		{"threshold 2.0 with very wide", 2.0, 300, 100, false},         // aspect=3.0, 3.0 > 2.0 = no skip
 	}
 
 	for _, tt := range tests {
@@ -778,10 +778,10 @@ func TestConfig_NumThreadsSettings(t *testing.T) {
 // TestConfig_SkipSquareImagesFlag tests SkipSquareImages flag behavior.
 func TestConfig_SkipSquareImagesFlag(t *testing.T) {
 	tests := []struct {
-		name             string
-		skipSquare       bool
-		imgSize          image.Rectangle
-		expectWouldSkip  bool
+		name            string
+		skipSquare      bool
+		imgSize         image.Rectangle
+		expectWouldSkip bool
 	}{
 		{"skip enabled, square image", true, image.Rect(0, 0, 100, 100), true},
 		{"skip disabled, square image", false, image.Rect(0, 0, 100, 100), true}, // shouldSkipOrientation still returns true based on aspect
@@ -868,11 +868,11 @@ func TestConfig_HeuristicOnlyMode(t *testing.T) {
 // TestConfig_UseHeuristicFallbackBehavior tests UseHeuristicFallback flag.
 func TestConfig_UseHeuristicFallbackBehavior(t *testing.T) {
 	tests := []struct {
-		name             string
-		useFallback      bool
-		modelPath        string
-		expectError      bool
-		expectHeuristic  bool
+		name            string
+		useFallback     bool
+		modelPath       string
+		expectError     bool
+		expectHeuristic bool
 	}{
 		{"with fallback, invalid model", true, "/nonexistent/model.onnx", false, true},
 		{"without fallback, invalid model", false, "/nonexistent/model.onnx", true, false},

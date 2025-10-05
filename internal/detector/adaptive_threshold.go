@@ -302,6 +302,18 @@ func calculateHistogramBasedThresholds(stats AdaptiveThresholdStats) (float32, f
 		boxThresh -= 0.05
 	}
 
+	// Clamp thresholds to [0,1] to satisfy callers that validate raw outputs
+	if dbThresh < 0 {
+		dbThresh = 0
+	} else if dbThresh > 1 {
+		dbThresh = 1
+	}
+	if boxThresh < 0 {
+		boxThresh = 0
+	} else if boxThresh > 1 {
+		boxThresh = 1
+	}
+
 	// Confidence based on dynamic range and bimodality
 	confidence := stats.DynamicRange * (0.5 + 0.5*stats.BimodalityIndex)
 

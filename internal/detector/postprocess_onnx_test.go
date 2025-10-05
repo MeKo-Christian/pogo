@@ -477,9 +477,9 @@ func createMultiRegionProbabilityMap(width, height int) []float32 {
 
 	// Create 3 distinct high-probability regions
 	regions := []struct{ x1, y1, x2, y2 int }{
-		{5, 5, 15, 10},    // Region 1: top-left
-		{20, 5, 30, 10},   // Region 2: top-right
-		{10, 15, 25, 20},  // Region 3: bottom
+		{5, 5, 15, 10},   // Region 1: top-left
+		{20, 5, 30, 10},  // Region 2: top-right
+		{10, 15, 25, 20}, // Region 3: bottom
 	}
 
 	for _, r := range regions {
@@ -635,12 +635,12 @@ func TestDetectRegions_MultipleRegions(t *testing.T) {
 	config.Morphology.Operation = MorphNone
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -666,12 +666,12 @@ func TestDetectRegions_LargeImage(t *testing.T) {
 	// Larger probability map
 	width, height := 128, 96
 	result := &DetectionResult{
-			ProbabilityMap: createLargeProbabilityMap(width, height),
-			Width:          width,
-			Height:         height,
-			OriginalWidth:  2560,
-			OriginalHeight: 1920,
-		}
+		ProbabilityMap: createLargeProbabilityMap(width, height),
+		Width:          width,
+		Height:         height,
+		OriginalWidth:  2560,
+		OriginalHeight: 1920,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -697,12 +697,12 @@ func TestDetectRegions_SingleRegion(t *testing.T) {
 	}
 
 	result := &DetectionResult{
-			ProbabilityMap: probMap,
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: probMap,
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -729,12 +729,12 @@ func TestDetectRegions_WithHardNMS(t *testing.T) {
 	config.Morphology.Operation = MorphNone
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -755,12 +755,12 @@ func TestDetectRegions_WithSoftNMS_Linear(t *testing.T) {
 	config.Morphology.Operation = MorphNone
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -781,12 +781,12 @@ func TestDetectRegions_WithSoftNMS_Gaussian(t *testing.T) {
 	config.Morphology.Operation = MorphNone
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -806,12 +806,12 @@ func TestDetectRegions_WithAdaptiveNMS_Method(t *testing.T) {
 	config.Morphology.Operation = MorphNone
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -833,12 +833,12 @@ func TestDetectRegions_WithSizeAwareNMS_Method(t *testing.T) {
 	config.Morphology.Operation = MorphNone
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -856,12 +856,12 @@ func TestDetectRegions_WithAdaptiveThresholds_Histogram(t *testing.T) {
 	config.Morphology.Operation = MorphNone
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -879,12 +879,12 @@ func TestDetectRegions_WithAdaptiveThresholds_Dynamic(t *testing.T) {
 	config.Morphology.Operation = MorphNone
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -903,12 +903,12 @@ func TestDetectRegions_WithMorphology_Dilate(t *testing.T) {
 	config.Morphology.Iterations = 1
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -927,12 +927,12 @@ func TestDetectRegions_WithMorphology_Erode(t *testing.T) {
 	config.Morphology.Iterations = 1
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -951,12 +951,12 @@ func TestDetectRegions_WithMorphology_Smooth(t *testing.T) {
 	config.Morphology.Iterations = 1
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -974,12 +974,12 @@ func TestDetectRegions_PolygonMode_Contour(t *testing.T) {
 	config.Morphology.Operation = MorphNone
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
-			Width:          32,
-			Height:         32,
-			OriginalWidth:  640,
-			OriginalHeight: 480,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(32, 32),
+		Width:          32,
+		Height:         32,
+		OriginalWidth:  640,
+		OriginalHeight: 480,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 
@@ -1028,12 +1028,12 @@ func TestDetectRegions_AllFeaturesEnabled_Integration(t *testing.T) {
 	config.Morphology.Iterations = 1
 
 	result := &DetectionResult{
-			ProbabilityMap: createMultiRegionProbabilityMap(64, 64),
-			Width:          64,
-			Height:         64,
-			OriginalWidth:  1280,
-			OriginalHeight: 960,
-		}
+		ProbabilityMap: createMultiRegionProbabilityMap(64, 64),
+		Width:          64,
+		Height:         64,
+		OriginalWidth:  1280,
+		OriginalHeight: 960,
+	}
 
 	regions, err := simulateDetectRegionsLogic(config, result)
 

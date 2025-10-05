@@ -1,13 +1,16 @@
 package pdf
 
 import (
-	"fmt"
-	"image"
-	"os"
-	"strconv"
-	"time"
+    "context"
+    "fmt"
+    "image"
+    "os"
+    "strings"
+    "strconv"
+    "time"
 
-	"github.com/MeKo-Tech/pogo/internal/detector"
+    "github.com/MeKo-Tech/pogo/internal/detector"
+    ibar "github.com/MeKo-Tech/pogo/internal/barcode"
 )
 
 // ProcessorConfig contains configuration for enhanced PDF processing.
@@ -23,7 +26,12 @@ type ProcessorConfig struct {
 	// Enable password handling
 	AllowPasswords bool
 	// Allow password prompts
-	AllowPasswordPrompt bool
+    AllowPasswordPrompt bool
+
+    // Barcodes (optional)
+    EnableBarcodes bool
+    BarcodeTypes   string // comma-separated
+    BarcodeMinSize int
 }
 
 // DefaultProcessorConfig returns the default processor configuration.
@@ -40,12 +48,12 @@ func DefaultProcessorConfig() *ProcessorConfig {
 
 // Processor handles enhanced PDF OCR processing with vector text and password support.
 type Processor struct {
-	detector        *detector.Detector
-	config          *ProcessorConfig
-	analyzer        *PageAnalyzer
-	hybridProcessor *HybridProcessor
-	passwordHandler *PasswordHandler
-	tempFiles       []string // Track temporary files for cleanup
+    detector        *detector.Detector
+    config          *ProcessorConfig
+    analyzer        *PageAnalyzer
+    hybridProcessor *HybridProcessor
+    passwordHandler *PasswordHandler
+    tempFiles       []string // Track temporary files for cleanup
 }
 
 // NewProcessor creates a new PDF processor with the given detector.
@@ -72,14 +80,14 @@ func NewProcessorWithConfig(det *detector.Detector, config *ProcessorConfig) *Pr
 	hybridProcessor := NewHybridProcessor(DefaultHybridConfig())
 	passwordHandler := NewPasswordHandler(config.AllowPasswordPrompt)
 
-	return &Processor{
-		detector:        det,
-		config:          config,
-		analyzer:        analyzer,
-		hybridProcessor: hybridProcessor,
-		passwordHandler: passwordHandler,
-		tempFiles:       make([]string, 0),
-	}
+    return &Processor{
+        detector:        det,
+        config:          config,
+        analyzer:        analyzer,
+        hybridProcessor: hybridProcessor,
+        passwordHandler: passwordHandler,
+        tempFiles:       make([]string, 0),
+    }
 }
 
 // ProcessFile processes a single PDF file and returns enhanced OCR results.
@@ -466,8 +474,8 @@ func (p *Processor) updatePageDimensions(img image.Image, currentWidth, currentH
 
 // performOCRDetection performs OCR detection on a single image.
 func (p *Processor) performOCRDetection(img image.Image, index int) (ImageResult, time.Duration) {
-	detectionStart := time.Now()
-	regions, err := p.detector.DetectRegions(img)
+    detectionStart := time.Now()
+    regions, err := p.detector.DetectRegions(img)
 	if err != nil {
 		// Return empty result on error
 		bounds := img.Bounds()
@@ -481,18 +489,127 @@ func (p *Processor) performOCRDetection(img image.Image, index int) (ImageResult
 	}
 	detectionTime := time.Since(detectionStart)
 
-	avgConfidence := p.calculateAverageConfidence(regions)
+    avgConfidence := p.calculateAverageConfidence(regions)
 
-	bounds := img.Bounds()
-	imageResult := ImageResult{
-		ImageIndex: index,
-		Width:      bounds.Dx(),
-		Height:     bounds.Dy(),
-		Regions:    regions,
-		Confidence: avgConfidence,
-	}
+    bounds := img.Bounds()
+    imageResult := ImageResult{
+        ImageIndex: index,
+        Width:      bounds.Dx(),
+        Height:     bounds.Dy(),
+        Regions:    regions,
+        Confidence: avgConfidence,
+    }
+
+    // Optional barcode detection
+    if p.config.EnableBarcodes {
+        if brs := p.decodeBarcodes(img); len(brs) > 0 {
+            imageResult.Barcodes = brs
+        }
+    }
 
 	return imageResult, detectionTime
+}
+
+// decodeBarcodes runs barcode decoding using the shared internal barcode backend.
+func (p *Processor) decodeBarcodes(img image.Image) []Barcode {
+    be, err := ibar.NewBackend()
+    if err != nil {
+        return nil
+    }
+    // Map types
+    var formats []ibar.Format
+    if strings.TrimSpace(p.config.BarcodeTypes) != "" {
+        parts := strings.Split(p.config.BarcodeTypes, ",")
+        for _, t := range parts {
+            if f, ok := mapFormat(t); ok {
+                formats = append(formats, f)
+            }
+        }
+    }
+    opts := ibar.Options{Formats: formats, TryHarder: false, Multi: true, MinSize: p.config.BarcodeMinSize}
+    rs, err := be.Decode(context.Background(), img, opts)
+    if err != nil || len(rs) == 0 {
+        return nil
+    }
+    out := make([]Barcode, 0, len(rs))
+    for _, r := range rs {
+        b := Barcode{Type: mapFormatToString(r.Type), Value: r.Value, Confidence: r.Confidence}
+        if len(r.Points) > 0 {
+            minX, minY := r.Points[0].X, r.Points[0].Y
+            maxX, maxY := minX, minY
+            for _, p := range r.Points[1:] {
+                if p.X < minX { minX = p.X }
+                if p.Y < minY { minY = p.Y }
+                if p.X > maxX { maxX = p.X }
+                if p.Y > maxY { maxY = p.Y }
+            }
+            b.Box = struct{ X, Y, W, H int }{X: minX, Y: minY, W: maxX - minX + 1, H: maxY - minY + 1}
+        }
+        out = append(out, b)
+    }
+    return out
+}
+
+func mapFormat(s string) (ibar.Format, bool) {
+    switch strings.ToLower(strings.TrimSpace(s)) {
+    case "qr":
+        return ibar.FormatQR, true
+    case "datamatrix", "data-matrix":
+        return ibar.FormatDataMatrix, true
+    case "aztec":
+        return ibar.FormatAztec, true
+    case "pdf417":
+        return ibar.FormatPDF417, true
+    case "code128", "code-128":
+        return ibar.FormatCode128, true
+    case "code39", "code-39":
+        return ibar.FormatCode39, true
+    case "ean8", "ean-8":
+        return ibar.FormatEAN8, true
+    case "ean13", "ean-13":
+        return ibar.FormatEAN13, true
+    case "upca", "upc-a":
+        return ibar.FormatUPCA, true
+    case "upce", "upc-e":
+        return ibar.FormatUPCE, true
+    case "itf", "interleaved2of5", "i2/5":
+        return ibar.FormatITF, true
+    case "codabar":
+        return ibar.FormatCodabar, true
+    default:
+        return 0, false
+    }
+}
+
+func mapFormatToString(f ibar.Format) string {
+    switch f {
+    case ibar.FormatQR:
+        return "qr"
+    case ibar.FormatDataMatrix:
+        return "datamatrix"
+    case ibar.FormatAztec:
+        return "aztec"
+    case ibar.FormatPDF417:
+        return "pdf417"
+    case ibar.FormatCode128:
+        return "code128"
+    case ibar.FormatCode39:
+        return "code39"
+    case ibar.FormatEAN8:
+        return "ean8"
+    case ibar.FormatEAN13:
+        return "ean13"
+    case ibar.FormatUPCA:
+        return "upca"
+    case ibar.FormatUPCE:
+        return "upce"
+    case ibar.FormatITF:
+        return "itf"
+    case ibar.FormatCodabar:
+        return "codabar"
+    default:
+        return "unknown"
+    }
 }
 
 // calculateAverageConfidence calculates the average confidence from detected regions.

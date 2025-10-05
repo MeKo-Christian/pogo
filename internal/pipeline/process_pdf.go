@@ -96,13 +96,14 @@ func (p *Pipeline) processPDFPage(ctx context.Context, pageNum int, images []ima
 			return nil, fmt.Errorf("OCR processing failed for image %d: %w", i, err)
 		}
 
-		imageResult := OCRPDFImageResult{
-			ImageIndex: i,
-			Width:      imgWidth,
-			Height:     imgHeight,
-			Regions:    ocrResult.Regions,
-			Confidence: ocrResult.AvgDetConf,
-		}
+        imageResult := OCRPDFImageResult{
+            ImageIndex: i,
+            Width:      imgWidth,
+            Height:     imgHeight,
+            Regions:    ocrResult.Regions,
+            Barcodes:   ocrResult.Barcodes,
+            Confidence: ocrResult.AvgDetConf,
+        }
 
 		imageResults = append(imageResults, imageResult)
 	}

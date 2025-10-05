@@ -71,6 +71,20 @@ type DetectorConfig struct {
 
 	// Adaptive thresholds
 	AdaptiveThresholds AdaptiveThresholdsConfig `mapstructure:"adaptive_thresholds" yaml:"adaptive_thresholds" json:"adaptive_thresholds"`
+
+	// Multi-scale detection
+	MultiScale MultiScaleConfig `mapstructure:"multi_scale" yaml:"multi_scale" json:"multi_scale"`
+}
+
+// MultiScaleConfig contains multi-scale detection settings.
+type MultiScaleConfig struct {
+	Enabled          bool      `mapstructure:"enabled" yaml:"enabled" json:"enabled"`
+	Scales           []float64 `mapstructure:"scales" yaml:"scales" json:"scales"`
+	MergeIoU         float64   `mapstructure:"merge_iou" yaml:"merge_iou" json:"merge_iou"`
+	Adaptive         bool      `mapstructure:"adaptive" yaml:"adaptive" json:"adaptive"`
+	MaxLevels        int       `mapstructure:"max_levels" yaml:"max_levels" json:"max_levels"`
+	MinSide          int       `mapstructure:"min_side" yaml:"min_side" json:"min_side"`
+	IncrementalMerge bool      `mapstructure:"incremental_merge" yaml:"incremental_merge" json:"incremental_merge"`
 }
 
 // RecognizerConfig contains text recognition settings.
@@ -149,7 +163,12 @@ type FeatureConfig struct {
 	RectificationModelPath string  `mapstructure:"rectification_model_path" yaml:"rectification_model_path" json:"rectification_model_path"`
 	RectificationThreshold float64 `mapstructure:"rectification_threshold" yaml:"rectification_threshold" json:"rectification_threshold"`
 	RectificationHeight    int     `mapstructure:"rectification_height" yaml:"rectification_height" json:"rectification_height"`
-	RectificationDebugDir  string  `mapstructure:"rectification_debug_dir" yaml:"rectification_debug_dir" json:"rectification_debug_dir"`
+    RectificationDebugDir  string  `mapstructure:"rectification_debug_dir" yaml:"rectification_debug_dir" json:"rectification_debug_dir"`
+
+    // Barcode detection (optional)
+    BarcodeEnabled bool   `mapstructure:"barcode_enabled" yaml:"barcode_enabled" json:"barcode_enabled"`
+    BarcodeTypes   string `mapstructure:"barcode_types" yaml:"barcode_types" json:"barcode_types"`
+    BarcodeMinSize int    `mapstructure:"barcode_min_size" yaml:"barcode_min_size" json:"barcode_min_size"`
 }
 
 // GPUConfig contains GPU acceleration settings.

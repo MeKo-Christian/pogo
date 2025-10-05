@@ -25,10 +25,11 @@ type OCRRegionResult struct {
 
 // OCRImageResult is the per-image aggregated OCR output.
 type OCRImageResult struct {
-	Width       int               `json:"width"`
-	Height      int               `json:"height"`
-	Regions     []OCRRegionResult `json:"regions"`
-	AvgDetConf  float64           `json:"avg_det_confidence"`
+    Width       int               `json:"width"`
+    Height      int               `json:"height"`
+    Regions     []OCRRegionResult `json:"regions"`
+    Barcodes    []BarcodeResult   `json:"barcodes,omitempty"`
+    AvgDetConf  float64           `json:"avg_det_confidence"`
 	Orientation struct {
 		Angle      int     `json:"angle"`
 		Confidence float64 `json:"confidence"`
@@ -65,9 +66,19 @@ type OCRPDFPageResult struct {
 
 // OCRPDFImageResult represents OCR results for a single image extracted from a PDF page.
 type OCRPDFImageResult struct {
-	ImageIndex int               `json:"image_index"`
-	Width      int               `json:"width"`
-	Height     int               `json:"height"`
-	Regions    []OCRRegionResult `json:"regions"`
-	Confidence float64           `json:"confidence"`
+    ImageIndex int               `json:"image_index"`
+    Width      int               `json:"width"`
+    Height     int               `json:"height"`
+    Regions    []OCRRegionResult `json:"regions"`
+    Barcodes   []BarcodeResult   `json:"barcodes,omitempty"`
+    Confidence float64           `json:"confidence"`
+}
+
+// BarcodeResult represents a decoded barcode in image coordinates.
+type BarcodeResult struct {
+    Type       string              `json:"type"`
+    Value      string              `json:"value"`
+    Confidence float64             `json:"confidence"`
+    Box        struct{ X, Y, W, H int } `json:"box"`
+    Points     []struct{ X, Y int } `json:"points,omitempty"`
 }

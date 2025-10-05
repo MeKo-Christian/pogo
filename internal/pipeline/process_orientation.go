@@ -134,7 +134,7 @@ func (p *Pipeline) processImagesWithOrientation(ctx context.Context, originalIma
 
 // processSingleImage processes a single image through the full OCR pipeline.
 func (p *Pipeline) processSingleImage(ctx context.Context, originalImg, workingImg image.Image,
-	orientationResult orientation.Result,
+    orientationResult orientation.Result,
 ) (*OCRImageResult, error) {
 	// Apply rectification to working image
 	rectifiedImg, err := p.applyRectification(ctx, workingImg)
@@ -148,15 +148,31 @@ func (p *Pipeline) processSingleImage(ctx context.Context, originalImg, workingI
 		return nil, err
 	}
 
-	// Perform recognition
-	recResults, recNs, err := p.performRecognition(ctx, rectifiedImg, regions)
-	if err != nil {
-		return nil, err
-	}
+    // Perform recognition
+    recResults, recNs, err := p.performRecognition(ctx, rectifiedImg, regions)
+    if err != nil {
+        return nil, err
+    }
 
-	// Build result with orientation info
-	totalNs := detNs + recNs // Simplified total for batch processing
-	appliedAngle := orientationResult.Angle
-	appliedConf := orientationResult.Confidence
-	return p.buildImageResult(originalImg, regions, recResults, appliedAngle, appliedConf, detNs, recNs, totalNs), nil
+    // Optional barcode detection on working (rectified) image
+    var barcodes []BarcodeResult
+    var _barNs int64
+    if p.barcodeDecoder != nil && p.cfg.Barcode.Enabled {
+        // Use original bounds and detected orientation for coordinate mapping back
+        ob := originalImg.Bounds()
+        bs, ns, berr := p.barcodeDecoder.Decode(ctx, rectifiedImg, p.cfg.Barcode, orientationResult.Angle, ob.Dx(), ob.Dy())
+        _ = berr // silent if decoder absent/unavailable
+        barcodes, _barNs = bs, ns
+        _ = _barNs
+    }
+
+    // Build result with orientation info
+    totalNs := detNs + recNs // Simplified total for batch processing
+    appliedAngle := orientationResult.Angle
+    appliedConf := orientationResult.Confidence
+    res := p.buildImageResult(originalImg, regions, recResults, appliedAngle, appliedConf, detNs, recNs, totalNs)
+    if len(barcodes) > 0 {
+        res.Barcodes = barcodes
+    }
+    return res, nil
 }

@@ -39,6 +39,9 @@ type Config struct {
 
 	// Adaptive threshold configuration
 	AdaptiveThresholds AdaptiveThresholdConfig // Adaptive threshold calculation
+
+	// Multi-scale inference configuration
+	MultiScale MultiScaleConfig
 }
 
 // DefaultConfig returns a default detector configuration.
@@ -71,6 +74,9 @@ func DefaultConfig() Config {
 
 		// Adaptive threshold defaults
 		AdaptiveThresholds: DefaultAdaptiveThresholdConfig(),
+
+		// Multi-scale defaults
+		MultiScale: DefaultMultiScaleConfig(),
 	}
 }
 
@@ -121,4 +127,29 @@ func validateModelInfo(modelPath string) (onnxruntime_go.InputOutputInfo, onnxru
 	}
 
 	return inputInfo, outputInfo, nil
+}
+
+// MultiScaleConfig controls optional multi-scale detection.
+type MultiScaleConfig struct {
+	Enabled   bool      // Enable multi-scale inference
+	Scales    []float64 // Relative scales (w.r.t original), e.g. [1.0, 0.75, 0.5]
+	MergeIoU  float64   // IoU used for duplicate removal during merge (defaults to NMSThreshold if <=0)
+	Adaptive  bool      // Enable adaptive scale generation based on image size
+	MaxLevels int       // Maximum number of pyramid levels (including 1.0) when adaptive
+	MinSide   int       // Stop generating when min(image side * scale) <= MinSide
+	// Memory/merge behavior
+	IncrementalMerge bool // Merge results after each scale to bound retained memory
+}
+
+// DefaultMultiScaleConfig returns disabled multi-scale with common downscales.
+func DefaultMultiScaleConfig() MultiScaleConfig {
+	return MultiScaleConfig{
+		Enabled:          false,
+		Scales:           []float64{1.0, 0.75, 0.5},
+		MergeIoU:         0.3,
+		Adaptive:         false,
+		MaxLevels:        3,
+		MinSide:          320,
+		IncrementalMerge: true,
+	}
 }

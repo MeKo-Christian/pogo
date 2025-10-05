@@ -18,6 +18,12 @@ type DetectedRegion struct {
 // PostProcessOptions controls optional behaviors in DB post-processing.
 type PostProcessOptions struct {
 	UseMinAreaRect bool
+	// Confidence calculation and calibration
+	ConfidenceMethod string  // "mean" (default), "max", or "mean_var"
+	CalibrationGamma float64 // >0, 1.0 means no change; >1 down-weights, <1 up-weights
+	// Adaptive confidence thresholding
+	AdaptiveConfidence      bool    // reduce threshold for very small regions
+	AdaptiveConfidenceScale float64 // max fractional reduction (0..1), default ~0.2
 }
 
 // PostProcessDB executes a simplified DB-style post-process:
@@ -34,11 +40,8 @@ func PostProcessDB(prob []float32, w, h int, dbThresh, boxMinConf float32) []Det
 	defer mempool.PutBool(mask)
 
 	comps, labels := connectedComponents(mask, prob, w, h)
-	// labels is a slice of ints that will be collected by GC, no pooling needed
-	_ = labels
-
 	// Default behavior: use minimum-area rectangle for polygons
-	regions := regionsFromComponents(comps, labels, w, h, true)
+	regions := regionsFromComponents(comps, labels, w, h, PostProcessOptions{UseMinAreaRect: true})
 	regions = filterRegions(regions, float64(boxMinConf))
 	return regions
 }
@@ -66,8 +69,13 @@ func PostProcessDBWithOptions(prob []float32, w, h int, dbThresh, boxMinConf flo
 	defer mempool.PutBool(mask)
 
 	comps, labels := connectedComponents(mask, prob, w, h)
-	regions := regionsFromComponents(comps, labels, w, h, opts.UseMinAreaRect)
-	regions = filterRegions(regions, float64(boxMinConf))
+	regions := regionsFromComponents(comps, labels, w, h, opts)
+	// Apply (optional) adaptive confidence thresholding
+	if opts.AdaptiveConfidence {
+		regions = adaptiveFilterRegions(regions, float64(boxMinConf), w, h, opts)
+	} else {
+		regions = filterRegions(regions, float64(boxMinConf))
+	}
 	return regions
 }
 
@@ -102,4 +110,49 @@ func ScaleRegionsToOriginal(regions []DetectedRegion, mapW, mapH, origW, origH i
 		out[i] = DetectedRegion{Polygon: scaledPoly, Box: sb, Confidence: r.Confidence}
 	}
 	return out
+}
+
+// adaptiveFilterRegions applies area-aware threshold adjustments to favor small regions.
+func adaptiveFilterRegions(regions []DetectedRegion, baseThreshold float64, mapW, mapH int, opts PostProcessOptions) []DetectedRegion {
+	scale := opts.AdaptiveConfidenceScale
+	if scale <= 0 {
+		scale = 0.2
+	}
+	if scale > 1 {
+		scale = 1
+	}
+	totalArea := float64(mapW * mapH)
+	filtered := make([]DetectedRegion, 0, len(regions))
+	for _, r := range regions {
+		// Compute normalized area of region's box
+		bw := r.Box.MaxX - r.Box.MinX
+		bh := r.Box.MaxY - r.Box.MinY
+		if bw < 0 || bh < 0 {
+			continue
+		}
+		area := float64(bw * bh)
+		if area < 0 {
+			continue
+		}
+		normArea := 0.0
+		if totalArea > 0 {
+			normArea = area / totalArea
+		}
+		// Reduce threshold up to "scale" for very small regions (<1% area), linearly
+		reduction := 0.0
+		smallRef := 0.01
+		if normArea < smallRef {
+			reduction = scale * (1 - (normArea / smallRef))
+			if reduction > scale {
+				reduction = scale
+			} else if reduction < 0 {
+				reduction = 0
+			}
+		}
+		thr := baseThreshold * (1 - reduction)
+		if r.Confidence >= thr {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
 }

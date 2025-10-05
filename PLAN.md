@@ -95,31 +95,84 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 3.1 Multi-Scale & Advanced Detection
 
-- [ ] Multi-scale inference + result merging (IoU/IoB based):
-  - [ ] Image pyramid processing
-  - [ ] Scale-aware result fusion
-  - [ ] IoU-based duplicate removal
-- [ ] Optional image pyramid for small text sensitivity:
-  - [ ] Pyramid level configuration
-  - [ ] Adaptive pyramid scaling
-  - [ ] Memory-efficient pyramid processing
+- [x] Multi-scale inference + result merging (IoU/IoB based):
+  - [x] Image pyramid processing
+  - [x] Scale-aware result fusion
+  - [x] IoU-based duplicate removal
+- [x] Optional image pyramid for small text sensitivity:
+  - [x] Pyramid level configuration
+  - [x] Adaptive pyramid scaling
+  - [x] Memory-efficient pyramid processing
 
 ### 3.2 Detection Enhancement & Testing
 
-- [ ] Alternative confidence metrics:
-  - [ ] Multiple confidence calculation methods
-  - [ ] Confidence calibration
-  - [ ] Adaptive confidence thresholding
+- [x] Alternative confidence metrics:
+  - [x] Multiple confidence calculation methods
+  - [x] Confidence calibration
+  - [x] Adaptive confidence thresholding
 - [ ] Robustness tests: fuzz prob maps, extreme aspect ratios, empty outputs:
-  - [ ] Fuzzing test framework
-  - [ ] Edge case validation
+  - [x] Fuzzing test framework
+  - [x] Edge case validation
   - [ ] Stress testing for extreme inputs
 
 **Success Metrics**: Improved small text detection, robust handling of edge cases, configurable detection strategies
 
 ---
 
-## Phase 4: Advanced Recognition & Language Features (Week 8)
+## Phase 4: Barcode Detection & Integration (Week 8)
+
+### 4.1 Symbologies & Libraries
+
+- [ ] Decision: Use pure Go ZXing port `gozxing` (github.com/makiuchi-d/gozxing) as the initial/default backend; barcode is an edge-case feature so prioritize portability and simple builds (no CGO).
+- [ ] Supported symbologies (as provided by `gozxing`): QR, Data Matrix, Aztec, PDF417, Code128, Code39, EAN-8/13, UPC-A/E, ITF, Codabar
+- [ ] Add dependency and wrapper:
+  - [ ] Introduce `barcode` package with a small adapter over `gozxing`
+  - [ ] Map options: requested formats, try-harder, multi-detect, ROI
+  - [ ] Normalize results: type, value, points/bbox, rotation (if available), confidence (-1 if unavailable)
+- [ ] Keep interface pluggable for future backends (zxing-cpp/zbar) but defer implementation
+
+### 4.2 Image Pipeline Integration
+
+- [ ] Optional barcode stage in image processing:
+  - [ ] Flags: --barcodes, --barcode-types, --barcode-min-size
+  - [ ] Multi-scale/adaptive sampling for tiny/low-res codes
+  - [ ] Return bbox, rotation, type, value, confidence
+- [ ] Debug overlays for detected barcodes
+
+### 4.3 PDF Pipeline Integration
+
+- [ ] Detect barcodes on rendered pages:
+  - [ ] Page-level toggle and type filter
+  - [ ] DPI heuristics (e.g., 150/300) for robust decoding
+  - [ ] Map results to PDF coordinate space
+- [ ] Batch PDFs with page-range and concurrency controls
+
+### 4.4 CLI & Server APIs
+
+- [ ] CLI:
+  - [ ] Add flags to image/pdf commands (see 4.2)
+  - [ ] Embed barcodes array alongside texts in outputs
+- [ ] Server:
+  - [ ] Accept barcode flags in multipart/form fields
+  - [ ] Extend response schema and OpenAPI docs
+
+### 4.5 Testing & Datasets
+
+- [ ] Unit tests with fixtures for each symbology
+- [ ] Golden tests on mixed-content images/PDFs
+- [ ] Fuzz tests for noisy/rotated/partial barcodes
+- [ ] Performance tests for batches and high-DPI PDFs
+
+### 4.6 Output Schema & Docs
+
+- [ ] Extend JSON/CSV with fields: type, value, confidence, bbox, page, rotation
+- [ ] Document supported symbologies, caveats, and best practices
+
+**Success Metrics**: 95%+ decode rate on common symbologies, robust mixed-content handling, <50ms per barcode on 1080p images
+
+---
+
+## Phase 5: Advanced Recognition & Language Features (Week 9)
 
 ### 4.1 Advanced Recognition Algorithms
 
@@ -145,7 +198,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 5: GPU & Provider Support (Week 9)
+## Phase 6: GPU & Provider Support (Week 10)
 
 ### 5.1 Multi-Provider GPU Support
 
@@ -172,7 +225,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 6: Advanced PDF Processing (Week 10)
+## Phase 7: Advanced PDF Processing (Week 11)
 
 ### 6.1 Enhanced PDF Capabilities
 
@@ -210,7 +263,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 7: Server & API Enhancements (Week 11)
+## Phase 8: Server & API Enhancements (Week 12)
 
 ### 7.1 API Endpoint Extensions
 
@@ -251,7 +304,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 8: CLI & Configuration Improvements (Week 12)
+## Phase 9: CLI & Configuration Improvements (Week 13)
 
 ### 8.1 Enhanced CLI Features
 
@@ -279,7 +332,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 9: Pipeline Enhancements (Week 13)
+## Phase 10: Pipeline Enhancements (Week 14)
 
 ### 9.1 Processing Intelligence
 
@@ -309,7 +362,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 11: Orientation & Processing Improvements (Week 14)
+## Phase 12: Orientation & Processing Improvements (Week 15)
 
 ### 11.1 Orientation Performance Optimization
 
@@ -344,7 +397,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 12: Quality Assurance & CI/CD (Week 15)
+## Phase 13: Quality Assurance & CI/CD (Week 16)
 
 ### 12.1 Advanced Testing & Validation
 
@@ -389,7 +442,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 13: Deployment & Distribution (Week 16)
+## Phase 14: Deployment & Distribution (Week 17)
 
 ### 13.1 Release Automation
 
@@ -433,7 +486,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 14: Advanced Testing (Week 17)
+## Phase 15: Advanced Testing (Week 18)
 
 ### 14.1 Integration Test Completion
 
@@ -462,7 +515,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 15: Documentation & Community (Week 18)
+## Phase 16: Documentation & Community (Week 19)
 
 ### 15.1 Documentation Completion
 
@@ -505,7 +558,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 16: Enterprise Features (Week 19-20)
+## Phase 17: Enterprise Features (Week 20-21)
 
 ### 16.1 Library-First Architecture
 
@@ -545,7 +598,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 17: Advanced Visualization (Week 21)
+## Phase 18: Advanced Visualization (Week 22)
 
 ### 17.1 Rich Visualization System
 
@@ -577,7 +630,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 18: Cloud Native Features (Week 22)
+## Phase 19: Cloud Native Features (Week 23)
 
 ### 18.1 Kubernetes Integration
 

@@ -3,6 +3,7 @@ package detector
 import (
 	"testing"
 
+	"github.com/MeKo-Tech/pogo/internal/mempool"
 	"github.com/MeKo-Tech/pogo/internal/utils"
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
@@ -56,7 +57,7 @@ func TestPostProcessDB_BinarizationProperty(t *testing.T) {
 func TestPostProcessDB_OutputNonIncreasing(t *testing.T) {
 	properties := gopter.NewProperties(nil)
 
-	properties.Property("filtering reduces or maintains region count", prop.ForAll(
+	properties.Property("higher db threshold reduces or maintains foreground area", prop.ForAll(
 		func(dims [2]int, threshold1, threshold2 float32) bool {
 			width, height := dims[0], dims[1]
 
@@ -78,11 +79,21 @@ func TestPostProcessDB_OutputNonIncreasing(t *testing.T) {
 				threshold1, threshold2 = threshold2, threshold1
 			}
 
-			regions1 := PostProcessDB(probMap, width, height, threshold1, 0.1)
-			regions2 := PostProcessDB(probMap, width, height, threshold2, 0.1)
-
-			// Higher threshold should produce fewer or equal regions
-			return len(regions2) <= len(regions1)
+			// Compare total number of true pixels in binarized masks (monotonic)
+			m1 := binarize(probMap, width, height, threshold1)
+			defer mempool.PutBool(m1)
+			m2 := binarize(probMap, width, height, threshold2)
+			defer mempool.PutBool(m2)
+			c1, c2 := 0, 0
+			for i := range m1 {
+				if m1[i] {
+					c1++
+				}
+				if m2[i] {
+					c2++
+				}
+			}
+			return c2 <= c1
 		},
 		genValidDimensions(),
 		gen.Float32Range(0.1, 0.4),
@@ -174,7 +185,7 @@ func TestPostProcessDB_ValidBoxes(t *testing.T) {
 func TestScaleRegionsToOriginal_ProportionalScaling(t *testing.T) {
 	properties := gopter.NewProperties(nil)
 
-	properties.Property("scaling maintains box aspect ratios", prop.ForAll(
+	properties.Property("scaling transforms aspect by axis scales", prop.ForAll(
 		func(mapW, mapH, origW, origH int) bool {
 			if mapW <= 0 || mapH <= 0 || origW <= 0 || origH <= 0 {
 				return true // skip invalid inputs
@@ -193,13 +204,13 @@ func TestScaleRegionsToOriginal_ProportionalScaling(t *testing.T) {
 				return false
 			}
 
-			// Check that aspect ratio is approximately preserved
+			// Aspect scales by (sx/sy), where sx=origW/mapW and sy=origH/mapH
 			origAspect := float64(region.Box.MaxX-region.Box.MinX) / float64(region.Box.MaxY-region.Box.MinY)
 			scaledAspect := (scaled[0].Box.MaxX - scaled[0].Box.MinX) / (scaled[0].Box.MaxY - scaled[0].Box.MinY)
-
-			// Should be equal (within floating point tolerance)
-			ratio := origAspect / scaledAspect
-			return ratio > 0.99 && ratio < 1.01
+			expectedScale := (float64(origW) / float64(mapW)) / (float64(origH) / float64(mapH))
+			// Accept small floating slop
+			ratio := scaledAspect / (origAspect * expectedScale)
+			return ratio > 0.98 && ratio < 1.02
 		},
 		gen.IntRange(32, 256), // mapW
 		gen.IntRange(32, 256), // mapH

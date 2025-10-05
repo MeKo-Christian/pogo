@@ -218,6 +218,30 @@ func TestBuilder_ModelPathOverrideAfterModelsDir(t *testing.T) {
 	assert.NotEqual(t, originalRecognizerPath, cfg.Recognizer.ModelPath)
 }
 
+func TestBuilder_MultiScale_FixedAndIoU(t *testing.T) {
+	b := NewBuilder()
+	b.WithDetectorMultiScale([]float64{1.0, 0.8, 0.6}).
+		WithDetectorMultiScaleIoU(0.35)
+
+	cfg := b.Config()
+	if assert.True(t, cfg.Detector.MultiScale.Enabled) {
+		assert.ElementsMatch(t, []float64{1.0, 0.8, 0.6}, cfg.Detector.MultiScale.Scales)
+		assert.InDelta(t, 0.35, cfg.Detector.MultiScale.MergeIoU, 1e-9)
+	}
+}
+
+func TestBuilder_MultiScale_AdaptiveAndIncremental(t *testing.T) {
+	b := NewBuilder()
+	b.WithDetectorMultiScaleAdaptive(true, 4, 300).
+		WithDetectorMultiScaleIncrementalMerge(false)
+
+	cfg := b.Config()
+	assert.True(t, cfg.Detector.MultiScale.Adaptive)
+	assert.Equal(t, 4, cfg.Detector.MultiScale.MaxLevels)
+	assert.Equal(t, 300, cfg.Detector.MultiScale.MinSide)
+	assert.False(t, cfg.Detector.MultiScale.IncrementalMerge)
+}
+
 func TestBuilder_WithModelsDirOverridesExplicitPaths(t *testing.T) {
 	// Test that WithModelsDir overrides explicitly set model paths due to UpdateModelPath call
 	b := NewBuilder()

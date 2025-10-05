@@ -1117,10 +1117,10 @@ func TestConfigIntegration_OrientationWithOtherFeatures(t *testing.T) {
 // TestOrientationConfig_EdgeCaseThresholds tests edge case threshold values.
 func TestOrientationConfig_EdgeCaseThresholds(t *testing.T) {
 	tests := []struct {
-		name        string
-		orientThresh float64
+		name           string
+		orientThresh   float64
 		textlineThresh float64
-		rectifyThresh float64
+		rectifyThresh  float64
 	}{
 		{"all minimum", 0.0, 0.0, 0.0},
 		{"all maximum", 1.0, 1.0, 1.0},

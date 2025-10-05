@@ -65,6 +65,10 @@ func DefaultConfig() Config {
 			RectificationEnabled:   false,
 			RectificationThreshold: 0.5,
 			RectificationHeight:    1024,
+			// Barcode defaults
+			BarcodeEnabled: false,
+			BarcodeTypes:   "",
+			BarcodeMinSize: 0,
 		},
 		GPU: GPUConfig{
 			Enabled:     false,
@@ -109,6 +113,17 @@ func defaultDetectorConfig() DetectorConfig {
 			MaxDbThresh:  cfg.AdaptiveThresholds.MaxDbThresh,
 			MinBoxThresh: cfg.AdaptiveThresholds.MinBoxThresh,
 			MaxBoxThresh: cfg.AdaptiveThresholds.MaxBoxThresh,
+		},
+
+		// Multi-scale defaults
+		MultiScale: MultiScaleConfig{
+			Enabled:          cfg.MultiScale.Enabled,
+			Scales:           cfg.MultiScale.Scales,
+			MergeIoU:         cfg.MultiScale.MergeIoU,
+			Adaptive:         cfg.MultiScale.Adaptive,
+			MaxLevels:        cfg.MultiScale.MaxLevels,
+			MinSide:          cfg.MultiScale.MinSide,
+			IncrementalMerge: cfg.MultiScale.IncrementalMerge,
 		},
 	}
 }
@@ -172,6 +187,19 @@ func (c *Config) validateThresholds() error {
 	if err := validateThreshold(c.Pipeline.Detector.NMSThreshold, "detector.nms_threshold"); err != nil {
 		return err
 	}
+	// Multi-scale merge IoU (optional; only validate if >0)
+	if c.Pipeline.Detector.MultiScale.MergeIoU > 0 {
+		if err := validateThreshold(c.Pipeline.Detector.MultiScale.MergeIoU, "detector.multi_scale.merge_iou"); err != nil {
+			return err
+		}
+	}
+	// Validate Multi-scale integers if adaptive enabled
+	if c.Pipeline.Detector.MultiScale.MaxLevels < 0 {
+		return fmt.Errorf("invalid detector.multi_scale.max_levels: %d (must be >= 0)", c.Pipeline.Detector.MultiScale.MaxLevels)
+	}
+	if c.Pipeline.Detector.MultiScale.MinSide < 0 {
+		return fmt.Errorf("invalid detector.multi_scale.min_side: %d (must be >= 0)", c.Pipeline.Detector.MultiScale.MinSide)
+	}
 	if err := validateThreshold(c.Pipeline.Detector.AdaptiveNMSScale, "detector.adaptive_nms_scale"); err != nil {
 		return err
 	}
@@ -220,6 +248,11 @@ func (c *Config) validatePositiveIntegers() error {
 	if c.Pipeline.Detector.MaxRegionSize < c.Pipeline.Detector.MinRegionSize {
 		return fmt.Errorf("detector max region size (%d) must be >= min region size (%d)",
 			c.Pipeline.Detector.MaxRegionSize, c.Pipeline.Detector.MinRegionSize)
+	}
+
+	// Barcode size cannot be negative
+	if c.Features.BarcodeMinSize < 0 {
+		return fmt.Errorf("invalid barcode_min_size: %d (must be >= 0)", c.Features.BarcodeMinSize)
 	}
 
 	return nil
@@ -272,18 +305,41 @@ func (c *Config) Validate() error {
 
 // ToPipelineConfig converts the config to the internal pipeline configuration format.
 func (c *Config) ToPipelineConfig() pipeline.Config {
-	return pipeline.Config{
-		ModelsDir:           c.ModelsDir,
-		EnableOrientation:   c.Features.OrientationEnabled,
-		Orientation:         c.toOrientationConfig(),
-		TextLineOrientation: c.toTextLineOrientationConfig(),
-		Rectification:       c.toRectificationConfig(),
-		Detector:            c.toDetectorConfig(),
-		Recognizer:          c.toRecognizerConfig(),
-		WarmupIterations:    c.Pipeline.WarmupIterations,
-		Parallel:            c.toParallelConfig(),
-		Resource:            c.toResourceConfig(),
-	}
+    return pipeline.Config{
+        ModelsDir:           c.ModelsDir,
+        EnableOrientation:   c.Features.OrientationEnabled,
+        Orientation:         c.toOrientationConfig(),
+        TextLineOrientation: c.toTextLineOrientationConfig(),
+        Rectification:       c.toRectificationConfig(),
+        Detector:            c.toDetectorConfig(),
+        Recognizer:          c.toRecognizerConfig(),
+        WarmupIterations:    c.Pipeline.WarmupIterations,
+        Parallel:            c.toParallelConfig(),
+        Resource:            c.toResourceConfig(),
+        Barcode:             c.toBarcodeConfig(),
+    }
+}
+
+// toBarcodeConfig converts feature flags to pipeline.BarcodeConfig.
+func (c *Config) toBarcodeConfig() pipeline.BarcodeConfig {
+    bc := pipeline.DefaultBarcodeConfig()
+    bc.Enabled = c.Features.BarcodeEnabled
+    // Parse types as comma-separated
+    if strings.TrimSpace(c.Features.BarcodeTypes) != "" {
+        parts := strings.Split(c.Features.BarcodeTypes, ",")
+        cleaned := make([]string, 0, len(parts))
+        for _, p := range parts {
+            p = strings.TrimSpace(p)
+            if p != "" {
+                cleaned = append(cleaned, p)
+            }
+        }
+        bc.Types = cleaned
+    }
+    if c.Features.BarcodeMinSize > 0 {
+        bc.MinSize = c.Features.BarcodeMinSize
+    }
+    return bc
 }
 
 // toOrientationConfig converts to orientation.Config.
@@ -350,6 +406,23 @@ func (c *Config) toDetectorConfig() detector.Config {
 
 	// Adaptive thresholds
 	cfg.AdaptiveThresholds = parseAdaptiveThresholdsConfig(c.Pipeline.Detector.AdaptiveThresholds)
+
+	// Multi-scale
+	cfg.MultiScale.Enabled = c.Pipeline.Detector.MultiScale.Enabled
+	if len(c.Pipeline.Detector.MultiScale.Scales) > 0 {
+		cfg.MultiScale.Scales = c.Pipeline.Detector.MultiScale.Scales
+	}
+	if c.Pipeline.Detector.MultiScale.MergeIoU > 0 {
+		cfg.MultiScale.MergeIoU = c.Pipeline.Detector.MultiScale.MergeIoU
+	}
+	cfg.MultiScale.Adaptive = c.Pipeline.Detector.MultiScale.Adaptive
+	if c.Pipeline.Detector.MultiScale.MaxLevels > 0 {
+		cfg.MultiScale.MaxLevels = c.Pipeline.Detector.MultiScale.MaxLevels
+	}
+	if c.Pipeline.Detector.MultiScale.MinSide > 0 {
+		cfg.MultiScale.MinSide = c.Pipeline.Detector.MultiScale.MinSide
+	}
+	cfg.MultiScale.IncrementalMerge = c.Pipeline.Detector.MultiScale.IncrementalMerge
 
 	return cfg
 }

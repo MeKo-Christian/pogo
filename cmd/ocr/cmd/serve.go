@@ -129,6 +129,36 @@ Examples:
 			minDetConf, _ = cmd.Flags().GetFloat64("min-det-conf")
 		}
 
+		// Multi-scale detection options
+		msEnabled := cfg.Pipeline.Detector.MultiScale.Enabled
+		if cmd.Flags().Changed("det-multiscale") {
+			msEnabled, _ = cmd.Flags().GetBool("det-multiscale")
+		}
+		msScales := cfg.Pipeline.Detector.MultiScale.Scales
+		if cmd.Flags().Changed("det-scales") {
+			msScales, _ = cmd.Flags().GetFloat64Slice("det-scales")
+		}
+		msMergeIoU := cfg.Pipeline.Detector.MultiScale.MergeIoU
+		if cmd.Flags().Changed("det-merge-iou") {
+			msMergeIoU, _ = cmd.Flags().GetFloat64("det-merge-iou")
+		}
+		msAdaptive := cfg.Pipeline.Detector.MultiScale.Adaptive
+		if cmd.Flags().Changed("det-ms-adaptive") {
+			msAdaptive, _ = cmd.Flags().GetBool("det-ms-adaptive")
+		}
+		msMaxLevels := cfg.Pipeline.Detector.MultiScale.MaxLevels
+		if cmd.Flags().Changed("det-ms-max-levels") {
+			msMaxLevels, _ = cmd.Flags().GetInt("det-ms-max-levels")
+		}
+		msMinSide := cfg.Pipeline.Detector.MultiScale.MinSide
+		if cmd.Flags().Changed("det-ms-min-side") {
+			msMinSide, _ = cmd.Flags().GetInt("det-ms-min-side")
+		}
+		msIncr := cfg.Pipeline.Detector.MultiScale.IncrementalMerge
+		if cmd.Flags().Changed("det-ms-incremental-merge") {
+			msIncr, _ = cmd.Flags().GetBool("det-ms-incremental-merge")
+		}
+
 		orientEnable := cfg.Features.OrientationEnabled
 		if cmd.Flags().Changed("detect-orientation") {
 			orientEnable, _ = cmd.Flags().GetBool("detect-orientation")
@@ -172,6 +202,27 @@ Examples:
 		pCfg := pipeline.DefaultConfig()
 		pCfg.ModelsDir = cfg.ModelsDir
 		pCfg.Recognizer.Language = language
+		// Barcode config from flags/env
+		if cmd.Flags().Changed("barcodes") || cmd.Flags().Changed("barcode-types") || cmd.Flags().Changed("barcode-min-size") || cfg.Features.BarcodeEnabled || cfg.Features.BarcodeTypes != "" || cfg.Features.BarcodeMinSize > 0 {
+			pCfg.Barcode.Enabled = cfg.Features.BarcodeEnabled
+			if cmd.Flags().Changed("barcodes") {
+				pCfg.Barcode.Enabled, _ = cmd.Flags().GetBool("barcodes")
+			}
+			var typesCSV string
+			if cmd.Flags().Changed("barcode-types") {
+				typesCSV, _ = cmd.Flags().GetString("barcode-types")
+			} else {
+				typesCSV = cfg.Features.BarcodeTypes
+			}
+			if strings.TrimSpace(typesCSV) != "" {
+				pCfg.Barcode.Types = strings.Split(typesCSV, ",")
+			}
+			if cmd.Flags().Changed("barcode-min-size") {
+				pCfg.Barcode.MinSize, _ = cmd.Flags().GetInt("barcode-min-size")
+			} else if cfg.Features.BarcodeMinSize > 0 {
+				pCfg.Barcode.MinSize = cfg.Features.BarcodeMinSize
+			}
+		}
 
 		// Allow polygon mode selection
 		polyMode := cfg.Pipeline.Detector.PolygonMode
@@ -197,6 +248,22 @@ Examples:
 		if minDetConf > 0 {
 			pCfg.Detector.DbBoxThresh = float32(minDetConf)
 		}
+		// Apply multi-scale detection configuration
+		pCfg.Detector.MultiScale.Enabled = msEnabled
+		if len(msScales) > 0 {
+			pCfg.Detector.MultiScale.Scales = msScales
+		}
+		if msMergeIoU > 0 {
+			pCfg.Detector.MultiScale.MergeIoU = msMergeIoU
+		}
+		pCfg.Detector.MultiScale.Adaptive = msAdaptive
+		if msMaxLevels > 0 {
+			pCfg.Detector.MultiScale.MaxLevels = msMaxLevels
+		}
+		if msMinSide > 0 {
+			pCfg.Detector.MultiScale.MinSide = msMinSide
+		}
+		pCfg.Detector.MultiScale.IncrementalMerge = msIncr
 		pCfg.Orientation.Enabled = orientEnable
 		if orientThresh > 0 {
 			pCfg.Orientation.ConfidenceThreshold = orientThresh
@@ -312,10 +379,40 @@ func init() {
 	serveCmd.Flags().String("overlay-poly-color", "#00FF00", "overlay polygon color (hex)")
 	// Detection polygon mode flag
 	serveCmd.Flags().String("det-polygon-mode", "minrect", "detector polygon mode: minrect or contour")
+	// Multi-scale detection flags (parity with image/pdf)
+	serveCmd.Flags().Bool("det-multiscale", false, "enable multi-scale detection (pyramid)")
+	serveCmd.Flags().Float64Slice("det-scales", []float64{1.0, 0.75, 0.5}, "relative scales for multi-scale detection (e.g., 1.0,0.75,0.5)")
+	serveCmd.Flags().Float64("det-merge-iou", 0.3, "IoU threshold for merging regions across scales")
+	serveCmd.Flags().Bool("det-ms-adaptive", false, "enable adaptive pyramid scaling (auto scales based on image size)")
+	serveCmd.Flags().Int("det-ms-max-levels", 3, "maximum pyramid levels when adaptive is enabled (including 1.0)")
+	serveCmd.Flags().Int("det-ms-min-side", 320, "stop adaptive scaling when min(image side * scale) <= this value")
 	// Rate limiting flags
 	serveCmd.Flags().Bool("rate-limit-enabled", false, "enable rate limiting")
 	serveCmd.Flags().Int("requests-per-minute", 60, "maximum requests per minute per client")
 	serveCmd.Flags().Int("requests-per-hour", 1000, "maximum requests per hour per client")
 	serveCmd.Flags().Int("max-requests-per-day", 5000, "maximum requests per day per client")
 	serveCmd.Flags().Int64("max-data-per-day", 100*1024*1024, "maximum data processed per day per client (bytes)")
+
+	// Barcode flags (optional; server-wide defaults)
+	serveCmd.Flags().Bool("barcodes", false, "enable barcode detection in server pipeline")
+	serveCmd.Flags().String("barcode-types", "", "comma-separated types to detect (e.g., qr,ean13,upca,code128,pdf417,datamatrix,aztec,ean8,upce,itf,codabar,code39)")
+	serveCmd.Flags().Int("barcode-min-size", 0, "minimum expected barcode size in pixels (hint)")
+}
+
+// Ensure server help mentions docs for multi-scale
+func init() {
+	serveCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		out := cmd.OutOrStdout()
+		if _, err := fmt.Fprintln(out, cmd.Short); err != nil {
+			return
+		}
+		if _, err := fmt.Fprintln(out, "Usage:"); err != nil {
+			return
+		}
+		_, _ = fmt.Fprintln(out, cmd.UseLine())
+		_, _ = fmt.Fprintln(out, "Flags:")
+		_, _ = fmt.Fprintln(out, cmd.Flags().FlagUsages())
+		_, _ = fmt.Fprintln(out, "Docs:")
+		_, _ = fmt.Fprintln(out, "  See docs/multiscale.md for multi-scale detection options and tuning.")
+	})
 }

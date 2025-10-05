@@ -47,6 +47,19 @@ func drawRegionPolygon(dst *image.RGBA, r OCRRegionResult, angle int, w0, h0 int
 	utils.DrawPolygon(dst, pts, polyColor, 1)
 }
 
+// drawBarcodeBox draws a transformed barcode bounding box on the destination image.
+func drawBarcodeBox(dst *image.RGBA, b BarcodeResult, angle int, w0, h0 int, boxColor color.Color) {
+    // Transform AABB corners similarly to text regions
+    x1, y1 := transformCoordinates(float64(b.Box.X), float64(b.Box.Y), angle, w0, h0)
+    x2, y2 := transformCoordinates(float64(b.Box.X+b.Box.W), float64(b.Box.Y), angle, w0, h0)
+    x3, y3 := transformCoordinates(float64(b.Box.X+b.Box.W), float64(b.Box.Y+b.Box.H), angle, w0, h0)
+    x4, y4 := transformCoordinates(float64(b.Box.X), float64(b.Box.Y+b.Box.H), angle, w0, h0)
+    minX, maxX := min4(x1, x2, x3, x4), max4(x1, x2, x3, x4)
+    minY, maxY := min4(y1, y2, y3, y4), max4(y1, y2, y3, y4)
+    rect := image.Rect(int(minX+0.5), int(minY+0.5), int(maxX+0.5), int(maxY+0.5))
+    utils.DrawRect(dst, rect, boxColor, 1)
+}
+
 // RenderOverlay draws region boxes and polygons over the image and returns an RGBA copy.
 func RenderOverlay(img image.Image, res *OCRImageResult, boxColor color.Color, polyColor color.Color) *image.RGBA {
 	if img == nil {
@@ -69,12 +82,19 @@ func RenderOverlay(img image.Image, res *OCRImageResult, boxColor color.Color, p
 		angle = res.Orientation.Angle
 	}
 	w0, h0 := b.Dx(), b.Dy()
-	// draw regions
-	for _, r := range res.Regions {
-		drawRegionBox(dst, r, angle, w0, h0, boxColor)
-		drawRegionPolygon(dst, r, angle, w0, h0, polyColor)
-	}
-	return dst
+    // draw regions
+    for _, r := range res.Regions {
+        drawRegionBox(dst, r, angle, w0, h0, boxColor)
+        drawRegionPolygon(dst, r, angle, w0, h0, polyColor)
+    }
+    // draw barcodes (use a distinct color)
+    if len(res.Barcodes) > 0 {
+        barcodeColor := color.RGBA{0, 200, 255, 255}
+        for _, bc := range res.Barcodes {
+            drawBarcodeBox(dst, bc, angle, w0, h0, barcodeColor)
+        }
+    }
+    return dst
 }
 
 func min4(a, b, c, d float64) float64 {

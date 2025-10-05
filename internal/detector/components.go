@@ -12,6 +12,8 @@ import (
 type compStats struct {
 	count int
 	sum   float64
+	sumSq float64
+	maxV  float64
 	minX  int
 	minY  int
 	maxX  int
@@ -85,6 +87,10 @@ func performComponentBFS(mask []bool, prob []float32, visited []int, labels []in
 func updateComponentStats(st *compStats, prob float32, cx, cy int) {
 	st.count++
 	st.sum += float64(prob)
+	st.sumSq += float64(prob) * float64(prob)
+	if float64(prob) > st.maxV {
+		st.maxV = float64(prob)
+	}
 	if cx < st.minX {
 		st.minX = cx
 	}
@@ -121,13 +127,13 @@ func isValidNeighbor(mask []bool, visited []int, w, h, nx, ny int) bool {
 }
 
 // regionsFromComponents converts connected components to detected regions.
-func regionsFromComponents(comps []compStats, labels []int, w, h int, useMinAreaRect bool) []DetectedRegion {
+func regionsFromComponents(comps []compStats, labels []int, w, h int, opts PostProcessOptions) []DetectedRegion {
 	regions := make([]DetectedRegion, 0, len(comps))
 	for i, c := range comps {
 		if c.count == 0 {
 			continue
 		}
-		conf := c.sum / float64(c.count)
+		conf := computeComponentConfidence(c, opts)
 		label := i + 1
 		poly := traceContourMoore(labels, w, h, label, c)
 		if len(poly) == 0 {
@@ -158,7 +164,7 @@ func regionsFromComponents(comps []compStats, labels []int, w, h int, useMinArea
 		// Unclip by 10% outward around centroid
 		poly = utils.UnclipPolygon(poly, 1.10)
 		// Optionally replace polygon with its minimum-area enclosing rectangle
-		if useMinAreaRect && len(poly) >= 3 {
+		if opts.UseMinAreaRect && len(poly) >= 3 {
 			if mar := utils.MinimumAreaRectangle(poly); len(mar) == 4 {
 				poly = mar
 			}
@@ -174,4 +180,75 @@ func regionsFromComponents(comps []compStats, labels []int, w, h int, useMinArea
 		regions = append(regions, DetectedRegion{Polygon: poly, Box: box, Confidence: conf})
 	}
 	return regions
+}
+
+// computeComponentConfidence computes confidence for a component based on options.
+// Supported methods:
+// - "mean" (default): average probability
+// - "max": maximum probability within the component
+// - "mean_var": variance-adjusted mean (penalize high-variance regions)
+func computeComponentConfidence(c compStats, opts PostProcessOptions) float64 {
+	// Default to mean
+	method := opts.ConfidenceMethod
+	if method == "" {
+		method = "mean"
+	}
+	mean := 0.0
+	if c.count > 0 {
+		mean = c.sum / float64(c.count)
+	}
+
+	var conf float64
+	switch method {
+	case "max":
+		conf = c.maxV
+	case "mean_var":
+		// Compute unbiased variance estimate if possible
+		var variance float64
+		if c.count > 1 {
+			m2 := c.sumSq/float64(c.count) - mean*mean
+			if m2 < 0 {
+				m2 = 0 // numeric guard
+			}
+			variance = m2
+		} else {
+			variance = 0
+		}
+		// Normalize variance by theoretical Bernoulli variance bound mean*(1-mean)
+		denom := mean * (1 - mean)
+		normVar := 0.0
+		if denom > 1e-6 {
+			normVar = variance / denom
+		}
+		if normVar > 1 {
+			normVar = 1
+		} else if normVar < 0 {
+			normVar = 0
+		}
+		// Penalize mean by normalized variance (up to 50% reduction)
+		conf = mean * (1 - 0.5*normVar)
+	case "mean":
+		fallthrough
+	default:
+		conf = mean
+	}
+
+	// Apply simple calibration via gamma/power scaling if requested
+	gamma := opts.CalibrationGamma
+	if gamma > 0 && gamma != 1.0 {
+		// clamp to [0,1] before and after
+		if conf < 0 {
+			conf = 0
+		} else if conf > 1 {
+			conf = 1
+		}
+		conf = math.Pow(conf, gamma)
+	}
+	// Final clamp to [0,1]
+	if conf < 0 {
+		conf = 0
+	} else if conf > 1 {
+		conf = 1
+	}
+	return conf
 }

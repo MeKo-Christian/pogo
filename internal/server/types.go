@@ -102,6 +102,13 @@ func (c *PipelineCache) createPipeline(config pipeline.Config) (pipelineInterfac
 	if config.Detector.UseNMS {
 		builder = builder.WithDetectorNMS(true, config.Detector.NMSThreshold)
 	}
+	// Multi-scale detection
+	if config.Detector.MultiScale.Enabled {
+		builder = builder.WithDetectorMultiScale(config.Detector.MultiScale.Scales)
+		if config.Detector.MultiScale.MergeIoU > 0 {
+			builder = builder.WithDetectorMultiScaleIoU(config.Detector.MultiScale.MergeIoU)
+		}
+	}
 	builder = builder.WithImageHeight(config.Recognizer.ImageHeight)
 	builder = builder.WithRecognizeWidthPadding(config.Recognizer.MaxWidth, config.Recognizer.PadWidthMultiple)
 
@@ -220,6 +227,12 @@ func NewServer(config Config) (*Server, error) {
 	nb = nb.WithDetectorThresholds(cfg.Detector.DbThresh, cfg.Detector.DbBoxThresh)
 	if cfg.Detector.UseNMS {
 		nb = nb.WithDetectorNMS(true, cfg.Detector.NMSThreshold)
+	}
+	if cfg.Detector.MultiScale.Enabled {
+		nb = nb.WithDetectorMultiScale(cfg.Detector.MultiScale.Scales)
+		if cfg.Detector.MultiScale.MergeIoU > 0 {
+			nb = nb.WithDetectorMultiScaleIoU(cfg.Detector.MultiScale.MergeIoU)
+		}
 	}
 	nb = nb.WithImageHeight(cfg.Recognizer.ImageHeight)
 	nb = nb.WithRecognizeWidthPadding(cfg.Recognizer.MaxWidth, cfg.Recognizer.PadWidthMultiple)

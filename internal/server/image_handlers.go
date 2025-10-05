@@ -1,18 +1,19 @@
 package server
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"image"
-	"image/color"
-	"image/png"
-	"io"
-	"net/http"
-	"os"
-	"strings"
-	"time"
+    "bytes"
+    "encoding/json"
+    "errors"
+    "fmt"
+    "image"
+    "image/color"
+    "image/png"
+    "io"
+    "net/http"
+    "os"
+    "strconv"
+    "strings"
+    "time"
 
 	"github.com/MeKo-Tech/pogo/internal/models"
 	"github.com/MeKo-Tech/pogo/internal/pipeline"
@@ -31,7 +32,12 @@ type RequestConfig struct {
 	OwnerPassword    string  `json:"owner_password,omitempty"`
 	EnableVectorText bool    `json:"enable_vector_text,omitempty"`
 	EnableHybrid     bool    `json:"enable_hybrid,omitempty"`
-	QualityThreshold float64 `json:"quality_threshold,omitempty"`
+    QualityThreshold float64 `json:"quality_threshold,omitempty"`
+
+    // Barcode options
+    EnableBarcodes  bool   `json:"barcodes,omitempty"`
+    BarcodeTypes    string `json:"barcode_types,omitempty"`
+    BarcodeMinSize  int    `json:"barcode_min_size,omitempty"`
 }
 
 // validateLanguageCode validates a language code format.
@@ -192,12 +198,25 @@ func (s *Server) parseImageRequest(w http.ResponseWriter, r *http.Request) (imag
 	}
 
 	// Extract request configuration
-	reqConfig := &RequestConfig{
-		Language: r.FormValue("language"),
-		DictPath: r.FormValue("dict"),
-		DetModel: r.FormValue("det-model"),
-		RecModel: r.FormValue("rec-model"),
-	}
+    reqConfig := &RequestConfig{
+        Language: r.FormValue("language"),
+        DictPath: r.FormValue("dict"),
+        DetModel: r.FormValue("det-model"),
+        RecModel: r.FormValue("rec-model"),
+    }
+
+    // Barcode options (per-request overrides)
+    if v := r.FormValue("barcodes"); v != "" {
+        reqConfig.EnableBarcodes = v == "1" || strings.ToLower(v) == "true"
+    }
+    if v := r.FormValue("barcode-types"); v != "" {
+        reqConfig.BarcodeTypes = v
+    }
+    if v := r.FormValue("barcode-min-size"); v != "" {
+        if n, err := strconv.Atoi(v); err == nil {
+            reqConfig.BarcodeMinSize = n
+        }
+    }
 
 	// Parse dict-langs
 	if dictLangsStr := r.FormValue("dict-langs"); dictLangsStr != "" {
@@ -385,13 +404,24 @@ func (s *Server) applyRequestOverrides(baseConfig pipeline.Config, reqConfig *Re
 	}
 
 	// Override dictionary languages if specified
-	if len(reqConfig.DictLangs) > 0 {
-		dictPaths := models.GetDictionaryPathsForLanguages(config.ModelsDir, reqConfig.DictLangs)
-		if len(dictPaths) > 0 {
-			config.Recognizer.DictPaths = dictPaths
-			config.Recognizer.DictPath = "" // Clear single dict when multiple dicts are specified
-		}
-	}
+    if len(reqConfig.DictLangs) > 0 {
+        dictPaths := models.GetDictionaryPathsForLanguages(config.ModelsDir, reqConfig.DictLangs)
+        if len(dictPaths) > 0 {
+            config.Recognizer.DictPaths = dictPaths
+            config.Recognizer.DictPath = "" // Clear single dict when multiple dicts are specified
+        }
+    }
 
-	return config
+    // Barcode overrides
+    if reqConfig.EnableBarcodes || reqConfig.BarcodeTypes != "" || reqConfig.BarcodeMinSize > 0 {
+        config.Barcode.Enabled = reqConfig.EnableBarcodes || config.Barcode.Enabled
+        if strings.TrimSpace(reqConfig.BarcodeTypes) != "" {
+            config.Barcode.Types = strings.Split(reqConfig.BarcodeTypes, ",")
+        }
+        if reqConfig.BarcodeMinSize > 0 {
+            config.Barcode.MinSize = reqConfig.BarcodeMinSize
+        }
+    }
+
+    return config
 }

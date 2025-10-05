@@ -3,11 +3,25 @@ package detector
 import (
 	"image"
 	"log/slog"
+
+	"github.com/MeKo-Tech/pogo/internal/mempool"
 )
 
 // DetectRegions runs detection inference and post-processes regions using the
 // configured DB thresholds, returning regions scaled to the original image size.
 func (d *Detector) DetectRegions(img image.Image) ([]DetectedRegion, error) {
+	// Multi-scale path: process multiple scales and merge
+	if d.config.MultiScale.Enabled {
+		regs, err := d.detectRegionsMultiScale(img)
+		if err != nil {
+			return nil, err
+		}
+		if len(regs) > 0 {
+			slog.Debug("Post-processing completed (multi-scale)", "raw_regions", len(regs))
+			return regs, nil
+		}
+		// fall back to single-scale if multi-scale produced nothing
+	}
 	res, err := d.RunInference(img)
 	if err != nil {
 		return nil, err
@@ -15,12 +29,14 @@ func (d *Detector) DetectRegions(img image.Image) ([]DetectedRegion, error) {
 
 	// Apply morphological operations to the probability map if configured
 	probMap := res.ProbabilityMap
+	usedMorph := false
 	if d.config.Morphology.Operation != MorphNone {
 		slog.Debug("Applying morphological operations",
 			"operation", d.config.Morphology.Operation,
 			"kernel_size", d.config.Morphology.KernelSize,
 			"iterations", d.config.Morphology.Iterations)
 		probMap = ApplyMorphologicalOperation(probMap, res.Width, res.Height, d.config.Morphology)
+		usedMorph = true
 	}
 
 	// Calculate adaptive thresholds if enabled
@@ -91,6 +107,10 @@ func (d *Detector) DetectRegions(img image.Image) ([]DetectedRegion, error) {
 			dbThresh, boxThresh, opts)
 	}
 	regs = ScaleRegionsToOriginal(regs, res.Width, res.Height, res.OriginalWidth, res.OriginalHeight)
+	// Return morphological buffer to pool if allocated
+	if usedMorph {
+		mempool.PutFloat32(probMap)
+	}
 	slog.Debug("Post-processing completed", "raw_regions", len(regs))
 	return regs, nil
 }

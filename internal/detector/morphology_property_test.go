@@ -291,10 +291,26 @@ func TestMorphOpening_RemovesSmallNoise(t *testing.T) {
 			for i := range probMap {
 				probMap[i] = 0.1
 			}
-			// Add isolated bright pixels
-			probMap[width*5+5] = 0.9
-			probMap[width*10+15] = 0.9
-			probMap[width*20+10] = 0.9
+			// Add isolated bright pixels at safe, in-bounds locations
+			idx := func(x, y int) int { return y*width + x }
+			clamp := func(v, min, max int) int {
+				if v < min {
+					return min
+				}
+				if v > max {
+					return max
+				}
+				return v
+			}
+			x1 := clamp(5, 0, width-1)
+			y1 := clamp(5, 0, height-1)
+			x2 := clamp(width/2, 0, width-1)
+			y2 := clamp(height/2, 0, height-1)
+			x3 := clamp(width/3, 0, width-1)
+			y3 := clamp((2*height)/3, 0, height-1)
+			probMap[idx(x1, y1)] = 0.9
+			probMap[idx(x2, y2)] = 0.9
+			probMap[idx(x3, y3)] = 0.9
 
 			config := MorphConfig{
 				Operation:  MorphOpening,
@@ -339,10 +355,23 @@ func TestMorphClosing_FillsGaps(t *testing.T) {
 					probMap[y*width+x] = 0.9
 				}
 			}
-			// Add small gaps
-			probMap[10*width+10] = 0.1
-			probMap[15*width+15] = 0.1
-			probMap[20*width+10] = 0.1
+			// Add small gaps at safe, in-bounds positions
+			idx := func(x, y int) int { return y*width + x }
+			clamp := func(v, min, max int) int {
+				if v < min {
+					return min
+				}
+				if v > max {
+					return max
+				}
+				return v
+			}
+			g1x, g1y := clamp(10, 5, width-6), clamp(10, 5, height-6)
+			g2x, g2y := clamp(width/2, 5, width-6), clamp(height/2, 5, height-6)
+			g3x, g3y := clamp((2*width)/3, 5, width-6), clamp(height/3, 5, height-6)
+			probMap[idx(g1x, g1y)] = 0.1
+			probMap[idx(g2x, g2y)] = 0.1
+			probMap[idx(g3x, g3y)] = 0.1
 
 			config := MorphConfig{
 				Operation:  MorphClosing,

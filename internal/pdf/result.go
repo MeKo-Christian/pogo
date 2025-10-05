@@ -19,14 +19,15 @@ type PageResult struct {
 
 // ImageResult represents OCR results for a single image extracted from a PDF page.
 type ImageResult struct {
-	ImageIndex int                       `json:"image_index"`
-	Width      int                       `json:"width"`
-	Height     int                       `json:"height"`
-	Regions    []detector.DetectedRegion `json:"regions"`
-	Confidence float64                   `json:"confidence"`
-	// Enriched OCR output (optional; present when processed via full pipeline)
-	OCRRegions []OCRRegion `json:"ocr_regions,omitempty"`
-	Text       string      `json:"text,omitempty"`
+    ImageIndex int                       `json:"image_index"`
+    Width      int                       `json:"width"`
+    Height     int                       `json:"height"`
+    Regions    []detector.DetectedRegion `json:"regions"`
+    Confidence float64                   `json:"confidence"`
+    // Enriched OCR output (optional; present when processed via full pipeline)
+    OCRRegions []OCRRegion `json:"ocr_regions,omitempty"`
+    Text       string      `json:"text,omitempty"`
+    Barcodes   []Barcode   `json:"barcodes,omitempty"`
 }
 
 // DocumentResult represents complete OCR results for a PDF document.
@@ -53,4 +54,12 @@ type OCRRegion struct {
 	Text          string                   `json:"text"`
 	RecConfidence float64                  `json:"rec_confidence"`
 	Language      string                   `json:"language,omitempty"`
+}
+
+// Barcode mirrors pipeline barcode output in PDF results.
+type Barcode struct {
+    Type       string                 `json:"type"`
+    Value      string                 `json:"value"`
+    Confidence float64                `json:"confidence"`
+    Box        struct{ X, Y, W, H int } `json:"box"`
 }

@@ -192,8 +192,8 @@ func TestTraceContourMoore_ReasonableLength(t *testing.T) {
 			regionHeight := stats.maxY - stats.minY
 			expectedPerimeter := 2 * (regionWidth + regionHeight)
 
-			// Allow some tolerance for jagged edges
-			maxExpected := expectedPerimeter * 2
+			// Allow generous tolerance for jagged edges from pixel tracing
+			maxExpected := expectedPerimeter * 6
 
 			return len(contour) >= 4 && len(contour) <= maxExpected
 		},

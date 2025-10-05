@@ -28,6 +28,7 @@
 - **Parallel Processing**: Intelligent worker pools with resource caps
 - **GPU Acceleration**: CUDA-powered inference where available
 - **Batch Operations**: Process thousands of documents efficiently
+- **Multi-Scale Detection**: Optional image pyramid with IoU-based result fusion
 
 ### Document Intelligence
 
@@ -134,6 +135,22 @@ go test -v ./...
 
 > **Pro Tip**: Use `just` for the ultimate developer experience with optimized build flags and integrated tooling!
 
+### Barcode (Optional)
+
+Barcode detection is optional and disabled by default to keep builds lean. To enable decoding via the pure-Go ZXing port (gozxing):
+
+```bash
+# Add dependency (once)
+go get github.com/makiuchi-d/gozxing@latest
+
+# Build with barcode support enabled
+just build-dev -- -tags=barcode_gozxing
+# or
+go build -tags=barcode_gozxing -o bin/pogo ./cmd/ocr
+```
+
+This enables the internal `barcode` package backed by `gozxing`. The interface is pluggable for future backends.
+
 ## CLI Power User Guide
 
 ### Instant Results
@@ -157,6 +174,14 @@ pogo pdf scan.pdf --format json       # → Full PDF extraction
 - `--det-model <path>` → Custom detector model
 - `--confidence <0..1>` → Detection confidence threshold
 - `--det-polygon-mode minrect|contour` → Polygon extraction mode
+- `--det-multiscale` → Enable multi-scale detection (image pyramid)
+- `--det-scales 1.0,0.75,0.5` → Relative scales used when multi-scale is enabled
+- `--det-merge-iou <0..1>` → IoU threshold for merging detections across scales
+  (Advanced) Adaptive pyramid controls:
+  - `--det-ms-adaptive` → Auto-generate scales based on image size
+  - `--det-ms-max-levels <n>` → Max pyramid levels when adaptive (default: 3)
+  - `--det-ms-min-side <px>` → Stop when min(image side × scale) <= this value (default: 320)
+  - `--det-ms-incremental-merge` → Merge after each scale to reduce memory (default: true)
 
 **Recognition Power:**
 
@@ -206,6 +231,10 @@ pogo batch images/ --recursive \
 pogo pdf scan.pdf --format json \
   --pages 1-5 --rectify \
   --dict-langs en,de
+
+# Multi-Scale Detection (improved small text sensitivity)
+pogo image doc.jpg --det-multiscale --det-scales 1.0,0.8,0.6 --format json
+pogo pdf scan.pdf --det-multiscale --det-merge-iou 0.35 --format text
 ```
 
 ### Debug Visualization
@@ -236,7 +265,14 @@ pogo serve --port 8080 --language en --detect-orientation
 | `/health`    | GET    | System health check                 |
 | `/models`    | GET    | List available AI models            |
 
-> **Server Configuration**: All CLI pipeline flags work identically (det/rec models, orientation, textline, dictionaries). Visual overlays supported in responses.
+> **Server Configuration**: All CLI pipeline flags work identically (det/rec models, orientation, textline, multi-scale). Visual overlays supported in responses.
+> Includes multi-scale detection flags: `--det-multiscale`, `--det-scales`, `--det-merge-iou`.
+> Adaptive scaling: `--det-ms-adaptive`, `--det-ms-max-levels`, `--det-ms-min-side`. Memory: `--det-ms-incremental-merge`.
+
+Barcode options (server API per-request overrides):
+- `barcodes=true|false` → enable barcode detection stage
+- `barcode-types=qr,ean13,code128,...` → restrict symbologies
+- `barcode-min-size=<pixels>` → size hint to skip tiny candidates
 
 ### API Examples
 
@@ -249,6 +285,21 @@ curl -s http://localhost:8080/models | jq
 
 # Image OCR → JSON
 curl -s -F image=@doc.jpg http://localhost:8080/ocr/image | jq
+
+# Enable multi-scale via server start flags
+# pogo serve --det-multiscale --det-scales 1.0,0.75,0.5 --det-merge-iou 0.3
+# Use adaptive multi-scale with incremental merge (default on)
+# pogo serve --det-multiscale --det-ms-adaptive --det-ms-max-levels 4 --det-ms-min-side 320
+
+## How Adaptive Multi-Scale Works
+
+POGO can auto-generate pyramid scales per image to improve small-text detection while controlling memory:
+
+- Always includes scale 1.0, then adds smaller scales until reaching `--det-ms-max-levels` or `--det-ms-min-side`.
+- Performs per-scale detection, maps regions back to original coordinates, and merges across scales using NMS.
+- With `--det-ms-incremental-merge` (default), performs a merge after each scale to bound memory usage.
+
+See docs/multiscale.md for details and tuning guidance.
 
 # Image OCR → Plain Text
 curl -s -F image=@doc.jpg -F format=text http://localhost:8080/ocr/image

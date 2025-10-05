@@ -124,7 +124,7 @@ func TestRegionsFromComponents_SimpleCase(t *testing.T) {
 	}
 	w, h := 4, 4
 
-	regions := regionsFromComponents(comps, labels, w, h, true)
+	regions := regionsFromComponents(comps, labels, w, h, PostProcessOptions{UseMinAreaRect: true})
 
 	if len(regions) != 1 {
 		t.Fatalf("expected 1 region, got %d", len(regions))
@@ -163,7 +163,7 @@ func TestRegionsFromComponents_EmptyComponent(t *testing.T) {
 	labels := []int{0, 0, 0, 0}
 	w, h := 2, 2
 
-	regions := regionsFromComponents(comps, labels, w, h, true)
+	regions := regionsFromComponents(comps, labels, w, h, PostProcessOptions{UseMinAreaRect: true})
 	_ = labels // Mark as used to avoid compiler warning
 
 	// Should return empty regions since component has zero count
