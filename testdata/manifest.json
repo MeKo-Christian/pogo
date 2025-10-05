@@ -2,7 +2,7 @@
   "name": "pogo test data",
   "version": "1.0.0",
   "description": "Test data for pogo OCR pipeline testing",
-  "created": "2025-09-27T12:30:36Z",
+  "created": "2025-10-05T16:07:42Z",
   "directories": {
     "images": {
       "simple": "Simple single-word test images",

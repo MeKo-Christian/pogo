@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"runtime"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/MeKo-Tech/pogo/internal/pdf"
@@ -34,19 +37,74 @@ func (p *Pipeline) ProcessPDFContext(ctx context.Context, filename string, pageR
 	}
 	extractNs := time.Since(extractStart).Nanoseconds()
 
-	// Process each page
-	pages := make([]OCRPDFPageResult, 0, len(pageImages))
-	for pageNum, images := range pageImages {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
+	// Process each page concurrently with a worker pool
+	type job struct {
+		page   int
+		images []image.Image
+	}
+	type out struct {
+		page int
+		res  *OCRPDFPageResult
+		err  error
+	}
 
-		pageResult, err := p.processPDFPage(ctx, pageNum, images)
-		if err != nil {
-			return nil, fmt.Errorf("failed to process page %d: %w", pageNum, err)
-		}
+	// Collect page numbers to keep order stable
+	pageList := make([]int, 0, len(pageImages))
+	for n := range pageImages {
+		pageList = append(pageList, n)
+	}
 
-		pages = append(pages, *pageResult)
+	jobs := make(chan job, len(pageImages))
+	results := make(chan out, len(pageImages))
+
+	// Decide workers: use Resource.MaxGoroutines if set, else NumCPU
+	workers := p.cfg.Resource.MaxGoroutines
+	if workers <= 0 {
+		workers = runtime.NumCPU()
+	}
+	if workers > len(pageList) {
+		workers = len(pageList)
+	}
+	if workers < 1 {
+		workers = 1
+	}
+
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				if err := ctx.Err(); err != nil {
+					results <- out{page: j.page, res: nil, err: err}
+					continue
+				}
+				r, err := p.processPDFPage(ctx, j.page, j.images)
+				results <- out{page: j.page, res: r, err: err}
+			}
+		}()
+	}
+
+	for _, n := range pageList {
+		jobs <- job{page: n, images: pageImages[n]}
+	}
+	close(jobs)
+	go func() { wg.Wait(); close(results) }()
+
+	pageMap := make(map[int]*OCRPDFPageResult)
+	for r := range results {
+		if r.err != nil {
+			return nil, r.err
+		}
+		pageMap[r.page] = r.res
+	}
+
+	sort.Ints(pageList)
+	pages := make([]OCRPDFPageResult, 0, len(pageList))
+	for _, n := range pageList {
+		if pr, ok := pageMap[n]; ok {
+			pages = append(pages, *pr)
+		}
 	}
 
 	totalNs := time.Since(totalStart).Nanoseconds()
@@ -96,14 +154,14 @@ func (p *Pipeline) processPDFPage(ctx context.Context, pageNum int, images []ima
 			return nil, fmt.Errorf("OCR processing failed for image %d: %w", i, err)
 		}
 
-        imageResult := OCRPDFImageResult{
-            ImageIndex: i,
-            Width:      imgWidth,
-            Height:     imgHeight,
-            Regions:    ocrResult.Regions,
-            Barcodes:   ocrResult.Barcodes,
-            Confidence: ocrResult.AvgDetConf,
-        }
+		imageResult := OCRPDFImageResult{
+			ImageIndex: i,
+			Width:      imgWidth,
+			Height:     imgHeight,
+			Regions:    ocrResult.Regions,
+			Barcodes:   ocrResult.Barcodes,
+			Confidence: ocrResult.AvgDetConf,
+		}
 
 		imageResults = append(imageResults, imageResult)
 	}

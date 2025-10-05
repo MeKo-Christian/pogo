@@ -10,11 +10,6 @@ import (
 	"github.com/leanovate/gopter/prop"
 )
 
-const (
-	nmsMethodGaussian = "gaussian"
-	nmsMethodHard     = "hard"
-)
-
 // genDetectedRegion generates a random detected region.
 func genDetectedRegion() gopter.Gen {
 	return gopter.CombineGens(

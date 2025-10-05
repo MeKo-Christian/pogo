@@ -111,6 +111,31 @@ func (b *Builder) WithDictionaryPaths(paths []string) *Builder {
 	return b
 }
 
+// WithFilterDictionaryPath sets a single filter dictionary path (restricts output characters).
+func (b *Builder) WithFilterDictionaryPath(path string) *Builder {
+	if path != "" {
+		b.cfg.Recognizer.FilterDictPath = path
+	}
+	return b
+}
+
+// WithFilterDictionaryPaths sets multiple filter dictionary paths to merge (restricts output characters).
+func (b *Builder) WithFilterDictionaryPaths(paths []string) *Builder {
+	// Clean empty entries
+	cleaned := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if p != "" {
+			cleaned = append(cleaned, p)
+		}
+	}
+	if len(cleaned) > 0 {
+		b.cfg.Recognizer.FilterDictPaths = cleaned
+		// Clear single FilterDictPath to avoid ambiguity
+		b.cfg.Recognizer.FilterDictPath = ""
+	}
+	return b
+}
+
 // WithServerModels toggles using server variants for both detector and recognizer.
 func (b *Builder) WithServerModels(useServer bool) *Builder {
 	b.cfg.Detector.UseServerModel = useServer

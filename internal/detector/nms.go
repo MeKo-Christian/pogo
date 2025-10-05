@@ -7,6 +7,12 @@ import (
 	"github.com/MeKo-Tech/pogo/internal/utils"
 )
 
+const (
+	nmsMethodHard     = "hard"
+	nmsMethodGaussian = "gaussian"
+	nmsMethodLinear   = "linear"
+)
+
 // AdaptiveNMSThresholds contains tunable parameters for adaptive NMS.
 type AdaptiveNMSThresholds struct {
 	BaseThreshold float64 // Base IoU threshold

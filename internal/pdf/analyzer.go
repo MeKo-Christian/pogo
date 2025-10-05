@@ -14,10 +14,14 @@ const (
 	StrategyVectorText ProcessingStrategy = iota
 	// StrategyOCR indicates the page should be processed using OCR.
 	StrategyOCR
-	// StrategyHybrid indicates the page should be processed using both vector text and OCR.
+	// StrategyHybrid indicates the page should be processed using both vector and OCR.
 	StrategyHybrid
 	// StrategySkip indicates the page should be skipped (no useful content).
 	StrategySkip
+)
+
+const (
+	strategyUnknown = "unknown"
 )
 
 // String returns the string representation of the processing strategy.
@@ -32,7 +36,7 @@ func (s ProcessingStrategy) String() string {
 	case StrategySkip:
 		return "skip"
 	default:
-		return "unknown"
+		return strategyUnknown
 	}
 }
 

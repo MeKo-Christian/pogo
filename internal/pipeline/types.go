@@ -79,6 +79,7 @@ type BarcodeResult struct {
     Type       string              `json:"type"`
     Value      string              `json:"value"`
     Confidence float64             `json:"confidence"`
+    Rotation   float64             `json:"rotation"`
     Box        struct{ X, Y, W, H int } `json:"box"`
     Points     []struct{ X, Y int } `json:"points,omitempty"`
 }

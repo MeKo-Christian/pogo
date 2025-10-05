@@ -174,6 +174,16 @@ func (s *Server) parseRequestConfig(r *http.Request) (*RequestConfig, error) {
             reqConfig.BarcodeMinSize = n
         }
     }
+    if v := r.FormValue("barcode-dpi"); v != "" {
+        if n, err := strconv.Atoi(v); err == nil {
+            reqConfig.BarcodeDPI = n
+        }
+    }
+    if v := r.FormValue("pdf-workers"); v != "" {
+        if n, err := strconv.Atoi(v); err == nil {
+            reqConfig.PDFWorkers = n
+        }
+    }
 
 	// Parse quality threshold
 	if qthreshStr := r.FormValue("quality-threshold"); qthreshStr != "" {
@@ -323,6 +333,8 @@ func (s *Server) processEnhancedPDF(filename, pageRange string,
         EnableBarcodes:      reqConfig.EnableBarcodes,
         BarcodeTypes:        reqConfig.BarcodeTypes,
         BarcodeMinSize:      reqConfig.BarcodeMinSize,
+        BarcodeTargetDPI:    func() int { if reqConfig.BarcodeDPI > 0 { return reqConfig.BarcodeDPI }; if s.barcodeDPI > 0 { return s.barcodeDPI }; return 150 }(),
+        MaxWorkers:          func() int { if reqConfig.PDFWorkers > 0 { return reqConfig.PDFWorkers }; if s.pdfWorkers > 0 { return s.pdfWorkers }; return 0 }(),
     }
 
 	// Create enhanced PDF processor

@@ -141,7 +141,9 @@ type Server struct {
 	overlayPolyColor string
 	rateLimiter      *RateLimiter
 	pipelineCache    *PipelineCache
-	baseConfig       pipeline.Config // Base configuration for creating custom pipelines
+    baseConfig       pipeline.Config // Base configuration for creating custom pipelines
+    barcodeDPI       int
+    pdfWorkers       int
 }
 
 // Config holds server configuration.
@@ -154,8 +156,12 @@ type Config struct {
 	PipelineConfig   pipeline.Config
 	OverlayEnabled   bool
 	OverlayBoxColor  string
-	OverlayPolyColor string
-	RateLimit        RateLimitConfig
+    OverlayPolyColor string
+    RateLimit        RateLimitConfig
+    // Default barcode DPI target for PDF decoding (points-based scaling)
+    BarcodeDPI       int
+    // Default PDF page processing workers (0=NumCPU)
+    PDFWorkers       int
 }
 
 // RateLimitConfig holds rate limiting configuration.
@@ -262,8 +268,8 @@ func NewServer(config Config) (*Server, error) {
 		)
 	}
 
-	return &Server{
-		pipeline:         pl,
+    return &Server{
+        pipeline:         pl,
 		corsOrigin:       config.CORSOrigin,
 		maxUploadMB:      config.MaxUploadMB,
 		timeoutSec:       config.TimeoutSec,
@@ -272,8 +278,10 @@ func NewServer(config Config) (*Server, error) {
 		overlayPolyColor: config.OverlayPolyColor,
 		rateLimiter:      rateLimiter,
 		pipelineCache:    NewPipelineCache(),
-		baseConfig:       config.PipelineConfig,
-	}, nil
+        baseConfig:       config.PipelineConfig,
+        barcodeDPI:       config.BarcodeDPI,
+        pdfWorkers:       config.PDFWorkers,
+    }, nil
 }
 
 // Close releases server resources.

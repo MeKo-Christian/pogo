@@ -48,6 +48,8 @@ func init() {
 	pdfCmd.Flags().String("rec-model", "", "override recognition model path")
 	pdfCmd.Flags().String("dict", "", "comma-separated dictionary file paths")
 	pdfCmd.Flags().String("dict-langs", "", "comma-separated language codes for dictionaries (e.g., en,de,fr)")
+	pdfCmd.Flags().String("filter-dict", "", "comma-separated filter dictionary paths (restricts output characters, e.g., latin_subset.txt)")
+	pdfCmd.Flags().String("filter-dict-langs", "", "comma-separated language codes for filter dictionaries")
 	pdfCmd.Flags().Int("rec-height", 0, "recognizer input height (0=auto, typical: 32 or 48)")
 	pdfCmd.Flags().Bool("detect-orientation", false, "enable document orientation detection")
 	pdfCmd.Flags().Float64("orientation-threshold", 0.7, "orientation confidence threshold (0..1)")
@@ -86,9 +88,11 @@ func init() {
 	pdfCmd.Flags().Bool("barcodes", false, "enable barcode detection on pages")
 	pdfCmd.Flags().String("barcode-types", "", "comma-separated types to detect (e.g., qr,ean13,upca,code128,pdf417,datamatrix,aztec,ean8,upce,itf,codabar,code39)")
 	pdfCmd.Flags().Int("barcode-min-size", 0, "minimum expected barcode size in pixels (hint; affects render DPI)")
+	pdfCmd.Flags().Int("barcode-dpi", 150, "target DPI for barcode decoding (page image scaling)")
+	pdfCmd.Flags().Int("pdf-workers", 0, "max worker goroutines for page processing (0=NumCPU)")
 }
 
-// Ensure pdf help mentions docs for multi-scale
+// Ensure pdf help mentions docs for multi-scale.
 func init() {
 	pdfCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		out := cmd.OutOrStdout()
@@ -118,6 +122,8 @@ type pdfConfig struct {
 	recModel          string
 	dictCSV           string
 	dictLangs         string
+	filterDictCSV     string
+	filterDictLangs   string
 	recH              int
 	detectOrientation bool
 	orientThresh      float64
@@ -154,6 +160,8 @@ type pdfConfig struct {
 	barcodeEnabled bool
 	barcodeTypes   string
 	barcodeMinSize int
+	barcodeDPI     int
+	pdfWorkers     int
 }
 
 // configToPDFConfig maps centralized configuration to pdfConfig.
@@ -200,6 +208,8 @@ func configToPDFConfig(centralCfg *config.Config, cmd *cobra.Command) (*pdfConfi
 	setStringWithFlag(centralCfg.Pipeline.Recognizer.ModelPath, "rec-model", &cfg.recModel)
 	setStringWithFlag(centralCfg.Pipeline.Recognizer.DictPath, "dict", &cfg.dictCSV)
 	setStringWithFlag(centralCfg.Pipeline.Recognizer.DictLangs, "dict-langs", &cfg.dictLangs)
+	setStringWithFlag(centralCfg.Pipeline.Recognizer.FilterDictPath, "filter-dict", &cfg.filterDictCSV)
+	setStringWithFlag(centralCfg.Pipeline.Recognizer.FilterDictLangs, "filter-dict-langs", &cfg.filterDictLangs)
 	setIntWithFlag(centralCfg.Pipeline.Recognizer.ImageHeight, "rec-height", &cfg.recH)
 
 	// Orientation settings
@@ -230,10 +240,16 @@ func configToPDFConfig(centralCfg *config.Config, cmd *cobra.Command) (*pdfConfi
 	cfg.allowPasswords, _ = cmd.Flags().GetBool("allow-passwords")
 	cfg.promptPassword, _ = cmd.Flags().GetBool("prompt-password")
 
-	// Barcode flags (captured for future pipeline integration)
+	// Barcode flags (captured for pipeline integration)
 	cfg.barcodeEnabled, _ = cmd.Flags().GetBool("barcodes")
 	cfg.barcodeTypes, _ = cmd.Flags().GetString("barcode-types")
 	cfg.barcodeMinSize, _ = cmd.Flags().GetInt("barcode-min-size")
+	cfg.barcodeDPI, _ = cmd.Flags().GetInt("barcode-dpi")
+	// Concurrency controls
+	// (Uses central config for defaults if present in future; currently CLI flag only)
+	// Store into unused field via return path by extending buildEnhancedPDFProcessor
+	// Will be passed to ProcessorConfig.MaxWorkers
+	cfg.pdfWorkers, _ = cmd.Flags().GetInt("pdf-workers")
 
 	// Multi-scale detection defaults from central config
 	cfg.multiScaleEnabled = centralCfg.Pipeline.Detector.MultiScale.Enabled
@@ -503,56 +519,57 @@ func formatText(results []*pdf.DocumentResult) string {
 
 // formatCSV formats results as CSV.
 func formatCSV(results []*pdf.DocumentResult) string {
-    var records [][]string
+	var records [][]string
 
 	// Header
 	records = append(records, []string{
 		"File", "Page", "Image", "Region", "X1", "Y1", "X2", "Y2", "Width", "Height", "Confidence",
 	})
 
-    // Data rows (text regions)
-    for _, doc := range results {
-        for _, page := range doc.Pages {
-            for _, img := range page.Images {
-                for i, region := range img.Regions {
-                    records = append(records, []string{
-                        doc.Filename,
-                        strconv.Itoa(page.PageNumber),
-                        strconv.Itoa(img.ImageIndex),
-                        strconv.Itoa(i + 1),
-                        strconv.FormatFloat(float64(region.Box.MinX), 'f', 0, 32),
-                        strconv.FormatFloat(float64(region.Box.MinY), 'f', 0, 32),
-                        strconv.FormatFloat(float64(region.Box.MaxX), 'f', 0, 32),
-                        strconv.FormatFloat(float64(region.Box.MaxY), 'f', 0, 32),
-                        strconv.FormatFloat(float64(region.Box.Width()), 'f', 0, 32),
-                        strconv.FormatFloat(float64(region.Box.Height()), 'f', 0, 32),
-                        strconv.FormatFloat(region.Confidence, 'f', 3, 64),
-                    })
-                }
-                // Append barcode rows for this image (second section header per image)
-                if len(img.Barcodes) > 0 {
-                    // Blank line and header for barcodes
-                    records = append(records, []string{})
-                    records = append(records, []string{"File", "Page", "Image", "Barcode", "Type", "Value", "Confidence", "X", "Y", "Width", "Height"})
-                    for j, b := range img.Barcodes {
-                        records = append(records, []string{
-                            doc.Filename,
-                            strconv.Itoa(page.PageNumber),
-                            strconv.Itoa(img.ImageIndex),
-                            strconv.Itoa(j + 1),
-                            b.Type,
-                            b.Value,
-                            strconv.FormatFloat(b.Confidence, 'f', 3, 64),
-                            strconv.Itoa(b.Box.X),
-                            strconv.Itoa(b.Box.Y),
-                            strconv.Itoa(b.Box.W),
-                            strconv.Itoa(b.Box.H),
-                        })
-                    }
-                }
-            }
-        }
-    }
+	// Data rows (text regions)
+	for _, doc := range results {
+		for _, page := range doc.Pages {
+			for _, img := range page.Images {
+				for i, region := range img.Regions {
+					records = append(records, []string{
+						doc.Filename,
+						strconv.Itoa(page.PageNumber),
+						strconv.Itoa(img.ImageIndex),
+						strconv.Itoa(i + 1),
+						strconv.FormatFloat(float64(region.Box.MinX), 'f', 0, 32),
+						strconv.FormatFloat(float64(region.Box.MinY), 'f', 0, 32),
+						strconv.FormatFloat(float64(region.Box.MaxX), 'f', 0, 32),
+						strconv.FormatFloat(float64(region.Box.MaxY), 'f', 0, 32),
+						strconv.FormatFloat(float64(region.Box.Width()), 'f', 0, 32),
+						strconv.FormatFloat(float64(region.Box.Height()), 'f', 0, 32),
+						strconv.FormatFloat(region.Confidence, 'f', 3, 64),
+					})
+				}
+				// Append barcode rows for this image (second section header per image)
+				if len(img.Barcodes) > 0 {
+					// Blank line and header for barcodes
+					records = append(records, []string{})
+					records = append(records, []string{"File", "Page", "Image", "Barcode", "Type", "Value", "Confidence", "Rotation", "X", "Y", "Width", "Height"})
+					for j, b := range img.Barcodes {
+						records = append(records, []string{
+							doc.Filename,
+							strconv.Itoa(page.PageNumber),
+							strconv.Itoa(img.ImageIndex),
+							strconv.Itoa(j + 1),
+							b.Type,
+							b.Value,
+							strconv.FormatFloat(b.Confidence, 'f', 3, 64),
+							strconv.FormatFloat(b.Rotation, 'f', 1, 64),
+							strconv.Itoa(b.Box.X),
+							strconv.Itoa(b.Box.Y),
+							strconv.Itoa(b.Box.W),
+							strconv.Itoa(b.Box.H),
+						})
+					}
+				}
+			}
+		}
+	}
 
 	// Convert to CSV string
 	var csvOutput string
@@ -679,17 +696,24 @@ func buildEnhancedPDFProcessor(cfg *pdfConfig) (*pdf.Processor, error) {
 	}
 
 	// Create processor configuration
-    processorConfig := &pdf.ProcessorConfig{
-        EnableVectorText:    cfg.enableVectorText,
-        EnableHybrid:        cfg.enableHybrid,
-        VectorTextQuality:   cfg.vectorTextQuality,
-        VectorTextCoverage:  cfg.vectorTextCoverage,
-        AllowPasswords:      cfg.allowPasswords,
-        AllowPasswordPrompt: cfg.promptPassword,
-        EnableBarcodes:      cfg.barcodeEnabled,
-        BarcodeTypes:        cfg.barcodeTypes,
-        BarcodeMinSize:      cfg.barcodeMinSize,
-    }
+	processorConfig := &pdf.ProcessorConfig{
+		EnableVectorText:    cfg.enableVectorText,
+		EnableHybrid:        cfg.enableHybrid,
+		VectorTextQuality:   cfg.vectorTextQuality,
+		VectorTextCoverage:  cfg.vectorTextCoverage,
+		AllowPasswords:      cfg.allowPasswords,
+		AllowPasswordPrompt: cfg.promptPassword,
+		EnableBarcodes:      cfg.barcodeEnabled,
+		BarcodeTypes:        cfg.barcodeTypes,
+		BarcodeMinSize:      cfg.barcodeMinSize,
+		BarcodeTargetDPI: func() int {
+			if cfg.barcodeDPI > 0 {
+				return cfg.barcodeDPI
+			}
+			return 150
+		}(),
+		MaxWorkers: cfg.pdfWorkers,
+	}
 
 	// Create enhanced processor
 	processor := pdf.NewProcessorWithConfig(det, processorConfig)

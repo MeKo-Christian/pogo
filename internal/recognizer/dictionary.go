@@ -26,7 +26,9 @@ func removeBOM(line string, isFirstLine bool) string {
 
 // processLine processes a single line from the dictionary file.
 func processLine(line string, lineNum int) string {
-	line = strings.TrimSpace(line)
+	// Remove trailing newline but preserve other whitespace (spaces, tabs, ideographic spaces, etc.)
+	line = strings.TrimSuffix(line, "\n")
+	line = strings.TrimSuffix(line, "\r")
 	line = removeBOM(line, lineNum == 1)
 	return line
 }
@@ -68,9 +70,8 @@ func LoadCharset(path string) (*Charset, error) {
 	for scanner.Scan() {
 		lineNum++
 		line := processLine(scanner.Text(), lineNum)
-		if line == "" {
-			continue
-		}
+		// Don't skip empty lines - they might be whitespace characters that were part of the original line
+		// Only skip truly empty lines (after removing BOM and newlines)
 		tokens = append(tokens, line)
 	}
 	if err := scanner.Err(); err != nil {
@@ -151,4 +152,36 @@ func (c *Charset) LookupToken(index int) string {
 		return t
 	}
 	return ""
+}
+
+// Contains checks if a token exists in the charset.
+func (c *Charset) Contains(token string) bool {
+	if c == nil {
+		return false
+	}
+	_, ok := c.TokenToIndex[token]
+	return ok
+}
+
+// Filter removes any runes/characters from the text that are not in this charset.
+// Returns the filtered text containing only characters present in the charset.
+// If the charset is nil, returns the original text unchanged.
+func (c *Charset) Filter(text string) string {
+	if c == nil || len(c.TokenToIndex) == 0 {
+		return text
+	}
+
+	// Convert text to runes for proper Unicode handling
+	runes := []rune(text)
+	filtered := make([]rune, 0, len(runes))
+
+	for _, r := range runes {
+		// Check if this rune (as a string) is in our charset
+		token := string(r)
+		if c.Contains(token) {
+			filtered = append(filtered, r)
+		}
+	}
+
+	return string(filtered)
 }

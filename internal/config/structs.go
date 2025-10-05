@@ -92,6 +92,8 @@ type RecognizerConfig struct {
 	ModelPath        string  `mapstructure:"model_path" yaml:"model_path" json:"model_path"`
 	DictPath         string  `mapstructure:"dict_path" yaml:"dict_path" json:"dict_path"`
 	DictLangs        string  `mapstructure:"dict_langs" yaml:"dict_langs" json:"dict_langs"`
+	FilterDictPath   string  `mapstructure:"filter_dict_path" yaml:"filter_dict_path" json:"filter_dict_path"`
+	FilterDictLangs  string  `mapstructure:"filter_dict_langs" yaml:"filter_dict_langs" json:"filter_dict_langs"`
 	Language         string  `mapstructure:"language" yaml:"language" json:"language"`
 	ImageHeight      int     `mapstructure:"image_height" yaml:"image_height" json:"image_height"`
 	MaxWidth         int     `mapstructure:"max_width" yaml:"max_width" json:"max_width"`

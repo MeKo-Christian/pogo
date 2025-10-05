@@ -710,7 +710,7 @@ func TestConfig_ConfidenceThresholdRange(t *testing.T) {
 
 			cls, err := NewClassifier(cfg)
 			require.NoError(t, err)
-			assert.Equal(t, tt.threshold, cls.cfg.ConfidenceThreshold)
+			assert.InDelta(t, tt.threshold, cls.cfg.ConfidenceThreshold, 1e-9)
 		})
 	}
 }
@@ -889,7 +889,7 @@ func TestConfig_UseHeuristicFallbackBehavior(t *testing.T) {
 			cls, err := NewClassifier(cfg)
 
 			if tt.expectError {
-				assert.Error(t, err, "Expected error for invalid config without fallback")
+				require.Error(t, err, "Expected error for invalid config without fallback")
 				assert.Nil(t, cls, "Classifier should be nil on error")
 			} else {
 				require.NoError(t, err, "Should not error with fallback enabled")

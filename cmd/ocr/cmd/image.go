@@ -59,6 +59,8 @@ Examples:
 		lang := cfg.Pipeline.Recognizer.Language
 		dictCSV := cfg.Pipeline.Recognizer.DictPath
 		dictLangs := cfg.Pipeline.Recognizer.DictLangs
+		filterDictCSV := cfg.Pipeline.Recognizer.FilterDictPath
+		filterDictLangs := cfg.Pipeline.Recognizer.FilterDictLangs
 		recH := cfg.Pipeline.Recognizer.ImageHeight
 		minRecConf := cfg.Pipeline.Recognizer.MinConfidence
 		overlayDir := cfg.Output.OverlayDir
@@ -182,6 +184,18 @@ Examples:
 			paths := models.GetDictionaryPathsForLanguages(modelsDir, langs)
 			if len(paths) > 0 {
 				b = b.WithDictionaryPaths(paths)
+			}
+		}
+		// Filter dictionary configuration (restricts output characters)
+		if filterDictCSV != "" {
+			parts := strings.Split(filterDictCSV, ",")
+			b = b.WithFilterDictionaryPaths(parts)
+		}
+		if filterDictLangs != "" {
+			langs := strings.Split(filterDictLangs, ",")
+			paths := models.GetDictionaryPathsForLanguages(modelsDir, langs)
+			if len(paths) > 0 {
+				b = b.WithFilterDictionaryPaths(paths)
 			}
 		}
 		if detectOrientation {
@@ -428,9 +442,11 @@ func addImageFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("detect-orientation", false, "enable document orientation detection")
 	cmd.Flags().Float64("orientation-threshold", 0.7, "orientation confidence threshold (0..1)")
 	cmd.Flags().StringP("language", "l", "en", "recognition language")
-	cmd.Flags().String("dict", "", "comma-separated dictionary file paths to merge for recognition")
+	cmd.Flags().String("dict", "", "comma-separated dictionary file paths to merge for recognition (must match model)")
 	cmd.Flags().String("dict-langs", "", "comma-separated language codes to auto-select "+
 		"dictionaries (e.g., en,de,fr)")
+	cmd.Flags().String("filter-dict", "", "comma-separated filter dictionary paths (restricts output characters, e.g., latin_subset.txt)")
+	cmd.Flags().String("filter-dict-langs", "", "comma-separated language codes for filter dictionaries")
 	cmd.Flags().Int("rec-height", 0, "recognizer input height (0=auto, typical: 32 or 48)")
 	cmd.Flags().Float64("min-rec-conf", 0.0, "minimum recognition confidence (filter output)")
 	cmd.Flags().String("overlay-dir", "", "directory to write overlay images (drawn boxes)")
@@ -499,6 +515,8 @@ func bindImageFlags(cmd *cobra.Command) {
 		{"pipeline.recognizer.language", "language"},
 		{"pipeline.recognizer.dict_path", "dict"},
 		{"pipeline.recognizer.dict_langs", "dict-langs"},
+		{"pipeline.recognizer.filter_dict_path", "filter-dict"},
+		{"pipeline.recognizer.filter_dict_langs", "filter-dict-langs"},
 		{"pipeline.recognizer.image_height", "rec-height"},
 		{"pipeline.recognizer.min_confidence", "min-rec-conf"},
 		{"output.overlay_dir", "overlay-dir"},

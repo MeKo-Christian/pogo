@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	customModelsDir = "/custom/models"
+	customModelsDir   = "/custom/models"
+	testTextlineModel = "/test/textline.onnx"
 )
 
 // TestDefaultConfig verifies that DefaultConfig returns expected values.
@@ -479,7 +480,7 @@ func TestToTextLineOrientationConfig(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Features.TextlineEnabled = true
 	cfg.Features.TextlineThreshold = 0.6
-	cfg.Features.TextlineModelPath = "/test/textline.onnx"
+	cfg.Features.TextlineModelPath = testTextlineModel
 
 	textlineCfg := cfg.toTextLineOrientationConfig()
 
@@ -489,8 +490,8 @@ func TestToTextLineOrientationConfig(t *testing.T) {
 	if textlineCfg.ConfidenceThreshold != 0.6 {
 		t.Errorf("Expected confidence threshold 0.6, got %f", textlineCfg.ConfidenceThreshold)
 	}
-	if textlineCfg.ModelPath != "/test/textline.onnx" {
-		t.Errorf("Expected model path '/test/textline.onnx', got %s", textlineCfg.ModelPath)
+	if textlineCfg.ModelPath != testTextlineModel {
+		t.Errorf("Expected model path 'testTextlineModel', got %s", textlineCfg.ModelPath)
 	}
 }
 
@@ -777,7 +778,7 @@ func TestConfigConversionIntegration(t *testing.T) {
 	pipelineCfg := cfg.ToPipelineConfig()
 
 	// Verify conversion
-	if pipelineCfg.ModelsDir != "/custom/models" {
+	if pipelineCfg.ModelsDir != customModelsDir {
 		t.Errorf("ModelsDir not converted correctly")
 	}
 	if !pipelineCfg.EnableOrientation {
@@ -812,7 +813,7 @@ func TestToOrientationConfig_AllFields(t *testing.T) {
 	cfg.Features.OrientationEnabled = true
 	cfg.Features.OrientationThreshold = 0.85
 	cfg.Features.OrientationModelPath = "/custom/orientation.onnx"
-	cfg.ModelsDir = "/custom/models"
+	cfg.ModelsDir = customModelsDir
 
 	orientCfg := cfg.toOrientationConfig()
 
@@ -1003,7 +1004,7 @@ func TestToPipelineConfig_OrientationIntegration(t *testing.T) {
 	cfg.Features.OrientationModelPath = "/test/orient.onnx"
 	cfg.Features.TextlineEnabled = true
 	cfg.Features.TextlineThreshold = 0.65
-	cfg.Features.TextlineModelPath = "/test/textline.onnx"
+	cfg.Features.TextlineModelPath = testTextlineModel
 
 	pipelineCfg := cfg.ToPipelineConfig()
 
@@ -1028,8 +1029,8 @@ func TestToPipelineConfig_OrientationIntegration(t *testing.T) {
 	if pipelineCfg.TextLineOrientation.ConfidenceThreshold != 0.65 {
 		t.Errorf("Expected textline threshold 0.65, got %f", pipelineCfg.TextLineOrientation.ConfidenceThreshold)
 	}
-	if pipelineCfg.TextLineOrientation.ModelPath != "/test/textline.onnx" {
-		t.Errorf("Expected textline model path '/test/textline.onnx', got %s", pipelineCfg.TextLineOrientation.ModelPath)
+	if pipelineCfg.TextLineOrientation.ModelPath != testTextlineModel {
+		t.Errorf("Expected textline model path 'testTextlineModel', got %s", pipelineCfg.TextLineOrientation.ModelPath)
 	}
 }
 

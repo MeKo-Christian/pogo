@@ -293,12 +293,12 @@ func TestMorphOpening_RemovesSmallNoise(t *testing.T) {
 			}
 			// Add isolated bright pixels at safe, in-bounds locations
 			idx := func(x, y int) int { return y*width + x }
-			clamp := func(v, min, max int) int {
-				if v < min {
-					return min
+			clamp := func(v, minVal, maxVal int) int {
+				if v < minVal {
+					return minVal
 				}
-				if v > max {
-					return max
+				if v > maxVal {
+					return maxVal
 				}
 				return v
 			}
@@ -357,12 +357,12 @@ func TestMorphClosing_FillsGaps(t *testing.T) {
 			}
 			// Add small gaps at safe, in-bounds positions
 			idx := func(x, y int) int { return y*width + x }
-			clamp := func(v, min, max int) int {
-				if v < min {
-					return min
+			clamp := func(v, minVal, maxVal int) int {
+				if v < minVal {
+					return minVal
 				}
-				if v > max {
-					return max
+				if v > maxVal {
+					return maxVal
 				}
 				return v
 			}

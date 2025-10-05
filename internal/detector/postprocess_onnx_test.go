@@ -6,8 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const nmsMethodLinear = "linear"
-
 // createMockProbabilityMap creates a probability map with some text-like regions.
 func createMockProbabilityMap() []float32 {
 	width, height := 32, 32
@@ -134,7 +132,7 @@ func TestDetector_DetectRegions_WithAdaptiveThresholds(t *testing.T) {
 func TestDetector_DetectRegions_WithHardNMS(t *testing.T) {
 	config := DefaultConfig()
 	config.UseNMS = true
-	config.NMSMethod = "hard"
+	config.NMSMethod = nmsMethodHard
 	config.NMSThreshold = 0.3
 	config.AdaptiveThresholds.Enabled = false
 	config.Morphology.Operation = MorphNone
@@ -295,7 +293,7 @@ func TestDetector_DetectRegions_AllFeaturesEnabled(t *testing.T) {
 func TestDetector_DetectRegions_ContourMode(t *testing.T) {
 	config := DefaultConfig()
 	config.UseNMS = false
-	config.PolygonMode = "contour"
+	config.PolygonMode = PolygonModeContour
 	config.AdaptiveThresholds.Enabled = false
 	config.Morphology.Operation = MorphNone
 
@@ -524,7 +522,7 @@ func createLargeProbabilityMap(width, height int) []float32 {
 }
 
 // simulateDetectRegionsLogic simulates the core logic of DetectRegions without actual ONNX inference.
-func simulateDetectRegionsLogic(config Config, result *DetectionResult) ([]DetectedRegion, error) {
+func simulateDetectRegionsLogic(config Config, result *DetectionResult) []DetectedRegion {
 	// This is the actual logic from DetectRegions
 	probMap := result.ProbabilityMap
 
@@ -543,12 +541,12 @@ func simulateDetectRegionsLogic(config Config, result *DetectionResult) ([]Detec
 	}
 
 	var regs []DetectedRegion
-	opts := PostProcessOptions{UseMinAreaRect: config.PolygonMode != "contour"}
+	opts := PostProcessOptions{UseMinAreaRect: config.PolygonMode != PolygonModeContour}
 
 	if config.UseNMS {
 		// Choose NMS method based on configuration
 		switch config.NMSMethod {
-		case "linear", "gaussian":
+		case nmsMethodLinear, nmsMethodGaussian:
 			regs = PostProcessDBWithOptions(probMap, result.Width, result.Height,
 				dbThresh, boxThresh, opts)
 			regs = SoftNonMaxSuppression(regs, config.NMSMethod, config.NMSThreshold,
@@ -575,7 +573,7 @@ func simulateDetectRegionsLogic(config Config, result *DetectionResult) ([]Detec
 	}
 
 	regs = ScaleRegionsToOriginal(regs, result.Width, result.Height, result.OriginalWidth, result.OriginalHeight)
-	return regs, nil
+	return regs
 }
 
 // TestDetectRegions_DefaultConfig tests DetectRegions with default configuration.
@@ -593,9 +591,8 @@ func TestDetectRegions_DefaultConfig(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	// Verify regions are within original image bounds
 	for _, region := range regions {
@@ -621,9 +618,8 @@ func TestDetectRegions_EmptyProbMap(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.Empty(t, regions, "Empty probability map should produce no regions")
 }
 
@@ -642,9 +638,8 @@ func TestDetectRegions_MultipleRegions(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	if len(regions) > 0 {
 		// Verify all regions have valid properties
@@ -660,7 +655,7 @@ func TestDetectRegions_MultipleRegions(t *testing.T) {
 func TestDetectRegions_LargeImage(t *testing.T) {
 	config := DefaultConfig()
 	config.UseNMS = true
-	config.NMSMethod = "hard"
+	config.NMSMethod = nmsMethodHard
 	config.NMSThreshold = 0.3
 
 	// Larger probability map
@@ -673,9 +668,8 @@ func TestDetectRegions_LargeImage(t *testing.T) {
 		OriginalHeight: 1920,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	// Large images should produce multiple regions
 	t.Logf("Large image test produced %d regions", len(regions))
@@ -704,9 +698,8 @@ func TestDetectRegions_SingleRegion(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	if len(regions) > 0 {
 		// Should produce exactly one high-confidence region
@@ -723,7 +716,7 @@ func TestDetectRegions_SingleRegion(t *testing.T) {
 func TestDetectRegions_WithHardNMS(t *testing.T) {
 	config := DefaultConfig()
 	config.UseNMS = true
-	config.NMSMethod = "hard"
+	config.NMSMethod = nmsMethodHard
 	config.NMSThreshold = 0.3
 	config.AdaptiveThresholds.Enabled = false
 	config.Morphology.Operation = MorphNone
@@ -736,9 +729,8 @@ func TestDetectRegions_WithHardNMS(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	t.Logf("Hard NMS produced %d regions", len(regions))
 }
@@ -762,9 +754,8 @@ func TestDetectRegions_WithSoftNMS_Linear(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	t.Logf("Linear Soft-NMS produced %d regions", len(regions))
 }
@@ -773,7 +764,7 @@ func TestDetectRegions_WithSoftNMS_Linear(t *testing.T) {
 func TestDetectRegions_WithSoftNMS_Gaussian(t *testing.T) {
 	config := DefaultConfig()
 	config.UseNMS = true
-	config.NMSMethod = "gaussian"
+	config.NMSMethod = nmsMethodGaussian
 	config.NMSThreshold = 0.3
 	config.SoftNMSSigma = 0.5
 	config.SoftNMSThresh = 0.1
@@ -788,9 +779,8 @@ func TestDetectRegions_WithSoftNMS_Gaussian(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	t.Logf("Gaussian Soft-NMS produced %d regions", len(regions))
 }
@@ -813,9 +803,8 @@ func TestDetectRegions_WithAdaptiveNMS_Method(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	t.Logf("Adaptive NMS produced %d regions", len(regions))
 }
@@ -840,9 +829,8 @@ func TestDetectRegions_WithSizeAwareNMS_Method(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	t.Logf("Size-Aware NMS produced %d regions", len(regions))
 }
@@ -863,9 +851,8 @@ func TestDetectRegions_WithAdaptiveThresholds_Histogram(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	t.Logf("Adaptive thresholds (histogram) produced %d regions", len(regions))
 }
@@ -886,9 +873,8 @@ func TestDetectRegions_WithAdaptiveThresholds_Dynamic(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	t.Logf("Adaptive thresholds (dynamic) produced %d regions", len(regions))
 }
@@ -910,9 +896,8 @@ func TestDetectRegions_WithMorphology_Dilate(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	t.Logf("Morphology (dilate) produced %d regions", len(regions))
 }
@@ -934,9 +919,8 @@ func TestDetectRegions_WithMorphology_Erode(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	t.Logf("Morphology (erode) produced %d regions", len(regions))
 }
@@ -958,9 +942,8 @@ func TestDetectRegions_WithMorphology_Smooth(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	t.Logf("Morphology (smooth) produced %d regions", len(regions))
 }
@@ -969,7 +952,7 @@ func TestDetectRegions_WithMorphology_Smooth(t *testing.T) {
 func TestDetectRegions_PolygonMode_Contour(t *testing.T) {
 	config := DefaultConfig()
 	config.UseNMS = false
-	config.PolygonMode = "contour"
+	config.PolygonMode = PolygonModeContour
 	config.AdaptiveThresholds.Enabled = false
 	config.Morphology.Operation = MorphNone
 
@@ -981,9 +964,8 @@ func TestDetectRegions_PolygonMode_Contour(t *testing.T) {
 		OriginalHeight: 480,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 	t.Logf("Contour polygon mode produced %d regions", len(regions))
 }
@@ -1006,10 +988,9 @@ func TestDetectRegions_InferenceError(t *testing.T) {
 
 	// The actual DetectRegions would fail during RunInference
 	// For our simulation, we just test that the logic handles nil probMap gracefully
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
 	// With nil or empty probMap, should return empty regions, not error
-	assert.NoError(t, err)
 	assert.Empty(t, regions)
 }
 
@@ -1035,9 +1016,8 @@ func TestDetectRegions_AllFeaturesEnabled_Integration(t *testing.T) {
 		OriginalHeight: 960,
 	}
 
-	regions, err := simulateDetectRegionsLogic(config, result)
+	regions := simulateDetectRegionsLogic(config, result)
 
-	assert.NoError(t, err)
 	assert.NotNil(t, regions)
 
 	// With all features enabled, verify regions are valid

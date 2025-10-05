@@ -10,6 +10,11 @@ import (
 	"github.com/yalue/onnxruntime_go"
 )
 
+const (
+	PolygonModeMinRect = "minrect"
+	PolygonModeContour = "contour"
+)
+
 // Config holds configuration for the text detector.
 type Config struct {
 	ModelPath      string         // Path to ONNX detection model
@@ -58,7 +63,7 @@ func DefaultConfig() Config {
 		NMSMethod:      "hard",
 		SoftNMSSigma:   0.5,
 		SoftNMSThresh:  0.1,
-		PolygonMode:    "minrect",
+		PolygonMode:    PolygonModeMinRect,
 		GPU:            onnx.DefaultGPUConfig(),
 
 		// Class-agnostic NMS tuning defaults

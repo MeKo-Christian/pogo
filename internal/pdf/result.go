@@ -61,5 +61,8 @@ type Barcode struct {
     Type       string                 `json:"type"`
     Value      string                 `json:"value"`
     Confidence float64                `json:"confidence"`
+    Rotation   float64                `json:"rotation"`
     Box        struct{ X, Y, W, H int } `json:"box"`
+    // PageBox gives the location in PDF page coordinates (points), origin at bottom-left.
+    PageBox    struct{ X, Y, W, H float64 } `json:"page_box,omitempty"`
 }

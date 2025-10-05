@@ -32,7 +32,7 @@ func (d *Detector) detectRegionsMultiScale(img image.Image) ([]DetectedRegion, e
 	}
 
 	var merged []DetectedRegion
-	opts := PostProcessOptions{UseMinAreaRect: d.config.PolygonMode != "contour"}
+	opts := PostProcessOptions{UseMinAreaRect: d.config.PolygonMode != PolygonModeContour}
 
 	for _, s := range scales {
 		if s <= 0 {
@@ -152,7 +152,7 @@ func mergeMultiScaleRegions(regs []DetectedRegion, cfg Config) []DetectedRegion 
 		}
 	}
 	switch cfg.NMSMethod {
-	case "linear", "gaussian":
+	case nmsMethodLinear, nmsMethodGaussian:
 		return SoftNonMaxSuppression(regs, cfg.NMSMethod, mergeIoU, cfg.SoftNMSSigma, cfg.SoftNMSThresh)
 	default:
 		if cfg.UseAdaptiveNMS {

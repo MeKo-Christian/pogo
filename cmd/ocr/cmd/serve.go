@@ -179,6 +179,17 @@ Examples:
 			textlineThresh, _ = cmd.Flags().GetFloat64("textline-threshold")
 		}
 
+		// Barcode DPI default for enhanced PDF path
+		barcodeDPI := 150
+		if cmd.Flags().Changed("barcode-dpi") {
+			barcodeDPI, _ = cmd.Flags().GetInt("barcode-dpi")
+		}
+
+		pdfWorkers := 0
+		if cmd.Flags().Changed("pdf-workers") {
+			pdfWorkers, _ = cmd.Flags().GetInt("pdf-workers")
+		}
+
 		dictCSV := cfg.Pipeline.Recognizer.DictPath
 		if cmd.Flags().Changed("dict") {
 			dictCSV, _ = cmd.Flags().GetString("dict")
@@ -187,6 +198,16 @@ Examples:
 		dictLangs := cfg.Pipeline.Recognizer.DictLangs
 		if cmd.Flags().Changed("dict-langs") {
 			dictLangs, _ = cmd.Flags().GetString("dict-langs")
+		}
+
+		filterDictCSV := cfg.Pipeline.Recognizer.FilterDictPath
+		if cmd.Flags().Changed("filter-dict") {
+			filterDictCSV, _ = cmd.Flags().GetString("filter-dict")
+		}
+
+		filterDictLangs := cfg.Pipeline.Recognizer.FilterDictLangs
+		if cmd.Flags().Changed("filter-dict-langs") {
+			filterDictLangs, _ = cmd.Flags().GetString("filter-dict-langs")
 		}
 
 		// Validate port number
@@ -245,6 +266,13 @@ Examples:
 		if dictLangs != "" {
 			pCfg.Recognizer.DictPaths = models.GetDictionaryPathsForLanguages(cfg.ModelsDir, strings.Split(dictLangs, ","))
 		}
+		// Filter dictionary configuration (restricts output characters)
+		if filterDictCSV != "" {
+			pCfg.Recognizer.FilterDictPaths = strings.Split(filterDictCSV, ",")
+		}
+		if filterDictLangs != "" {
+			pCfg.Recognizer.FilterDictPaths = models.GetDictionaryPathsForLanguages(cfg.ModelsDir, strings.Split(filterDictLangs, ","))
+		}
 		if minDetConf > 0 {
 			pCfg.Detector.DbBoxThresh = float32(minDetConf)
 		}
@@ -290,6 +318,8 @@ Examples:
 				MaxRequestsPerDay: maxRequestsPerDay,
 				MaxDataPerDay:     maxDataPerDay,
 			},
+			BarcodeDPI: barcodeDPI,
+			PDFWorkers: pdfWorkers,
 		}
 
 		// Initialize server
@@ -370,6 +400,8 @@ func init() {
 	serveCmd.Flags().String("dict", "", "comma-separated dictionary file paths to merge for recognition")
 	serveCmd.Flags().String("dict-langs", "",
 		"comma-separated language codes to auto-select dictionaries (e.g., en,de,fr)")
+	serveCmd.Flags().String("filter-dict", "", "comma-separated filter dictionary paths (restricts output characters, e.g., latin_subset.txt)")
+	serveCmd.Flags().String("filter-dict-langs", "", "comma-separated language codes for filter dictionaries")
 	serveCmd.Flags().Bool("detect-orientation", false, "enable document orientation detection")
 	serveCmd.Flags().Float64("orientation-threshold", 0.7, "orientation confidence threshold (0..1)")
 	serveCmd.Flags().Bool("detect-textline", false, "enable per-text-line orientation detection")
@@ -397,9 +429,11 @@ func init() {
 	serveCmd.Flags().Bool("barcodes", false, "enable barcode detection in server pipeline")
 	serveCmd.Flags().String("barcode-types", "", "comma-separated types to detect (e.g., qr,ean13,upca,code128,pdf417,datamatrix,aztec,ean8,upce,itf,codabar,code39)")
 	serveCmd.Flags().Int("barcode-min-size", 0, "minimum expected barcode size in pixels (hint)")
+	serveCmd.Flags().Int("barcode-dpi", 150, "target DPI for PDF barcode decoding (enhanced path)")
+	serveCmd.Flags().Int("pdf-workers", 0, "max worker goroutines for page processing (0=NumCPU)")
 }
 
-// Ensure server help mentions docs for multi-scale
+// Ensure server help mentions docs for multi-scale.
 func init() {
 	serveCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		out := cmd.OutOrStdout()

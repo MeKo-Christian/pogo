@@ -235,6 +235,11 @@ func (r *Recognizer) decodeOutput(output *modelOutput, preprocessed *preprocesse
 	}
 	text := string(runes)
 
+	// Apply filter charset if configured (removes characters not in filter dictionary)
+	if r.filterCharset != nil {
+		text = r.filterCharset.Filter(text)
+	}
+
 	return &Result{
 		Text:            text,
 		Confidence:      confidence,
@@ -379,7 +384,8 @@ func extractSequenceData(seq interface{}) ([]int, []float64, float64) {
 }
 
 // convertIndicesToRunes converts token indices to runes using the charset.
-func convertIndicesToRunes(indices []int, charset *Charset) []rune {
+// Optionally applies filtering if filterCharset is non-nil.
+func convertIndicesToRunes(indices []int, charset *Charset, filterCharset *Charset) string {
 	runes := make([]rune, 0, len(indices))
 	for _, idx := range indices {
 		ch := charset.LookupToken(idx - 1)
@@ -388,7 +394,14 @@ func convertIndicesToRunes(indices []int, charset *Charset) []rune {
 		}
 		runes = append(runes, []rune(ch)...)
 	}
-	return runes
+	text := string(runes)
+
+	// Apply filter charset if configured
+	if filterCharset != nil {
+		text = filterCharset.Filter(text)
+	}
+
+	return text
 }
 
 // buildBatchResults constructs Result structs from decoded sequences.
@@ -397,6 +410,7 @@ func (r *Recognizer) buildBatchResults(decoded interface{}, prepped []preprocess
 
 	r.mu.RLock()
 	charset := r.charset
+	filterCharset := r.filterCharset
 	r.mu.RUnlock()
 
 	for i := range out {
@@ -426,8 +440,8 @@ func (r *Recognizer) buildBatchResults(decoded interface{}, prepped []preprocess
 			continue
 		}
 
-		runes := convertIndicesToRunes(collapsed, charset)
-		out[i].Text = string(runes)
+		text := convertIndicesToRunes(collapsed, charset, filterCharset)
+		out[i].Text = text
 		out[i].Confidence = confidence
 		out[i].CharConfidences = charProbs
 		out[i].Indices = collapsed

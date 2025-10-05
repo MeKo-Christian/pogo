@@ -19,8 +19,10 @@ import (
 // Config holds configuration for the text recognizer.
 type Config struct {
 	ModelPath      string   // Path to ONNX recognition model
-	DictPath       string   // Path to character dictionary (single)
-	DictPaths      []string // Optional multiple dictionary paths to merge
+	DictPath       string   // Path to character dictionary (single) - must match model output classes
+	DictPaths      []string // Optional multiple dictionary paths to merge - must match model output classes
+	FilterDictPath string   // Optional path to filter dictionary (restricts output to subset of characters)
+	FilterDictPaths []string // Optional multiple filter dictionary paths to merge
 	ImageHeight    int      // Expected input height (e.g., 32 or 48)
 	UseServerModel bool     // Use server model instead of mobile
 	NumThreads     int      // Number of CPU threads (0 for default)
@@ -38,7 +40,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		ModelPath:        models.GetRecognitionModelPath("", false),
-		DictPath:         models.GetDictionaryPath("", models.DictionaryPPOCRKeysV1),
+		DictPath:         models.GetDictionaryPath("", models.DictionaryPPOCRv5),
 		ImageHeight:      48, // Use 48 for mobile models (PP-OCRv5_mobile_rec.onnx)
 		UseServerModel:   false,
 		NumThreads:       0,
@@ -66,7 +68,8 @@ type Recognizer struct {
 	session    *onnxrt.DynamicAdvancedSession
 	inputInfo  onnxrt.InputOutputInfo
 	outputInfo onnxrt.InputOutputInfo
-	charset    *Charset
+	charset    *Charset        // Model dictionary - must match ONNX model output classes
+	filterCharset *Charset     // Optional filter dictionary - restricts output characters
 	mu         sync.RWMutex
 	// Optional per-text-line orientation classifier (0/90/180/270)
 	textLineOrienter *orientation.Classifier
@@ -102,17 +105,24 @@ func NewRecognizer(config Config) (*Recognizer, error) {
 		return nil, err
 	}
 
+	// Load optional filter charset
+	filterCharset, err := loadFilterCharsetForRecognizer(config)
+	if err != nil {
+		return nil, err
+	}
+
 	session, err := createONNXSessionForRecognizer(config, inputInfo, outputInfo)
 	if err != nil {
 		return nil, err
 	}
 
 	r := &Recognizer{
-		config:     config,
-		session:    session,
-		inputInfo:  inputInfo,
-		outputInfo: outputInfo,
-		charset:    charset,
+		config:        config,
+		session:       session,
+		inputInfo:     inputInfo,
+		outputInfo:    outputInfo,
+		charset:       charset,
+		filterCharset: filterCharset,
 	}
 	return r, nil
 }
@@ -189,6 +199,31 @@ func loadCharsetForRecognizer(config Config) (*Charset, error) {
 
 	slog.Debug("Dictionary loaded successfully", "charset_size", charset.Size())
 	return charset, nil
+}
+
+func loadFilterCharsetForRecognizer(config Config) (*Charset, error) {
+	// Filter charset is optional - if not configured, return nil (no filtering)
+	if config.FilterDictPath == "" && len(config.FilterDictPaths) == 0 {
+		return nil, nil
+	}
+
+	var filterCharset *Charset
+	var err error
+
+	if len(config.FilterDictPaths) > 0 {
+		slog.Debug("Loading merged filter dictionaries", "count", len(config.FilterDictPaths), "paths", config.FilterDictPaths)
+		filterCharset, err = LoadCharsets(config.FilterDictPaths)
+	} else {
+		slog.Debug("Loading single filter dictionary", "path", config.FilterDictPath)
+		filterCharset, err = LoadCharset(config.FilterDictPath)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to load filter dictionary: %w", err)
+	}
+
+	slog.Debug("Filter dictionary loaded successfully", "filter_charset_size", filterCharset.Size())
+	return filterCharset, nil
 }
 
 func createONNXSessionForRecognizer(

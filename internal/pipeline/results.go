@@ -76,12 +76,13 @@ func ToCSVImage(res *OCRImageResult) (string, error) {
     // Append barcode section if present
     if len(res.Barcodes) > 0 {
         _ = w.Write([]string{}) // blank line
-        _ = w.Write([]string{"barcode_type", "value", "confidence", "x", "y", "w", "h"})
+        _ = w.Write([]string{"barcode_type", "value", "confidence", "rotation", "x", "y", "w", "h"})
         for _, b := range res.Barcodes {
             row := []string{
                 b.Type,
                 b.Value,
                 fmt.Sprintf("%.3f", b.Confidence),
+                fmt.Sprintf("%.1f", b.Rotation),
                 strconv.Itoa(b.Box.X),
                 strconv.Itoa(b.Box.Y),
                 strconv.Itoa(b.Box.W),

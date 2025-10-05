@@ -186,7 +186,7 @@ func regionsFromComponents(comps []compStats, labels []int, w, h int, opts PostP
 // Supported methods:
 // - "mean" (default): average probability
 // - "max": maximum probability within the component
-// - "mean_var": variance-adjusted mean (penalize high-variance regions)
+// - "mean_var": variance-adjusted mean (penalize high-variance regions).
 func computeComponentConfidence(c compStats, opts PostProcessOptions) float64 {
 	// Default to mean
 	method := opts.ConfidenceMethod

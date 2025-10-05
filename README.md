@@ -273,6 +273,14 @@ Barcode options (server API per-request overrides):
 - `barcodes=true|false` → enable barcode detection stage
 - `barcode-types=qr,ean13,code128,...` → restrict symbologies
 - `barcode-min-size=<pixels>` → size hint to skip tiny candidates
+- `barcode-dpi=<int>` → target DPI for page scaling (enhanced path; default 150)
+
+PDF barcode mapping
+- PDF responses include `page_box` for each barcode, in page coordinates (points) with origin at bottom-left.
+- The server uses DPI heuristics (target ~150 DPI) to improve barcode decode robustness on page images.
+
+OpenAPI
+- See `docs/openapi.yaml` for a machine-readable API specification (OpenAPI 3.0).
 
 ### API Examples
 

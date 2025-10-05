@@ -3,7 +3,6 @@ package batch
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -26,8 +25,11 @@ func TestProcessBatch_NoImageFiles(t *testing.T) {
 }
 
 func TestProcessBatch_InvalidImagePath(t *testing.T) {
+	root, err := testutil.GetProjectRoot()
+	require.NoError(t, err)
+
 	config := &Config{
-		ModelsDir: testutil.GetTestDataDir(t),
+		ModelsDir: filepath.Join(root, "models"),
 		Workers:   1,
 	}
 
@@ -44,26 +46,20 @@ func TestProcessBatch_ValidImage(t *testing.T) {
 	}
 
 	// Skip if models directory doesn't exist (ONNX runtime not set up)
-	modelsDir := testutil.GetTestDataDir(t)
-	if !testutil.DirExists(filepath.Join(modelsDir, "models")) {
+	root, err := testutil.GetProjectRoot()
+	require.NoError(t, err)
+	modelsDir := filepath.Join(root, "models")
+	if !testutil.DirExists(modelsDir) {
 		t.Skip("Models directory not found, skipping integration test")
 	}
 
-	// Create a temporary image file
-	imagePath := "/tmp/test_batch_valid.png"
+	// Use an actual test image instead of creating one
+	imagePath := testutil.GetTestImagePath(t, "simple_text.png")
+	if !testutil.FileExists(imagePath) {
+		t.Skip("Test image not found")
+	}
 
-	// Create a minimal valid PNG file (1x1 white pixel)
-	pngData := "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde" +
-		"\x00\x00\x00\tpHYs\x00\x00\x0b\x13\x00\x00\x0b\x13\x01\x00\x9a\x9c\x18\x00\x00\x00\nIDATx\x9cc\xf8" +
-		"\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00IEND\xaeB`\x82"
-	err := os.WriteFile(imagePath, []byte(pngData), 0o600)
-	require.NoError(t, err)
-
-	// Verify the file exists and has the right extension
-	require.True(t, testutil.FileExists(imagePath))
-	require.True(t, strings.HasSuffix(imagePath, ".png"))
-
-	t.Logf("Created test image at: %s", imagePath)
+	t.Logf("Using test image at: %s", imagePath)
 
 	config := &Config{
 		ModelsDir:        modelsDir,
@@ -108,8 +104,11 @@ func TestProcessBatch_MultipleImages(t *testing.T) {
 		t.Skip("No test images found")
 	}
 
+	root, err := testutil.GetProjectRoot()
+	require.NoError(t, err)
+
 	config := &Config{
-		ModelsDir:        testutil.GetTestDataDir(t),
+		ModelsDir:        filepath.Join(root, "models"),
 		Workers:          2,
 		Confidence:       0.3,
 		MinRecConf:       0.0,
@@ -141,8 +140,11 @@ func TestProcessBatch_WithOverlay(t *testing.T) {
 	// Create temporary directory for overlays
 	overlayDir := testutil.CreateTempDir(t)
 
+	root, err := testutil.GetProjectRoot()
+	require.NoError(t, err)
+
 	config := &Config{
-		ModelsDir:        testutil.GetTestDataDir(t),
+		ModelsDir:        filepath.Join(root, "models"),
 		Workers:          1,
 		Confidence:       0.3,
 		MinRecConf:       0.0,
@@ -173,8 +175,11 @@ func TestProcessBatch_WithConfidenceFilters(t *testing.T) {
 		t.Skip("Test image not found")
 	}
 
+	root, err := testutil.GetProjectRoot()
+	require.NoError(t, err)
+
 	config := &Config{
-		ModelsDir:        testutil.GetTestDataDir(t),
+		ModelsDir:        filepath.Join(root, "models"),
 		Workers:          1,
 		Confidence:       0.8, // High confidence threshold
 		MinRecConf:       0.8, // High recognition confidence threshold

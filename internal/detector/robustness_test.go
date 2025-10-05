@@ -39,8 +39,8 @@ func TestPostProcessDB_ExtremeAspectRatios(t *testing.T) {
 	for _, tc := range tests {
 		prob := make([]float32, tc.w*tc.h)
 		// create a horizontal/vertical stripe over threshold
-		for y := 0; y < tc.h; y++ {
-			for x := 0; x < tc.w; x++ {
+		for y := range tc.h {
+			for x := range tc.w {
 				if tc.w >= tc.h {
 					// thin horizontal stripe
 					if y >= tc.h/3 && y < 2*tc.h/3 {

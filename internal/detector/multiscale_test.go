@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// helper to build a DetectedRegion with given box and confidence
+// helper to build a DetectedRegion with given box and confidence.
 func makeRegion(x1, y1, x2, y2 float64, conf float64) DetectedRegion {
 	return DetectedRegion{
 		Polygon:    []utils.Point{{X: x1, Y: y1}, {X: x2, Y: y1}, {X: x2, Y: y2}, {X: x1, Y: y2}},
@@ -23,7 +23,7 @@ func TestMergeMultiScaleRegions_HardNMS(t *testing.T) {
 	regs := []DetectedRegion{r1, r2}
 
 	cfg := DefaultConfig()
-	cfg.NMSMethod = "hard"
+	cfg.NMSMethod = nmsMethodHard
 	cfg.MultiScale.Enabled = true
 	cfg.MultiScale.MergeIoU = 0.3
 
@@ -40,7 +40,7 @@ func TestMergeMultiScaleRegions_SoftNMS_Linear(t *testing.T) {
 	regs := []DetectedRegion{r1, r2}
 
 	cfg := DefaultConfig()
-	cfg.NMSMethod = "linear"
+	cfg.NMSMethod = nmsMethodLinear
 	cfg.SoftNMSThresh = 0.1
 	cfg.MultiScale.Enabled = true
 	cfg.MultiScale.MergeIoU = 0.3
@@ -68,7 +68,7 @@ func TestMergeMultiScaleRegions_FallbackIoU_FromNMSThreshold(t *testing.T) {
 	assert.InDelta(t, 0.35, iou, 0.2) // accept a band around 0.35
 
 	cfg := DefaultConfig()
-	cfg.NMSMethod = "hard"
+	cfg.NMSMethod = nmsMethodHard
 	cfg.NMSThreshold = 0.4
 	cfg.MultiScale.Enabled = true
 	cfg.MultiScale.MergeIoU = 0.0 // force fallback
@@ -84,7 +84,7 @@ func TestMergeMultiScaleRegions_AdaptiveAndSizeAware_DoNotPanic(t *testing.T) {
 
 	// Adaptive NMS
 	cfgA := DefaultConfig()
-	cfgA.NMSMethod = "hard"
+	cfgA.NMSMethod = nmsMethodHard
 	cfgA.UseAdaptiveNMS = true
 	cfgA.NMSThreshold = 0.3
 	cfgA.AdaptiveNMSScale = 1.0
@@ -95,7 +95,7 @@ func TestMergeMultiScaleRegions_AdaptiveAndSizeAware_DoNotPanic(t *testing.T) {
 
 	// Size-aware NMS
 	cfgS := DefaultConfig()
-	cfgS.NMSMethod = "hard"
+	cfgS.NMSMethod = nmsMethodHard
 	cfgS.SizeAwareNMS = true
 	cfgS.NMSThreshold = 0.3
 	cfgS.SizeNMSScaleFactor = 0.1
@@ -137,7 +137,7 @@ func TestIncrementalMergeEquivalence(t *testing.T) {
 	b2 := makeRegion(160, 160, 200, 200, 0.7) // separate
 
 	cfg := DefaultConfig()
-	cfg.NMSMethod = "hard"
+	cfg.NMSMethod = nmsMethodHard
 	cfg.NMSThreshold = 0.3
 	cfg.MultiScale.Enabled = true
 

@@ -1,0 +1,276 @@
+openapi: 3.0.3
+info:
+  title: POGO OCR API
+  version: 0.1.0
+  description: HTTP API for image and PDF OCR with optional barcode detection.
+servers:
+  - url: http://localhost:8080
+paths:
+  /ocr/image:
+    post:
+      summary: OCR an uploaded image
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: Image file to process
+                format:
+                  type: string
+                  enum: [json, csv, text, overlay]
+                  description: Output format
+                language:
+                  type: string
+                dict:
+                  type: string
+                  description: Path to dictionary file
+                dict-langs:
+                  type: string
+                  description: Comma-separated languages for dictionaries
+                det-model:
+                  type: string
+                rec-model:
+                  type: string
+                detect-orientation:
+                  type: boolean
+                orientation-threshold:
+                  type: number
+                  format: float
+                detect-textline:
+                  type: boolean
+                textline-threshold:
+                  type: number
+                  format: float
+                overlay:
+                  type: boolean
+                  description: If true or 1, returns overlay PNG when format unspecified
+                barcodes:
+                  type: boolean
+                  description: Enable barcode detection
+                barcode-types:
+                  type: string
+                  description: Comma-separated symbologies (qr,ean13,code128,pdf417,datamatrix,aztec,ean8,upce,itf,codabar,code39)
+                barcode-min-size:
+                  type: integer
+                  description: Minimum expected barcode size in pixels
+      responses:
+        '200':
+          description: OCR result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ocr:
+                    $ref: '#/components/schemas/OCRImageResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /ocr/pdf:
+    post:
+      summary: OCR a PDF file (images extracted per page)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+          properties:
+            pdf:
+              type: string
+              format: binary
+                pages:
+                  type: string
+                  description: Page range (e.g. "1-5", "1,3,5")
+                format:
+                  type: string
+                  enum: [json, csv, text]
+                language:
+                  type: string
+                dict:
+                  type: string
+                dict-langs:
+                  type: string
+                det-model:
+                  type: string
+                rec-model:
+                  type: string
+                enable-vector-text:
+                  type: boolean
+                  description: Prefer vector text extraction if available (enhanced mode)
+                enable-hybrid:
+                  type: boolean
+                  description: Merge vector and OCR results (enhanced mode)
+                user-password:
+                  type: string
+                owner-password:
+                  type: string
+            barcodes:
+              type: boolean
+              description: Enable barcode detection on page images
+            barcode-types:
+              type: string
+            barcode-min-size:
+              type: integer
+            barcode-dpi:
+              type: integer
+              description: Target DPI for page image scaling (enhanced path), default 150
+            pdf-workers:
+              type: integer
+              description: Max worker goroutines for concurrent page processing (0=NumCPU)
+      responses:
+        '200':
+          description: OCR result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OCRPDFResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /models:
+    get:
+      summary: List available models
+      responses:
+        '200':
+          description: OK
+components:
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              error:
+                type: string
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+              error:
+                type: string
+  schemas:
+    OCRRegionResult:
+      type: object
+      properties:
+        polygon:
+          type: array
+          items:
+            type: object
+            properties:
+              X: { type: number }
+              Y: { type: number }
+        box:
+          type: object
+          properties:
+            X: { type: integer }
+            Y: { type: integer }
+            W: { type: integer }
+            H: { type: integer }
+        det_confidence:
+          type: number
+        text:
+          type: string
+        rec_confidence:
+          type: number
+        language:
+          type: string
+    BarcodeResult:
+      type: object
+      properties:
+        type: { type: string }
+        value: { type: string }
+        confidence: { type: number }
+        rotation: { type: number }
+        box:
+          type: object
+          properties:
+            X: { type: integer }
+            Y: { type: integer }
+            W: { type: integer }
+            H: { type: integer }
+        page_box:
+          type: object
+          description: Location in PDF page coordinates (points), origin bottom-left
+          properties:
+            X: { type: number }
+            Y: { type: number }
+            W: { type: number }
+            H: { type: number }
+        points:
+          type: array
+          items:
+            type: object
+            properties:
+              X: { type: integer }
+              Y: { type: integer }
+    OCRImageResult:
+      type: object
+      properties:
+        width: { type: integer }
+        height: { type: integer }
+        regions:
+          type: array
+          items: { $ref: '#/components/schemas/OCRRegionResult' }
+        barcodes:
+          type: array
+          items: { $ref: '#/components/schemas/BarcodeResult' }
+        avg_det_confidence: { type: number }
+        orientation:
+          type: object
+          properties:
+            angle: { type: integer }
+            confidence: { type: number }
+            applied: { type: boolean }
+    OCRPDFImageResult:
+      type: object
+      properties:
+        image_index: { type: integer }
+        width: { type: integer }
+        height: { type: integer }
+        regions:
+          type: array
+          items: { $ref: '#/components/schemas/OCRRegionResult' }
+        barcodes:
+          type: array
+          items: { $ref: '#/components/schemas/BarcodeResult' }
+        confidence: { type: number }
+    OCRPDFPageResult:
+      type: object
+      properties:
+        page_number: { type: integer }
+        width: { type: integer }
+        height: { type: integer }
+        images:
+          type: array
+          items: { $ref: '#/components/schemas/OCRPDFImageResult' }
+    OCRPDFResult:
+      type: object
+      properties:
+        filename: { type: string }
+        total_pages: { type: integer }
+        pages:
+          type: array
+          items: { $ref: '#/components/schemas/OCRPDFPageResult' }

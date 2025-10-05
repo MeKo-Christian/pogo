@@ -60,11 +60,11 @@ func (d *Detector) DetectRegions(img image.Image) ([]DetectedRegion, error) {
 	}
 
 	var regs []DetectedRegion
-	opts := PostProcessOptions{UseMinAreaRect: d.config.PolygonMode != "contour"}
+	opts := PostProcessOptions{UseMinAreaRect: d.config.PolygonMode != PolygonModeContour}
 	if d.config.UseNMS {
 		// Choose NMS method based on configuration
 		switch d.config.NMSMethod {
-		case "linear", "gaussian":
+		case nmsMethodLinear, nmsMethodGaussian:
 			slog.Debug("Using Soft-NMS for region filtering",
 				"method", d.config.NMSMethod,
 				"iou_threshold", d.config.NMSThreshold,

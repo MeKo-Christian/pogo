@@ -26,6 +26,7 @@ const (
 
 	// Dictionary files.
 	DictionaryPPOCRKeysV1 = "ppocr_keys_v1.txt"
+	DictionaryPPOCRv5     = "ppocrv5_dict.txt" // Default dictionary for PP-OCRv5 models (18,383 characters)
 )
 
 // Model type categories for organized directory structure.

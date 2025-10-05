@@ -10,6 +10,101 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
+## Phase 0: Critical Bug Fixes (Immediate - Week 1)
+
+### 0.1 Dictionary and Recognition Fixes
+
+**Issue**: OCR text recognition returns empty strings due to wrong dictionary file
+**Root Cause**: Using 142-character `ppocr_keys_v1.txt` instead of 18,383-character `ppocrv5_dict.txt` required by PP-OCRv5 models
+
+- [x] Download correct PP-OCRv5 dictionary (`ppocrv5_dict.txt`) to `models/dictionaries/`
+- [x] Fix dictionary loading bug in `internal/recognizer/dictionary.go`:
+  - [x] Replace `strings.TrimSpace()` with newline-only trimming to preserve whitespace characters
+  - [x] Remove empty line skip to preserve ideographic space (U+3000) and other whitespace tokens
+- [ ] Remove debug print statements from:
+  - [ ] `internal/recognizer/inference.go` (convertIndicesToRunes function)
+  - [ ] `internal/recognizer/ctc.go` (DecodeCTCGreedy function)
+- [ ] Update default configuration to use `ppocrv5_dict.txt` instead of `ppocr_keys_v1.txt`
+- [ ] Add tests to verify dictionary loading preserves whitespace characters
+- [ ] Document dictionary requirements for PP-OCRv5 models
+
+**Success Metric**: Text recognition produces correct output with PP-OCRv5 dictionary
+
+### 0.2 Performance Investigation and Optimization
+
+**Issue**: OCR processing times out after several minutes even on small images
+**Impact**: Unable to process documents in reasonable time
+
+- [ ] Profile recognition model inference to identify bottlenecks:
+  - [ ] Add timing instrumentation to batch processing pipeline
+  - [ ] Measure preprocessing, inference, and postprocessing stages
+  - [ ] Compare with PaddleOCR Python implementation performance
+- [ ] Investigate potential causes:
+  - [ ] Check if batch processing is inefficient for single regions
+  - [ ] Verify ONNX Runtime session configuration is optimal
+  - [ ] Review tensor allocation and memory operations
+  - [ ] Check if thread pool settings need adjustment
+- [ ] Implement performance optimizations:
+  - [ ] Optimize batch tensor creation and normalization
+  - [ ] Add caching for commonly used model inputs
+  - [ ] Consider model quantization or optimization
+- [ ] Add performance benchmarks and monitoring:
+  - [ ] Set reasonable timeout thresholds
+  - [ ] Add progress reporting for long operations
+  - [ ] Document expected processing times per image size
+
+**Success Metric**: Process 800x600 image in <10 seconds on CPU
+
+### 0.3 PDF Page Extraction Fix
+
+**Issue**: PDF processing reports "0 pages" even for valid single-page PDFs
+**Impact**: Cannot process PDF documents
+
+- [ ] Debug PDF page extraction in `internal/pdf/processor.go`:
+  - [ ] Add logging to trace PDF processing flow
+  - [ ] Verify page count detection logic
+  - [ ] Check image extraction from PDF pages
+- [ ] Test with various PDF types:
+  - [ ] Scanned PDFs (image-only)
+  - [ ] Text PDFs with embedded fonts
+  - [ ] Hybrid PDFs (text + images)
+  - [ ] Password-protected PDFs
+- [ ] Fix page extraction issues:
+  - [ ] Ensure proper PDF library initialization
+  - [ ] Verify page iteration and rendering
+  - [ ] Handle edge cases (rotated pages, unusual dimensions)
+- [ ] Add comprehensive PDF tests:
+  - [ ] Unit tests for page counting
+  - [ ] Integration tests with sample PDFs
+  - [ ] Error handling for corrupt/invalid PDFs
+
+**Success Metric**: Successfully extract and process all pages from test PDFs
+
+### 0.4 Model and Dictionary Configuration
+
+**Issue**: Need proper model-dictionary pairing and configuration management
+
+- [ ] Create model configuration profiles:
+  - [ ] PP-OCRv5 mobile (with ppocrv5_dict.txt)
+  - [ ] PP-OCRv5 server (with ppocrv5_dict.txt)
+  - [ ] Legacy PP-OCRv4 (with ppocr_keys_v1.txt if needed)
+- [ ] Update model auto-detection logic:
+  - [ ] Detect model version from filename or metadata
+  - [ ] Automatically select correct dictionary
+  - [ ] Warn if dictionary mismatch detected
+- [ ] Improve error messages:
+  - [ ] Clear errors when dictionary size doesn't match model
+  - [ ] Suggest correct dictionary for detected model
+  - [ ] Add validation during initialization
+- [ ] Update documentation:
+  - [ ] Document model-dictionary requirements
+  - [ ] Add troubleshooting guide for recognition issues
+  - [ ] Create migration guide from v4 to v5 models
+
+**Success Metric**: Correct model-dictionary pairing with helpful error messages
+
+---
+
 ## Phase 1: Testing Foundation (Week 3-4)
 
 ### 1.1 Unit Test Coverage Completion
@@ -123,38 +218,42 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 4.1 Symbologies & Libraries
 
-- [ ] Decision: Use pure Go ZXing port `gozxing` (github.com/makiuchi-d/gozxing) as the initial/default backend; barcode is an edge-case feature so prioritize portability and simple builds (no CGO).
-- [ ] Supported symbologies (as provided by `gozxing`): QR, Data Matrix, Aztec, PDF417, Code128, Code39, EAN-8/13, UPC-A/E, ITF, Codabar
-- [ ] Add dependency and wrapper:
-  - [ ] Introduce `barcode` package with a small adapter over `gozxing`
-  - [ ] Map options: requested formats, try-harder, multi-detect, ROI
-  - [ ] Normalize results: type, value, points/bbox, rotation (if available), confidence (-1 if unavailable)
-- [ ] Keep interface pluggable for future backends (zxing-cpp/zbar) but defer implementation
+- [x] Decision: Use pure Go ZXing port `gozxing` (github.com/makiuchi-d/gozxing) as the initial/default backend; barcode is an edge-case feature so prioritize portability and simple builds (no CGO).
+- [x] Supported symbologies (as provided by `gozxing`): QR, Data Matrix, Aztec, PDF417, Code128, Code39, EAN-8/13, UPC-A/E, ITF, Codabar
+- [x] Add dependency and wrapper:
+  - [x] Introduce `barcode` package with a small adapter over `gozxing`
+  - [x] Map options: requested formats, try-harder, multi-detect, ROI
+  - [x] Normalize results: type, value, points/bbox, rotation (if available), confidence (-1 if unavailable)
+- [x] Keep interface pluggable for future backends (zxing-cpp/zbar) but defer implementation
 
 ### 4.2 Image Pipeline Integration
 
-- [ ] Optional barcode stage in image processing:
-  - [ ] Flags: --barcodes, --barcode-types, --barcode-min-size
-  - [ ] Multi-scale/adaptive sampling for tiny/low-res codes
-  - [ ] Return bbox, rotation, type, value, confidence
-- [ ] Debug overlays for detected barcodes
+- [x] Optional barcode stage in image processing:
+  - [x] Flags: --barcodes, --barcode-types, --barcode-min-size
+  - [x] Multi-scale/adaptive sampling for tiny/low-res codes
+  - [x] Return bbox, rotation, type, value, confidence
+- [x] Debug overlays for detected barcodes
 
 ### 4.3 PDF Pipeline Integration
 
-- [ ] Detect barcodes on rendered pages:
-  - [ ] Page-level toggle and type filter
-  - [ ] DPI heuristics (e.g., 150/300) for robust decoding
-  - [ ] Map results to PDF coordinate space
-- [ ] Batch PDFs with page-range and concurrency controls
+- [x] Detect barcodes on rendered pages:
+  - [x] Page-level toggle and type filter
+  - [x] DPI heuristics (target ~150 DPI with capped upscale)
+  - [x] Map results to PDF coordinate space (page_box in points)
+- [x] Batch PDFs with page-range and concurrency controls
+  - [x] Page-level concurrency with worker pool (CLI/server configurable)
 
 ### 4.4 CLI & Server APIs
 
-- [ ] CLI:
-  - [ ] Add flags to image/pdf commands (see 4.2)
-  - [ ] Embed barcodes array alongside texts in outputs
-- [ ] Server:
-  - [ ] Accept barcode flags in multipart/form fields
-  - [ ] Extend response schema and OpenAPI docs
+- [x] CLI:
+  - [x] Add flags to image/pdf commands (see 4.2)
+  - [x] Embed barcodes array alongside texts in outputs
+- [x] Server:
+  - [x] Accept barcode flags in multipart/form fields
+  - [x] Extend response schema
+  - [x] Add OpenAPI docs
+  - [x] Add server flag for PDF barcode DPI (default 150)
+  - [x] Add CLI flag for PDF barcode DPI (default 150)
 
 ### 4.5 Testing & Datasets
 
@@ -165,7 +264,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ### 4.6 Output Schema & Docs
 
-- [ ] Extend JSON/CSV with fields: type, value, confidence, bbox, page, rotation
+- [x] Extend JSON/CSV with fields: type, value, confidence, bbox, page, rotation
 - [ ] Document supported symbologies, caveats, and best practices
 
 **Success Metrics**: 95%+ decode rate on common symbologies, robust mixed-content handling, <50ms per barcode on 1080p images
@@ -174,7 +273,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ## Phase 5: Advanced Recognition & Language Features (Week 9)
 
-### 4.1 Advanced Recognition Algorithms
+### 5.1 Advanced Recognition Algorithms
 
 - [ ] Add alternative decoding methods (beam search):
   - [ ] Beam search CTC decoding implementation
@@ -182,7 +281,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
   - [ ] Configurable beam width
   - [ ] Performance optimization for beam search
 
-### 4.2 Dynamic Language Support
+### 5.2 Dynamic Language Support
 
 - [ ] Dynamic language switching (per-request override TBD):
   - [ ] Per-request language override in server
@@ -200,7 +299,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ## Phase 6: GPU & Provider Support (Week 10)
 
-### 5.1 Multi-Provider GPU Support
+### 6.1 Multi-Provider GPU Support
 
 - [ ] Provider options (CUDA/DirectML) and graph optimization levels:
   - [ ] CUDA execution provider with device selection
@@ -212,7 +311,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
   - [ ] Automatic provider fallback
   - [ ] Device enumeration and selection
 
-### 5.2 GPU Memory Management
+### 6.2 GPU Memory Management
 
 - [ ] GPU memory management and monitoring:
   - [ ] GPU memory pooling and allocation strategies
@@ -227,7 +326,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ## Phase 7: Advanced PDF Processing (Week 11)
 
-### 6.1 Enhanced PDF Capabilities
+### 7.1 Enhanced PDF Capabilities
 
 - [x] Handle vector-based PDFs (text extraction vs OCR):
   - [x] Vector text detection and extraction
@@ -238,7 +337,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
   - [x] Secure password storage
   - [x] Batch processing with credentials
 
-### 6.2 PDF Robustness & Scale
+### 7.2 PDF Robustness & Scale
 
 - [ ] Manage large PDF files efficiently:
   - [ ] Streaming PDF processing
@@ -251,7 +350,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 - [ ] Add PDF processing limitations documentation
 - [ ] Create comprehensive PDF test suite
 
-### 6.3 Advanced PDF Features
+### 7.3 Advanced PDF Features
 
 - [ ] PDF form field processing:
   - [ ] Form field detection and extraction
@@ -265,7 +364,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ## Phase 8: Server & API Enhancements (Week 12)
 
-### 7.1 API Endpoint Extensions
+### 8.1 API Endpoint Extensions
 
 - [x] Add server endpoint: POST /ocr/pdf - PDF OCR:
   - [x] PDF upload and processing
@@ -280,7 +379,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
   - [x] Refactored handler code into separate files (image_handlers.go, pdf_handlers.go)
   - [x] Improved code maintainability and test organization
 
-### 7.2 Advanced Server Features
+### 8.2 Advanced Server Features
 
 - [x] Enhanced server capabilities:
   - [x] Graceful shutdown handling
@@ -292,7 +391,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
   - [x] Request-specific model selection
   - [x] Configuration validation
 
-### 7.3 API Testing & Documentation
+### 8.3 API Testing & Documentation
 
 - [x] Write server API tests:
   - [x] API endpoint testing
@@ -306,7 +405,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ## Phase 9: CLI & Configuration Improvements (Week 13)
 
-### 8.1 Enhanced CLI Features
+### 9.1 Enhanced CLI Features
 
 - [ ] Add enhanced CLI features:
   - [ ] --dry-run flag for testing configurations
@@ -317,7 +416,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
   - [ ] Schema validation for structured outputs
   - [ ] Data integrity checks
 
-### 8.2 Configuration System Enhancement
+### 9.2 Configuration System Enhancement
 
 - [ ] Implement configuration documentation:
   - [ ] Auto-generated configuration docs
@@ -334,7 +433,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ## Phase 10: Pipeline Enhancements (Week 14)
 
-### 9.1 Processing Intelligence
+### 10.1 Processing Intelligence
 
 - [ ] Profiles/presets (performance vs accuracy) for easy tuning:
   - [ ] Predefined configuration profiles
@@ -345,7 +444,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
   - [ ] Reading order detection
   - [ ] Paragraph and column detection
 
-### 9.2 Coordinate & Processing Improvements
+### 10.2 Coordinate & Processing Improvements
 
 - [ ] Return both original and working (post-rotation) coordinates when orientation applied:
   - [ ] Coordinate transformation tracking
@@ -362,7 +461,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 12: Orientation & Processing Improvements (Week 15)
+## Phase 11: Orientation & Processing Improvements (Week 15)
 
 ### 11.1 Orientation Performance Optimization
 
@@ -397,7 +496,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 13: Quality Assurance & CI/CD (Week 16)
+## Phase 12: Quality Assurance & CI/CD (Week 16)
 
 ### 12.1 Advanced Testing & Validation
 
@@ -442,7 +541,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 14: Deployment & Distribution (Week 17)
+## Phase 13: Deployment & Distribution (Week 17)
 
 ### 13.1 Release Automation
 
@@ -486,7 +585,7 @@ Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detect
 
 ---
 
-## Phase 15: Advanced Testing (Week 18)
+## Phase 14: Advanced Testing (Week 18)
 
 ### 14.1 Integration Test Completion
 
