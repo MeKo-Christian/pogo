@@ -1,8 +1,9 @@
 package pipeline
 
 import (
-	"os"
-	"testing"
+    "os"
+    "testing"
+    "strings"
 
 	"github.com/MeKo-Tech/pogo/internal/models"
 	"github.com/MeKo-Tech/pogo/internal/testutil"
@@ -14,7 +15,7 @@ import (
 func TestBuilder_WithRealModelsDir_Build(t *testing.T) {
 	det := models.GetDetectionModelPath("", false)
 	rec := models.GetRecognitionModelPath("", false)
-	dict := models.GetDictionaryPath("", models.DictionaryPPOCRKeysV1)
+    dict := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
 	for _, p := range []string{det, rec, dict} {
 		if _, err := os.Stat(p); err != nil {
 			t.Skipf("required model missing: %s", p)
@@ -40,7 +41,7 @@ func TestBuilder_WithRealModelsDir_Build(t *testing.T) {
 func TestPipeline_ProcessImage_WithRealModels(t *testing.T) {
 	det := models.GetDetectionModelPath("", false)
 	rec := models.GetRecognitionModelPath("", false)
-	dict := models.GetDictionaryPath("", models.DictionaryPPOCRKeysV1)
+    dict := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
 	for _, pth := range []string{det, rec, dict} {
 		if _, err := os.Stat(pth); err != nil {
 			t.Skipf("required model missing: %s", pth)
@@ -64,14 +65,21 @@ func TestPipeline_ProcessImage_WithRealModels(t *testing.T) {
 	require.NoError(t, procErr)
 	require.NotNil(t, res)
 
-	assert.Equal(t, img.Bounds().Dx(), res.Width)
-	assert.Equal(t, img.Bounds().Dy(), res.Height)
+    assert.Equal(t, img.Bounds().Dx(), res.Width)
+    assert.Equal(t, img.Bounds().Dy(), res.Height)
 	// Timing should be populated and consistent
 	assert.Positive(t, res.Processing.DetectionNs)
 	// Recognition might detect zero regions; still expect non-negative times
 	assert.GreaterOrEqual(t, res.Processing.RecognitionNs, int64(0))
 	assert.Positive(t, res.Processing.TotalNs)
 	// Total should be at least detection + recognition (allow overhead)
-	sum := res.Processing.DetectionNs + res.Processing.RecognitionNs
-	assert.GreaterOrEqual(t, res.Processing.TotalNs, sum)
+    sum := res.Processing.DetectionNs + res.Processing.RecognitionNs
+    assert.GreaterOrEqual(t, res.Processing.TotalNs, sum)
+
+    // Validate recognized text content (case-insensitive)
+    txt, err := ToPlainTextImage(res)
+    require.NoError(t, err)
+    got := strings.ToLower(txt)
+    assert.Contains(t, got, "hello")
+    assert.Contains(t, got, "world")
 }

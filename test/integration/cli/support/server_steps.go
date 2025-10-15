@@ -169,6 +169,15 @@ func (testCtx *TestContext) iPOSTAnImageToWithOverlayEnabled(endpoint string) er
 	return testCtx.uploadImageToEndpointWithOverlay(endpoint, imagePath, "")
 }
 
+// iPOSTAnImageToWithLanguage uploads an image with a language parameter.
+func (testCtx *TestContext) iPOSTAnImageToWithLanguage(endpoint, language string) error {
+    imagePath, err := testCtx.getTestImagePath()
+    if err != nil {
+        return err
+    }
+    return testCtx.uploadImageToEndpointWithOptions(endpoint, imagePath, "", map[string]string{"language": language})
+}
+
 // ensureImageExists checks if image exists and creates synthetic one if needed.
 func (testCtx *TestContext) ensureImageExists(imagePath string) error {
 	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
@@ -224,6 +233,52 @@ func (testCtx *TestContext) createMultipartForm(imagePath, format string, withOv
 	}
 
 	return &buf, writer, nil
+}
+
+// createMultipartFormForImage creates a multipart form with image and arbitrary options.
+func (testCtx *TestContext) createMultipartFormForImage(imagePath, format string, withOverlay bool, options map[string]string) (*bytes.Buffer, *multipart.Writer, error) {
+    var buf bytes.Buffer
+    writer := multipart.NewWriter(&buf)
+
+    // Add file field
+    file, err := os.Open(imagePath) //nolint:gosec // G304
+    if err != nil {
+        return nil, nil, fmt.Errorf("failed to open image file: %w", err)
+    }
+    defer func() { _ = file.Close() }()
+
+    part, err := writer.CreateFormFile("file", filepath.Base(imagePath))
+    if err != nil {
+        return nil, nil, fmt.Errorf("failed to create form file: %w", err)
+    }
+    if _, err := io.Copy(part, file); err != nil {
+        return nil, nil, fmt.Errorf("failed to copy file data: %w", err)
+    }
+
+    // Add base fields
+    if format != "" {
+        if err := writer.WriteField("format", format); err != nil {
+            return nil, nil, fmt.Errorf("failed to write format field: %w", err)
+        }
+    }
+    if withOverlay {
+        if err := writer.WriteField("overlay", "true"); err != nil {
+            return nil, nil, fmt.Errorf("failed to write overlay field: %w", err)
+        }
+    }
+
+    // Additional options
+    for k, v := range options {
+        if err := writer.WriteField(k, v); err != nil {
+            return nil, nil, fmt.Errorf("failed to write option field %s: %w", k, err)
+        }
+    }
+
+    if err := writer.Close(); err != nil {
+        return nil, nil, fmt.Errorf("failed to close multipart writer: %w", err)
+    }
+
+    return &buf, writer, nil
 }
 
 // makeUploadRequest performs the HTTP upload request and returns response.
@@ -292,7 +347,27 @@ func (testCtx *TestContext) uploadImageToEndpointWithOverlay(endpoint, imagePath
 
 // uploadImageToEndpoint performs the actual image upload.
 func (testCtx *TestContext) uploadImageToEndpoint(endpoint, imagePath, format string) error {
-	return testCtx.uploadImageToEndpointInternal(endpoint, imagePath, format, false)
+    return testCtx.uploadImageToEndpointInternal(endpoint, imagePath, format, false)
+}
+
+// uploadImageToEndpointWithOptions uploads an image with extra form fields.
+func (testCtx *TestContext) uploadImageToEndpointWithOptions(endpoint, imagePath, format string, options map[string]string) error {
+    if err := testCtx.ensureImageExists(imagePath); err != nil {
+        return err
+    }
+
+    buf, writer, err := testCtx.createMultipartFormForImage(imagePath, format, false, options)
+    if err != nil {
+        return err
+    }
+
+    body, statusCode, err := testCtx.makeUploadRequest(endpoint, buf, writer)
+    if err != nil {
+        return err
+    }
+
+    testCtx.storeUploadResponse(body, statusCode)
+    return nil
 }
 
 // uploadPDFToEndpoint uploads a PDF file to the specified endpoint.
@@ -544,6 +619,18 @@ func (testCtx *TestContext) theResponseShouldIndicateServerIsHealthy() error {
 	}
 
 	return fmt.Errorf("response does not indicate server is healthy: %s", testCtx.LastHTTPResponse)
+}
+
+// theResponseShouldContainText verifies the HTTP response contains specific text.
+func (testCtx *TestContext) theResponseShouldContainText(expected string) error {
+    if expected == "" {
+        return errors.New("expected text must not be empty")
+    }
+    body := strings.ToLower(testCtx.LastHTTPResponse)
+    if !strings.Contains(body, strings.ToLower(expected)) {
+        return fmt.Errorf("response does not contain %q. Got: %s", expected, testCtx.LastHTTPResponse)
+    }
+    return nil
 }
 
 // iSendSignalToTheServer sends a signal to the running server.
@@ -1202,9 +1289,10 @@ func (testCtx *TestContext) registerServerEndpointSteps(sc *godog.ScenarioContex
 // registerAPIRequestSteps registers API request steps.
 func (testCtx *TestContext) registerAPIRequestSteps(sc *godog.ScenarioContext) {
 	// Image endpoints
-	sc.Step(`^I POST an image to "([^"]*)"$`, testCtx.iPOSTAnImageTo)
-	sc.Step(`^I POST an image to "([^"]*)" with format "([^"]*)"$`, testCtx.iPOSTAnImageToWithFormat)
-	sc.Step(`^I POST an image to "([^"]*)" with overlay enabled$`, testCtx.iPOSTAnImageToWithOverlayEnabled)
+    sc.Step(`^I POST an image to "([^"]*)"$`, testCtx.iPOSTAnImageTo)
+    sc.Step(`^I POST an image to "([^"]*)" with format "([^"]*)"$`, testCtx.iPOSTAnImageToWithFormat)
+    sc.Step(`^I POST an image to "([^"]*)" with overlay enabled$`, testCtx.iPOSTAnImageToWithOverlayEnabled)
+    sc.Step(`^I POST an image to "([^"]*)" with language "([^"]*)"$`, testCtx.iPOSTAnImageToWithLanguage)
 	sc.Step(`^I POST a large image to "([^"]*)"$`, testCtx.iPOSTALargeImageTo)
 	sc.Step(`^I POST an image larger than 1MB to "([^"]*)"$`, testCtx.iPOSTAnImageLargerThan1MBTo)
 	sc.Step(`^I POST an invalid file to "([^"]*)"$`, testCtx.iPOSTAnInvalidFileTo)
@@ -1253,7 +1341,8 @@ func (testCtx *TestContext) registerResponseVerificationSteps(sc *godog.Scenario
 	sc.Step(`^the response should indicate server is healthy$`, testCtx.theResponseShouldIndicateServerIsHealthy)
 	sc.Step(`^the response should be valid JSON$`, testCtx.theResponseShouldBeValidJSON)
 	sc.Step(`^the response should be valid JSON-Code$`, testCtx.theResponseShouldBeValidJSONCode)
-	sc.Step(`^response times should be reasonable$`, testCtx.responseTimesShouldBeReasonable)
+    sc.Step(`^response times should be reasonable$`, testCtx.responseTimesShouldBeReasonable)
+    sc.Step(`^the response should contain text "([^"]*)"$`, testCtx.theResponseShouldContainText)
 
 	// PDF-specific response verification
 	sc.Step(`^the JSON should contain PDF metadata$`, testCtx.theJSONShouldContainPDFMetadata)

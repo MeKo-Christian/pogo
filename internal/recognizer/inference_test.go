@@ -1,10 +1,11 @@
 package recognizer
 
 import (
-	"image"
-	"image/color"
-	"os"
-	"testing"
+    "image"
+    "image/color"
+    "os"
+    "testing"
+    "strings"
 
 	"github.com/MeKo-Tech/pogo/internal/detector"
 	"github.com/MeKo-Tech/pogo/internal/models"
@@ -26,7 +27,7 @@ func TestRecognizeRegion_NilImage(t *testing.T) {
 func TestRecognizeRegion_ValidInput(t *testing.T) {
 	// Skip if model not available
 	modelPath := models.GetRecognitionModelPath("", false)
-	dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRKeysV1)
+    dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
 	if !fileExists(modelPath) || !fileExists(dictPath) {
 		t.Skip("Recognition model or dictionary not available, skipping test")
 	}
@@ -69,13 +70,18 @@ func TestRecognizeRegion_ValidInput(t *testing.T) {
 	}
 	require.NotNil(t, result)
 
-	// Basic validations - be lenient since this depends on the actual model
-	assert.Greater(t, result.Confidence, 0.0)
-	assert.LessOrEqual(t, result.Confidence, 1.0)
-	assert.NotEmpty(t, result.CharConfidences)
-	assert.NotEmpty(t, result.Indices)
-	assert.Positive(t, result.Width)
-	assert.Positive(t, result.Height)
+    // Basic validations - be lenient since this depends on the actual model
+    assert.Greater(t, result.Confidence, 0.0)
+    assert.LessOrEqual(t, result.Confidence, 1.0)
+    assert.NotEmpty(t, result.CharConfidences)
+    assert.NotEmpty(t, result.Indices)
+    assert.Positive(t, result.Width)
+    assert.Positive(t, result.Height)
+
+    // Validate recognized text contains expected content (case-insensitive).
+    // This ensures we actually verify OCR content, not just structure.
+    got := strings.ToUpper(result.Text)
+    assert.Contains(t, got, "HELLO")
 
 	// Timing should be positive
 	assert.Positive(t, result.TimingNs.Preprocess)
@@ -194,7 +200,7 @@ func TestRunInference_NilSession(t *testing.T) {
 func TestRunInference_ValidSession(t *testing.T) {
 	// Skip if model not available
 	modelPath := models.GetRecognitionModelPath("", false)
-	dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRKeysV1)
+    dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
 	if !fileExists(modelPath) || !fileExists(dictPath) {
 		t.Skip("Recognition model or dictionary not available, skipping test")
 	}
@@ -522,7 +528,7 @@ func TestDetermineClassesFirst(t *testing.T) {
 func TestRecognizeBatch_ValidMultipleRegions(t *testing.T) {
 	// Skip if models not available for this complex test
 	modelPath := models.GetRecognitionModelPath("", false)
-	dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRKeysV1)
+    dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
 	if !fileExists(modelPath) || !fileExists(dictPath) {
 		t.Skip("Recognition model or dictionary not available, testing with unit tests instead")
 	}
@@ -563,31 +569,40 @@ func TestRecognizeBatch_ValidMultipleRegions(t *testing.T) {
 		},
 	}
 
-	// Test batch recognition
-	results, err := r.RecognizeBatch(img, regions)
+    // Test batch recognition
+    results, err := r.RecognizeBatch(img, regions)
 	// Allow test to pass even if recognition fails due to model issues
 	if err != nil {
 		t.Skipf("Batch recognition failed (possibly due to model/environment issues): %v", err)
 	}
 	require.Len(t, results, len(regions))
 
-	// Validate each result
-	for i, result := range results {
-		assert.Greater(t, result.Confidence, 0.0, "Result %d should have positive confidence", i)
-		assert.LessOrEqual(t, result.Confidence, 1.0, "Result %d confidence should be <= 1.0", i)
-		assert.NotEmpty(t, result.CharConfidences, "Result %d should have character confidences", i)
-		assert.NotEmpty(t, result.Indices, "Result %d should have indices", i)
-		assert.Positive(t, result.Width, "Result %d should have positive width", i)
-		assert.Positive(t, result.Height, "Result %d should have positive height", i)
-		assert.Equal(t, r.config.ImageHeight, result.Height, "Result %d height should match config", i)
-	}
+    // Validate each result
+    for i, result := range results {
+        assert.Greater(t, result.Confidence, 0.0, "Result %d should have positive confidence", i)
+        assert.LessOrEqual(t, result.Confidence, 1.0, "Result %d confidence should be <= 1.0", i)
+        assert.NotEmpty(t, result.CharConfidences, "Result %d should have character confidences", i)
+        assert.NotEmpty(t, result.Indices, "Result %d should have indices", i)
+        assert.Positive(t, result.Width, "Result %d should have positive width", i)
+        assert.Positive(t, result.Height, "Result %d should have positive height", i)
+        assert.Equal(t, r.config.ImageHeight, result.Height, "Result %d height should match config", i)
+    }
+
+    // Validate recognized text content appears somewhere across regions
+    var combined strings.Builder
+    for _, res := range results {
+        combined.WriteString(res.Text)
+        combined.WriteString(" ")
+    }
+    got := strings.ToUpper(combined.String())
+    assert.True(t, strings.Contains(got, "BATCH") || strings.Contains(got, "TEST"))
 }
 
 // TestRecognizeBatch_SingleRegion tests batch processing with just one region.
 func TestRecognizeBatch_SingleRegion(t *testing.T) {
 	// Skip if models not available
 	modelPath := models.GetRecognitionModelPath("", false)
-	dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRKeysV1)
+    dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
 	if !fileExists(modelPath) || !fileExists(dictPath) {
 		t.Skip("Recognition model or dictionary not available, skipping test")
 	}
@@ -738,7 +753,7 @@ func TestBuildBatchResults_MismatchedLengths(t *testing.T) {
 func TestRecognizeBatch_Integration(t *testing.T) {
 	// Skip if models not available
 	modelPath := models.GetRecognitionModelPath("", false)
-	dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRKeysV1)
+    dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
 	if !fileExists(modelPath) || !fileExists(dictPath) {
 		t.Skip("Recognition model or dictionary not available, skipping integration test")
 	}
@@ -793,18 +808,27 @@ func TestRecognizeBatch_Integration(t *testing.T) {
 	}
 	require.Len(t, results, len(regions))
 
-	// Validate results
-	for i, result := range results {
-		// Note: confidence may be 0.0 if model returns empty results for synthetic data
-		assert.GreaterOrEqual(t, result.Confidence, 0.0, "Result %d should have non-negative confidence", i)
-		assert.LessOrEqual(t, result.Confidence, 1.0, "Result %d confidence should be <= 1.0", i)
-		// Character confidences and indices may be empty if no text is recognized
-		assert.NotNil(t, result.CharConfidences, "Result %d should have non-nil character confidences", i)
-		assert.NotNil(t, result.Indices, "Result %d should have non-nil indices", i)
-		assert.Positive(t, result.Width, "Result %d should have positive width", i)
-		assert.Positive(t, result.Height, "Result %d should have positive height", i)
+    // Validate results
+    for i, result := range results {
+        // Note: confidence may be 0.0 if model returns empty results for synthetic data
+        assert.GreaterOrEqual(t, result.Confidence, 0.0, "Result %d should have non-negative confidence", i)
+        assert.LessOrEqual(t, result.Confidence, 1.0, "Result %d confidence should be <= 1.0", i)
+        // Character confidences and indices may be empty if no text is recognized
+        assert.NotNil(t, result.CharConfidences, "Result %d should have non-nil character confidences", i)
+        assert.NotNil(t, result.Indices, "Result %d should have non-nil indices", i)
+        assert.Positive(t, result.Width, "Result %d should have positive width", i)
+        assert.Positive(t, result.Height, "Result %d should have positive height", i)
 
-		// Results should be consistent between single and batch processing
-		assert.Equal(t, r.config.ImageHeight, result.Height, "Result %d height should match config", i)
-	}
+        // Results should be consistent between single and batch processing
+        assert.Equal(t, r.config.ImageHeight, result.Height, "Result %d height should match config", i)
+    }
+
+    // Validate we recognized some expected content across regions
+    var all strings.Builder
+    for _, res := range results {
+        all.WriteString(res.Text)
+        all.WriteString(" ")
+    }
+    agg := strings.ToUpper(all.String())
+    assert.True(t, strings.Contains(agg, "BATCH") || strings.Contains(agg, "TEST"))
 }

@@ -13,6 +13,7 @@ Feature: Server API - Batch Processing Endpoint
     And the JSON should contain a "results" array with 3 items
     And all batch items should have "success" field
     And the JSON should contain processing summary
+    And the response should contain text "Hello World"
 
   Scenario: Batch process multiple PDFs
     When I POST a batch request with 2 PDFs to "/ocr/batch"
@@ -20,6 +21,7 @@ Feature: Server API - Batch Processing Endpoint
     And the response should be valid JSON
     And the JSON should contain a "results" array with 2 items
     And all PDF results should have "pages" array
+    And the response should contain text "Sample PDF text"
 
   Scenario: Batch process mixed images and PDFs
     When I POST a batch request with 2 images and 1 PDF to "/ocr/batch"

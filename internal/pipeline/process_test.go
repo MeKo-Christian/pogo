@@ -1,13 +1,14 @@
 package pipeline
 
 import (
-	"image/color"
-	"os"
-	"testing"
+    "image/color"
+    "os"
+    "testing"
 
-	"github.com/MeKo-Tech/pogo/internal/testutil"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+    "github.com/MeKo-Tech/pogo/internal/testutil"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+    "strings"
 )
 
 func TestProcessImage_Errors(t *testing.T) {
@@ -79,11 +80,16 @@ func TestProcessImage_Smoke(t *testing.T) {
 	img, err2 := testutil.GenerateTextImage(cfg)
 	require.NoError(t, err2)
 
-	res, err := p.ProcessImage(img)
-	if err != nil {
-		t.Skipf("process failed (runtime deps): %v", err)
-	}
-	require.NotNil(t, res)
-	assert.Equal(t, img.Bounds().Dx(), res.Width)
-	assert.Equal(t, img.Bounds().Dy(), res.Height)
+    res, err := p.ProcessImage(img)
+    if err != nil {
+        t.Skipf("process failed (runtime deps): %v", err)
+    }
+    require.NotNil(t, res)
+    assert.Equal(t, img.Bounds().Dx(), res.Width)
+    assert.Equal(t, img.Bounds().Dy(), res.Height)
+
+    // Validate recognized text contains expected content (case-insensitive)
+    txt, err := ToPlainTextImage(res)
+    require.NoError(t, err)
+    assert.Contains(t, strings.ToLower(txt), "hello")
 }

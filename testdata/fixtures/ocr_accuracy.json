@@ -1,0 +1,16 @@
+[
+  {"image": "testdata/images/simple/simple_1_Hello.png",  "expected": "Hello",  "min_similarity": 0.80, "min_car": 0.80, "min_war": 1.00, "min_avg_conf": 0.00},
+  {"image": "testdata/images/simple/simple_2_World.png",  "expected": "World",  "min_similarity": 0.80, "min_car": 0.80, "min_war": 1.00, "min_avg_conf": 0.00},
+  {"image": "testdata/images/simple/simple_3_OCR.png",    "expected": "OCR",    "min_similarity": 0.80, "min_car": 0.80, "min_war": 1.00, "min_avg_conf": 0.00},
+  {"image": "testdata/images/simple/simple_4_Test.png",   "expected": "Test",   "min_similarity": 0.80, "min_car": 0.80, "min_war": 1.00, "min_avg_conf": 0.00},
+  {"image": "testdata/images/simple/simple_5_123.png",    "expected": "123",    "min_similarity": 0.95, "min_car": 0.95, "min_war": 1.00, "min_avg_conf": 0.00},
+  {"image": "testdata/images/simple/simple_6_Sample.png", "expected": "Sample", "min_similarity": 0.80, "min_car": 0.80, "min_war": 1.00, "min_avg_conf": 0.00},
+  {"image": "testdata/images/rotated/rotated_0.png",   "expected": "Rotated Text", "min_similarity": 0.70, "min_car": 0.70, "min_war": 0.50, "min_avg_conf": 0.00},
+  {"image": "testdata/images/rotated/rotated_90.png",  "expected": "Rotated Text", "min_similarity": 0.65, "min_car": 0.65, "min_war": 0.50, "min_avg_conf": 0.00},
+  {"image": "testdata/images/rotated/rotated_180.png", "expected": "Rotated Text", "min_similarity": 0.65, "min_car": 0.65, "min_war": 0.50, "min_avg_conf": 0.00},
+  {"image": "testdata/images/rotated/rotated_270.png", "expected": "Rotated Text", "min_similarity": 0.65, "min_car": 0.65, "min_war": 0.50, "min_avg_conf": 0.00},
+  {"image": "testdata/images/rotated/rotated_45.png",  "expected": "Rotated Text", "min_similarity": 0.50, "min_car": 0.50, "min_war": 0.50, "min_avg_conf": 0.00},
+  {"image": "testdata/images/rotated/rotated_-45.png", "expected": "Rotated Text", "min_similarity": 0.50, "min_car": 0.50, "min_war": 0.50, "min_avg_conf": 0.00}
+  , {"image": "testdata/images/scanned/scanned_document.png", "expected": "Scanned Document Sample", "min_similarity": 0.55, "min_car": 0.55, "min_war": 0.50, "min_avg_conf": 0.00}
+  , {"image": "testdata/images/german_text.png", "expected": "", "min_similarity": 0.00, "min_car": 0.00, "min_war": 0.00, "min_avg_conf": 0.00, "contains_any": ["ä","ö","ü","Ä","Ö","Ü","ß"], "min_contains": 1}
+]

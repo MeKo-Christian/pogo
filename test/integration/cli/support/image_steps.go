@@ -1,14 +1,14 @@
 package support
 
 import (
-	"encoding/csv"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"strconv"
-	"strings"
+    "encoding/csv"
+    "encoding/json"
+    "errors"
+    "fmt"
+    "strconv"
+    "strings"
 
-	"github.com/cucumber/godog"
+    "github.com/cucumber/godog"
 )
 
 // theOutputShouldContainDetectedTextRegions verifies the output contains text regions.
@@ -230,18 +230,125 @@ func (testCtx *TestContext) theOverlayShouldShowDetectedTextRegions() error {
 
 // onlyHighConfidenceRecognizedTextShouldBeIncluded verifies recognition confidence filtering.
 func (testCtx *TestContext) onlyHighConfidenceRecognizedTextShouldBeIncluded() error {
-	// Similar to detection confidence, this is a simplified check
-	// In a real implementation, we would parse and verify recognition confidence values
-	return nil
+    // If JSON format, parse and validate recognition confidences against --min-rec-conf
+    if strings.Contains(testCtx.LastCommand, "--format json") {
+        regions, err := extractRegionsFromJSON(testCtx.LastOutput)
+        if err != nil {
+            return err
+        }
+        // Default threshold if none provided
+        threshold := 0.0
+        // Parse --min-rec-conf value from command
+        parts := strings.Fields(testCtx.LastCommand)
+        for i := 0; i < len(parts); i++ {
+            if parts[i] == "--min-rec-conf" && i+1 < len(parts) {
+                if v, err := strconv.ParseFloat(parts[i+1], 64); err == nil {
+                    threshold = v
+                }
+                break
+            }
+        }
+        for i, region := range regions {
+            if v, ok := region["rec_confidence"]; ok {
+                if cf, ok := v.(float64); ok {
+                    if cf < threshold {
+                        return fmt.Errorf("region %d rec_confidence %.3f below threshold %.3f", i, cf, threshold)
+                    }
+                }
+            }
+        }
+    }
+    // For text or CSV formats, we accept success since confidences are not present
+    return nil
+}
+
+// theOutputShouldContainText verifies the output contains specific text (case-insensitive).
+func (testCtx *TestContext) theOutputShouldContainText(expected string) error {
+    if expected == "" {
+        return errors.New("expected text must not be empty")
+    }
+    if !strings.Contains(strings.ToLower(testCtx.LastOutput), strings.ToLower(expected)) {
+        return fmt.Errorf("output does not contain expected text %q. Got: %s", expected, testCtx.LastOutput)
+    }
+    return nil
+}
+
+// levenshteinDistance computes the Levenshtein distance between two strings.
+func levenshteinDistance(a, b string) int {
+    ra := []rune(a)
+    rb := []rune(b)
+    da := make([]int, len(rb)+1)
+    db := make([]int, len(rb)+1)
+    for j := range da { da[j] = j }
+    for i := 1; i <= len(ra); i++ {
+        db[0] = i
+        for j := 1; j <= len(rb); j++ {
+            cost := 0
+            if ra[i-1] != rb[j-1] {
+                cost = 1
+            }
+            db[j] = min3(db[j-1]+1, da[j]+1, da[j-1]+cost)
+        }
+        copy(da, db)
+    }
+    return da[len(rb)]
+}
+
+func min3(a, b, c int) int {
+    if a < b {
+        if a < c { return a }
+        return c
+    }
+    if b < c { return b }
+    return c
+}
+
+// similarity returns a normalized similarity score [0,1] based on Levenshtein distance.
+func similarity(a, b string) float64 {
+    if a == "" && b == "" { return 1 }
+    dist := float64(levenshteinDistance(strings.ToLower(a), strings.ToLower(b)))
+    maxLen := float64(max(len([]rune(a)), len([]rune(b))))
+    if maxLen == 0 { return 1 }
+    return 1.0 - dist/maxLen
+}
+
+func max(a, b int) int { if a > b { return a } ; return b }
+
+// theOutputShouldApproximatelyMatch verifies the output approximately matches expected text.
+// Uses a default similarity threshold of 0.8 for robustness.
+func (testCtx *TestContext) theOutputShouldApproximatelyMatch(expected string) error {
+    if expected == "" {
+        return errors.New("expected text must not be empty")
+    }
+    // Extract a plausible text body (strip filenames/paths if present)
+    body := testCtx.LastOutput
+    // Evaluate similarity line-by-line and also against full body
+    best := similarity(body, expected)
+    for _, line := range strings.Split(body, "\n") {
+        s := similarity(line, expected)
+        if s > best { best = s }
+    }
+    if best+1e-9 < 0.8 { // allow tiny float diff
+        return fmt.Errorf("output does not approximately match %q (similarity=%.3f). Got: %s", expected, best, testCtx.LastOutput)
+    }
+    return nil
 }
 
 // theOutputShouldContainGermanText verifies German language processing.
 func (testCtx *TestContext) theOutputShouldContainGermanText() error {
-	// This is a simplified check - in a real implementation, we would check for German-specific characters or words
-	if len(strings.TrimSpace(testCtx.LastOutput)) == 0 {
-		return errors.New("no text output found for German language processing")
-	}
-	return nil
+    // Strengthened: require presence of at least one German-specific character
+    out := testCtx.LastOutput
+    if len(strings.TrimSpace(out)) == 0 {
+        return errors.New("no text output found for German language processing")
+    }
+    germanChars := []string{"ä", "ö", "ü", "Ä", "Ö", "Ü", "ß"}
+    lower := strings.ToLower(out)
+    for _, ch := range germanChars {
+        if strings.Contains(lower, strings.ToLower(ch)) {
+            return nil
+        }
+    }
+    return errors.New("output does not contain German-specific characters (ä, ö, ü, ß)")
 }
 
 // allDetectedRegionsShouldHaveConfidenceGTE verifies all regions have minimum confidence.
@@ -302,9 +409,13 @@ func (testCtx *TestContext) RegisterImageSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^the overlay should show detected text regions$`,
 		testCtx.theOverlayShouldShowDetectedTextRegions)
 
-	// Recognition confidence
-	sc.Step(`^only high-confidence recognized text should be included$`,
-		testCtx.onlyHighConfidenceRecognizedTextShouldBeIncluded)
+    // Recognition confidence
+    sc.Step(`^only high-confidence recognized text should be included$`,
+        testCtx.onlyHighConfidenceRecognizedTextShouldBeIncluded)
+
+    // Text content validation
+    sc.Step(`^the output should contain text "([^"]*)"$`, testCtx.theOutputShouldContainText)
+    sc.Step(`^the output should approximately match "([^"]*)"$`, testCtx.theOutputShouldApproximatelyMatch)
 
 	// Language-specific processing
 	sc.Step(`^the output should contain German text$`, testCtx.theOutputShouldContainGermanText)

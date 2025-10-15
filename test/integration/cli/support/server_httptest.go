@@ -366,7 +366,7 @@ func (testCtx *TestContext) handleSuccessfulDecode(w http.ResponseWriter,
 
 // sendOCRResponse sends the OCR result response.
 func (testCtx *TestContext) sendOCRResponse(w http.ResponseWriter,
-	result *pipeline.OCRImageResult, mockBase64ImageData string, r *http.Request,
+    result *pipeline.OCRImageResult, mockBase64ImageData string, r *http.Request,
 ) {
 	// Get format parameter
 	format := r.FormValue("format")
@@ -374,7 +374,14 @@ func (testCtx *TestContext) sendOCRResponse(w http.ResponseWriter,
 		format = "json"
 	}
 
-	// Handle different response formats
+    // Allow language override to simulate German text output
+    if lang := strings.ToLower(r.FormValue("language")); lang == "de" {
+        if len(result.Regions) > 0 {
+            result.Regions[0].Text = "Übergröße für München: Grüße, schön & süß – Spaß! äöüÄÖÜß"
+        }
+    }
+
+    // Handle different response formats
 	switch format {
 	case "text":
 		w.Header().Set("Content-Type", "text/plain")

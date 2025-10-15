@@ -9,8 +9,8 @@ import (
 )
 
 func TestRecognizer_Warmup_SkipIfNoModel(t *testing.T) {
-	modelPath := models.GetRecognitionModelPath("", false)
-	dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRKeysV1)
+    modelPath := models.GetRecognitionModelPath("", false)
+    dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
 	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 		t.Skip("Recognition model not available, skipping warmup test")
 	}

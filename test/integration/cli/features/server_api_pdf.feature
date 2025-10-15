@@ -12,6 +12,7 @@ Feature: Server API - PDF Processing Endpoint
     And the response should be valid JSON
     And the JSON should contain "pages" array
     And each page should have "images" array
+    And the response should contain text "Sample PDF text"
 
   Scenario: Process PDF with page range
     When I POST a PDF to "/ocr/pdf" with pages "1-3"
@@ -31,6 +32,7 @@ Feature: Server API - PDF Processing Endpoint
     And the response should be valid JSON
     And the JSON should contain PDF metadata
     And the JSON should contain page results
+    And the response should contain text "Sample PDF text"
 
   Scenario: Upload PDF with CSV format
     When I POST a PDF to "/ocr/pdf" with format "csv"
@@ -43,6 +45,7 @@ Feature: Server API - PDF Processing Endpoint
     Then the response status should be 200
     And the response should contain text output
     And the output should contain page information
+    And the response should contain text "Sample PDF text"
 
   Scenario: Upload multi-page PDF
     When I POST a multi-page PDF to "/ocr/pdf"

@@ -12,6 +12,7 @@ Feature: Image OCR Processing
     Then the command should succeed
     And the output should contain detected text regions
     And the output should be in text format
+    And the output should approximately match "Hello"
 
   Scenario: Process image with JSON output
     When I run "pogo image testdata/images/simple_text.png --format json"
@@ -19,17 +20,57 @@ Feature: Image OCR Processing
     Then the output should be valid JSON-Code
     Then the JSON should contain "regions" array
     Then the JSON should contain confidence scores
+    And the output should contain text "Hello"
 
   Scenario: Process image with CSV output
     When I run "pogo image testdata/images/simple_text.png --format csv"
     Then the command should succeed
     Then the output should be valid CSV
     Then the CSV should contain coordinate columns
+    And the output should contain text "Hello"
 
   Scenario: Process multiple images
     When I run "pogo image testdata/images/simple/simple_1_Hello.png testdata/images/simple/simple_2_World.png"
     Then the command should succeed
     And the output should contain results for all images
+    And the output should contain text "Hello"
+    And the output should contain text "World"
+
+  Scenario: Process multiple images with JSON output
+    When I run "pogo image testdata/images/simple/simple_1_Hello.png testdata/images/simple/simple_2_World.png --format json"
+    Then the command should succeed
+    Then the output should be valid JSON-Code
+    Then the JSON should contain "regions" array
+    And the output should contain text "Hello"
+    And the output should contain text "World"
+
+  Scenario: Process multiple images with CSV output
+    When I run "pogo image testdata/images/simple/simple_1_Hello.png testdata/images/simple/simple_2_World.png --format csv"
+    Then the command should succeed
+    Then the output should be valid CSV
+    And the CSV should contain coordinate columns
+    And the output should contain text "Hello"
+    And the output should contain text "World"
+
+  Scenario: Process image containing text OCR
+    When I run "pogo image testdata/images/simple/simple_3_OCR.png"
+    Then the command should succeed
+    And the output should contain text "OCR"
+
+  Scenario: Process image containing text Test
+    When I run "pogo image testdata/images/simple/simple_4_Test.png"
+    Then the command should succeed
+    And the output should contain text "Test"
+
+  Scenario: Process image containing numeric text 123
+    When I run "pogo image testdata/images/simple/simple_5_123.png"
+    Then the command should succeed
+    And the output should contain text "123"
+
+  Scenario: Process image containing text Sample
+    When I run "pogo image testdata/images/simple/simple_6_Sample.png"
+    Then the command should succeed
+    And the output should contain text "Sample"
 
   Scenario: Process image with confidence filtering
     When I run "pogo image testdata/images/simple_text.png --confidence 0.8"
@@ -45,6 +86,12 @@ Feature: Image OCR Processing
     When I run "pogo image testdata/images/rotated/rotated_90.png --detect-textline"
     Then the command should succeed
     And individual text lines should be corrected for orientation
+    And the output should approximately match "Rotated"
+
+  Scenario: Process rotated image with orientation detection
+    When I run "pogo image testdata/images/rotated/rotated_270.png --detect-orientation"
+    Then the command should succeed
+    And the output should approximately match "Rotated"
 
   Scenario: Save output to file
     When I run "pogo image testdata/images/simple_text.png --output results.txt"
@@ -59,7 +106,7 @@ Feature: Image OCR Processing
     And the overlay should show detected text regions
 
   Scenario: Process image with recognition confidence filtering
-    When I run "pogo image testdata/images/simple_text.png --min-rec-conf 0.9"
+    When I run "pogo image testdata/images/simple_text.png --min-rec-conf 0.9 --format json"
     Then the command should succeed
     And only high-confidence recognized text should be included
 
@@ -67,6 +114,11 @@ Feature: Image OCR Processing
     When I run "pogo image testdata/images/german_text.png --language de"
     Then the command should succeed
     And the output should contain German text
+
+  Scenario: Process scanned/low-quality image
+    When I run "pogo image testdata/images/scanned/scanned_document.png"
+    Then the command should succeed
+    And the output should approximately match "Scanned Document"
 
   Scenario: Process image with custom recognition height
     When I run "pogo image testdata/images/small_text.png --rec-height 48"

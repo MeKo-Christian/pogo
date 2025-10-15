@@ -10,12 +10,12 @@ import (
 )
 
 func TestDefaultConfig(t *testing.T) {
-	cfg := DefaultConfig()
-	assert.Equal(t, models.GetRecognitionModelPath("", false), cfg.ModelPath)
-	assert.Equal(t, models.GetDictionaryPath("", models.DictionaryPPOCRKeysV1), cfg.DictPath)
-	assert.Equal(t, 48, cfg.ImageHeight)
-	assert.False(t, cfg.UseServerModel)
-	assert.Equal(t, 0, cfg.NumThreads)
+    cfg := DefaultConfig()
+    assert.Equal(t, models.GetRecognitionModelPath("", false), cfg.ModelPath)
+    assert.Equal(t, models.GetDictionaryPath("", models.DictionaryPPOCRv5), cfg.DictPath)
+    assert.Equal(t, 48, cfg.ImageHeight)
+    assert.False(t, cfg.UseServerModel)
+    assert.Equal(t, 0, cfg.NumThreads)
 }
 
 func TestNewRecognizer_EmptyPaths(t *testing.T) {
@@ -52,8 +52,8 @@ func TestNewRecognizer_MissingDictionary(t *testing.T) {
 }
 
 func TestNewRecognizer_ValidModel(t *testing.T) {
-	modelPath := models.GetRecognitionModelPath("", false)
-	dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRKeysV1)
+    modelPath := models.GetRecognitionModelPath("", false)
+    dictPath := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
 
 	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 		t.Skip("Recognition model not available, skipping test")

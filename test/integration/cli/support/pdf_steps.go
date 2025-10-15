@@ -441,11 +441,19 @@ func (testCtx *TestContext) theCommandShouldCompleteWithinReasonableTime() error
 
 // theOutputShouldContainGermanTextExtraction verifies German text processing.
 func (testCtx *TestContext) theOutputShouldContainGermanTextExtraction() error {
-	// This is a simplified check - in a real implementation, we would check for German-specific characters or words
-	if len(strings.TrimSpace(testCtx.LastOutput)) == 0 {
-		return errors.New("no text output found for German language processing")
-	}
-	return nil
+    // Strengthened: require presence of at least one German-specific character
+    out := testCtx.LastOutput
+    if len(strings.TrimSpace(out)) == 0 {
+        return errors.New("no text output found for German language processing")
+    }
+    germanChars := []string{"ä", "ö", "ü", "Ä", "Ö", "Ü", "ß"}
+    lower := strings.ToLower(out)
+    for _, ch := range germanChars {
+        if strings.Contains(lower, strings.ToLower(ch)) {
+            return nil
+        }
+    }
+    return errors.New("output does not contain German-specific characters (ä, ö, ü, ß)")
 }
 
 // thePDFShouldHavePages verifies PDF page count.

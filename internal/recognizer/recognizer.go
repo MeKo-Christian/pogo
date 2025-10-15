@@ -55,11 +55,12 @@ func DefaultConfig() Config {
 
 // UpdateModelPath updates the ModelPath and DictPath based on modelsDir and UseServerModel flag.
 func (c *Config) UpdateModelPath(modelsDir string) {
-	c.ModelPath = models.GetRecognitionModelPath(modelsDir, c.UseServerModel)
-	// Update DictPath if using single dictionary (not multiple)
-	if len(c.DictPaths) == 0 {
-		c.DictPath = models.GetDictionaryPath(modelsDir, models.DictionaryPPOCRKeysV1)
-	}
+    c.ModelPath = models.GetRecognitionModelPath(modelsDir, c.UseServerModel)
+    // Update DictPath if using single dictionary (not multiple)
+    if len(c.DictPaths) == 0 {
+        // Default to PP-OCRv5 dictionary which matches PP-OCRv5 models
+        c.DictPath = models.GetDictionaryPath(modelsDir, models.DictionaryPPOCRv5)
+    }
 }
 
 // Recognizer performs text recognition using ONNX Runtime.
