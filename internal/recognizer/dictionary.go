@@ -70,8 +70,11 @@ func LoadCharset(path string) (*Charset, error) {
 	for scanner.Scan() {
 		lineNum++
 		line := processLine(scanner.Text(), lineNum)
-		// Don't skip empty lines - they might be whitespace characters that were part of the original line
-		// Only skip truly empty lines (after removing BOM and newlines)
+		// Skip truly empty lines (after removing BOM and newlines)
+		// Whitespace-only lines should be preserved as they might be valid tokens
+		if line == "" {
+			continue
+		}
 		tokens = append(tokens, line)
 	}
 	if err := scanner.Err(); err != nil {

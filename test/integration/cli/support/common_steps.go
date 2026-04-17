@@ -60,27 +60,29 @@ func (testCtx *TestContext) theOCRModelsAreAvailable() error {
 		return fmt.Errorf("models directory not found: %s", modelsDir)
 	}
 
-    // Check for essential model files in their organized locations
-    // Prefer PP-OCRv5 dictionary; fall back to v1 if not found (to avoid brittle CI failures)
-    dictV5 := filepath.Join(modelsDir, "dictionaries", "ppocrv5_dict.txt")
-    dictV1 := filepath.Join(modelsDir, "dictionaries", "ppocr_keys_v1.txt")
-    dictPath := dictV5
-    if _, err := os.Stat(dictPath); os.IsNotExist(err) {
-        dictPath = dictV1
-    }
+	// Check for essential model files in their organized locations
+	// Prefer PP-OCRv5 dictionary; fall back to v1 if not found (to avoid brittle CI failures)
+	dictV5 := filepath.Join(modelsDir, "dictionaries", "ppocrv5_dict.txt")
+	dictV1 := filepath.Join(modelsDir, "dictionaries", "ppocr_keys_v1.txt")
+	var dictPath string
+	if _, err := os.Stat(dictV5); os.IsNotExist(err) {
+		dictPath = dictV1
+	} else {
+		dictPath = dictV5
+	}
 
-    expectedModels := []string{
-        filepath.Join("detection", "mobile", "PP-OCRv5_mobile_det.onnx"),
-        filepath.Join("recognition", "mobile", "PP-OCRv5_mobile_rec.onnx"),
-        dictPath,
-    }
+	// Check essential models exist
+	expectedModels := []string{
+		filepath.Join(modelsDir, "detection", "mobile", "PP-OCRv5_mobile_det.onnx"),
+		filepath.Join(modelsDir, "recognition", "mobile", "PP-OCRv5_mobile_rec.onnx"),
+		dictPath,
+	}
 
-    for _, model := range expectedModels {
-        modelPath := filepath.Join(modelsDir, model)
-        if _, err := os.Stat(modelPath); os.IsNotExist(err) {
-            return fmt.Errorf("required model not found: %s", modelPath)
-        }
-    }
+	for _, modelPath := range expectedModels {
+		if _, err := os.Stat(modelPath); os.IsNotExist(err) {
+			return fmt.Errorf("required model not found: %s", modelPath)
+		}
+	}
 
 	// Set the environment variable for the test - this is crucial!
 	testCtx.AddEnvVar("GO_OAR_OCR_MODELS_DIR", modelsDir)

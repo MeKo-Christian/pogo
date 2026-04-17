@@ -88,8 +88,8 @@ func wordAccuracyRate(a, b string) float64 {
 // using a similarity threshold to be robust to minor decoding differences.
 func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
     // Ensure models exist; otherwise skip
-    det := models.GetDetectionModelPath("", false)
-    rec := models.GetRecognitionModelPath("", false)
+    det := models.GetDetectionModelPath("", true)  // Use server model for better accuracy
+    rec := models.GetRecognitionModelPath("", true) // Use server model for better accuracy
     dict := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
     for _, p := range []string{det, rec, dict} {
         if _, err := os.Stat(p); err != nil {

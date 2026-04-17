@@ -288,17 +288,18 @@ func GetDictionaryPathsForLanguages(modelsDir string, languages []string) []stri
 		tryAdd(filepath.Join(base, TypeDictionaries, "keys_"+lang+".txt"))
 		tryAdd(filepath.Join(base, TypeDictionaries, lang+".txt"))
 	}
-    // Always ensure a default dictionary exists (prefer PP-OCRv5, fallback to v1)
-    defV5 := GetDictionaryPath(base, DictionaryPPOCRv5)
-    defV1 := GetDictionaryPath(base, DictionaryPPOCRKeysV1)
-    if _, err := os.Stat(defV5); err == nil {
-        if _, ok := seen[defV5]; !ok {
-            out = append(out, defV5)
-        }
-    } else if _, err := os.Stat(defV1); err == nil {
-        if _, ok := seen[defV1]; !ok {
-            out = append(out, defV1)
-        }
-    }
-    return out
+	// Always ensure a default dictionary exists (prefer PP-OCRv5, fallback to v1)
+	// Use filepath.Join directly instead of GetDictionaryPath to avoid path duplication
+	defV5 := filepath.Join(base, TypeDictionaries, DictionaryPPOCRv5)
+	defV1 := filepath.Join(base, TypeDictionaries, DictionaryPPOCRKeysV1)
+	if _, err := os.Stat(defV5); err == nil {
+		if _, ok := seen[defV5]; !ok {
+			out = append(out, defV5)
+		}
+	} else if _, err := os.Stat(defV1); err == nil {
+		if _, ok := seen[defV1]; !ok {
+			out = append(out, defV1)
+		}
+	}
+	return out
 }
