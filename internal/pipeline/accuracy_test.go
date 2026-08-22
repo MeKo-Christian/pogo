@@ -145,7 +145,8 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 	for _, p := range []string{det, rec, dict} {
 		// The env var only selects between two bundled model constants, so the
 		// path is not attacker-controlled.
-		if _, err := os.Stat(p); err != nil { //nolint:gosec // G703: taint is a false positive here
+		//nolint:gosec // G703: path built from bundled model constants, not user input.
+		if _, err := os.Stat(p); err != nil {
 			t.Skipf("required model missing: %s", p)
 		}
 	}
@@ -175,6 +176,7 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 			started := time.Now()
 			var regionCount int
 			defer func() { t.Logf("elapsed=%s regions=%d", time.Since(started).Round(time.Millisecond), regionCount) }()
+			//nolint:gosec // G304: the path comes from the checked-in fixture file, not from user input.
 			f, err := os.Open(filepath.Join(root, c.Image))
 			require.NoError(t, err)
 			defer func() { _ = f.Close() }()
@@ -191,6 +193,15 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 			assert.GreaterOrEqualf(t, car, c.MinCAR, "CAR=%.3f text=%q expected=%q", car, txt, c.Expected)
 			war := wordAccuracyRate(txt, c.Expected)
 			assert.GreaterOrEqualf(t, war, c.MinWAR, "WAR=%.3f text=%q expected=%q", war, txt, c.Expected)
+
+			// similarity, CAR and WAR all fold case, so a 1.0 bar on its own
+			// would still accept "hello" for "Hello". Cases that ask for a
+			// perfect score get a case-sensitive equality check on top,
+			// normalizing only whitespace.
+			if c.MinSimilarity >= 1.0 {
+				assert.Equalf(t, c.Expected, strings.Join(strings.Fields(txt), " "),
+					"exact match required, text=%q expected=%q", txt, c.Expected)
+			}
 
 			// Minimum average recognition confidence across regions (if present)
 			if c.MinAvgConf > 0 {
