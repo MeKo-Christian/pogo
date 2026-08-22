@@ -365,36 +365,74 @@ green and idempotent._
 The harness is made able to fail first, then the two defects are fixed against
 it. Tasks 1.1–1.3 must land before 1.4, or there is nothing to measure against.
 
-### Task 1.1 — Raise every fixture to exact match
+### Task 1.1 — Tier the corpus and raise the upright cases to exact match
 
-- [ ] Set `min_similarity`, `min_car` and `min_war` to `1.0` for all 14 cases in
-      `testdata/fixtures/ocr_accuracy.json`
-- [ ] Run the suite and record the failure output verbatim in the commit message
-- [ ] Confirm the failures are the expected ones: `Hellg`, `Hor1c`, `""`,
-      `Samele`, `Rotatedlext`, `Rot.at.ectext.`, `scannecoccument.`, `Haoetr`
+Exact match for all 14 was the original intent, but `rotated_45` and
+`rotated_-45` are small 45°-rotated text on a large canvas, and Task 3.9 deletes
+`internal/rectify` and `internal/orientation` — the deskew machinery that could
+make them exact. So the corpus is tiered instead.
 
-**Accept:** the suite fails, printing actual vs expected for every wrong case.
-That failure is the baseline the rest of the phase is measured against.
+- [x] Add a `group` field to each case and to `accuracyCase`
+- [x] `group: "upright"` — `simple_1..6`, `rotated_0`, `scanned_document`,
+      `german_text` (9 cases) at `min_similarity`/`min_car`/`min_war` = `1.0`
+- [x] `group: "rotated"` — `rotated_90/180/270/45/-45` (5 cases) keep their
+      similarity bars; Phase 3 decides their fate, not Phase 1
+- [x] Run the suite and record the failure output in the commit message
+
+**Accept:** the upright group fails, printing actual vs expected for every wrong
+case. That failure is the baseline the rest of the phase is measured against.
 
 ### Task 1.2 — Give `german_text.png` a real expectation
 
-- [ ] Read the image and hand-key its actual text
-- [ ] Replace `expected: ""` with that string
-- [ ] Delete the `contains_any` / `min_contains` fallback, which is the only
-      thing that case ever asserted
+- [x] Read the image and hand-key its actual text — it is `Hallo Welt!`
+- [x] Replace `expected: ""` with that string
+- [x] Delete the `contains_any` / `min_contains` fallback, which is the only
+      thing that case ever asserted — and which could never have passed, since
+      the image contains no umlaut and no `ß`
 
 **Accept:** no case in the file has an empty `expected`, and grepping for
 `contains_any` returns nothing.
 
-### Task 1.3 — Stop the accuracy test from taking twelve minutes
+### Task 1.3 — Fix the model gate, then attribute the runtime
 
-- [ ] Default `accuracy_test.go:89` to the mobile detection and recognition
-      models instead of the server ones
-- [ ] Keep the server models reachable via `POGO_ACCURACY_MODELS=server`
-- [ ] Record both models' CER in the commit message, so the trade is explicit
+The original task said to default the test to the mobile models. That premise
+was wrong: `accuracy_test.go` asked for _server_ paths only as its `t.Skipf`
+gate, while `detector.DefaultConfig()` and `recognizer.DefaultConfig()` both set
+`UseServerModel: false`, so the pipeline was already running mobile weights. The
+real defect was a test that skipped when server weights were absent despite
+never loading them.
 
-**Accept:** `go test ./internal/pipeline` finishes in under 60 s. It takes 715 s
-today, almost all of it this one test.
+- [x] Gate on the models actually loaded, and honour `POGO_ACCURACY_MODELS=server`
+      through `Builder.WithServerModels`
+- [x] Log per-case elapsed time and region count, so the runtime can be
+      attributed rather than guessed at
+
+**Accept:** the suite no longer skips when only mobile weights are present, and
+the per-case timing table shows where the wall clock actually goes.
+
+### Task 1.12 — Find out why three fixtures take five and a half minutes
+
+Measured in Task 1.3. `TestOCRAccuracy` is 370 s, and three cases are 89 % of it:
+
+| Case                           | Elapsed | Regions found |
+| ------------------------------ | ------- | ------------- |
+| `scanned/scanned_document.png` | 2m25s   | 2             |
+| `rotated/rotated_45.png`       | 1m42s   | 1             |
+| `rotated/rotated_-45.png`      | 1m23s   | 1             |
+| all eleven others, combined    | 40s     | 1 each        |
+
+All three are large canvases holding very little text. Spending 145 s to return
+two regions from a 1024×768 image is not a slow model, it is a defect. The other
+eleven cases average 3.6 s on the same weights.
+
+- [ ] Profile one of the three; find where the time goes (DB post-processing,
+      contour extraction and NMS on the graph-paper grid are the first suspects)
+- [ ] Fix the pathology, or record why it is inherent
+- [ ] Re-measure and put the new table in the commit message
+
+**Accept:** the full accuracy corpus runs in under 60 s, which is what Task 1.3
+originally promised. Until then `go test -short` skips the corpus so the unit
+suite stays fast — that is a workaround, not the fix.
 
 ### Task 1.4 — Read the model's real class count
 
