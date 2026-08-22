@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/MeKo-Tech/pogo/internal/models"
 	"github.com/MeKo-Tech/pogo/internal/testutil"
@@ -16,15 +17,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// accuracyCase is one ground-truth entry from testdata/fixtures/ocr_accuracy.json.
+//
+// Group tiers the corpus. "upright" cases are held to exact match; "rotated"
+// cases keep similarity bars because the deskew packages that could make them
+// exact (internal/rectify, internal/orientation) are scheduled for deletion in
+// PLAN.md Task 3.9. Phase 3 decides whether they survive at all.
 type accuracyCase struct {
-	Image         string   `json:"image"`
-	Expected      string   `json:"expected"`
-	MinSimilarity float64  `json:"min_similarity"`
-	MinCAR        float64  `json:"min_car"`
-	MinWAR        float64  `json:"min_war"`
-	MinAvgConf    float64  `json:"min_avg_conf"`
-	ContainsAny   []string `json:"contains_any"`
-	MinContains   int      `json:"min_contains"`
+	Group         string  `json:"group"`
+	Image         string  `json:"image"`
+	Expected      string  `json:"expected"`
+	MinSimilarity float64 `json:"min_similarity"`
+	MinCAR        float64 `json:"min_car"`
+	MinWAR        float64 `json:"min_war"`
+	MinAvgConf    float64 `json:"min_avg_conf"`
 }
 
 func levenshtein(a, b string) int {
@@ -120,12 +126,26 @@ func wordAccuracyRate(a, b string) float64 {
 // TestOCRAccuracy_SimpleFixtures validates text output against ground truth fixtures
 // using a similarity threshold to be robust to minor decoding differences.
 func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
-	// Ensure models exist; otherwise skip
-	det := models.GetDetectionModelPath("", true)   // Use server model for better accuracy
-	rec := models.GetRecognitionModelPath("", true) // Use server model for better accuracy
+	// This is an accuracy gate, not a unit test: a full run is ~370 s, of which
+	// scanned_document (145 s), rotated_45 (102 s) and rotated_-45 (83 s) are
+	// 89 %. Those three are large canvases holding very little text, and the
+	// detector spends minutes on them to return one or two regions — a real
+	// performance defect, tracked separately. Keep `go test -short` fast.
+	if testing.Short() {
+		t.Skip("accuracy corpus is slow; run without -short")
+	}
+
+	// The pipeline builder defaults to the mobile variants, so gate on the models
+	// that are actually loaded. Set POGO_ACCURACY_MODELS=server to run the server
+	// weights instead.
+	useServer := os.Getenv("POGO_ACCURACY_MODELS") == "server"
+	det := models.GetDetectionModelPath("", useServer)
+	rec := models.GetRecognitionModelPath("", useServer)
 	dict := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
 	for _, p := range []string{det, rec, dict} {
-		if _, err := os.Stat(p); err != nil {
+		// The env var only selects between two bundled model constants, so the
+		// path is not attacker-controlled.
+		if _, err := os.Stat(p); err != nil { //nolint:gosec // G703: taint is a false positive here
 			t.Skipf("required model missing: %s", p)
 		}
 	}
@@ -143,6 +163,7 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 	// Build pipeline
 	b := NewBuilder().WithModelsDir(models.GetModelsDir(""))
 	b.WithImageHeight(48)
+	b.WithServerModels(useServer)
 	p, err := b.Build()
 	if err != nil {
 		t.Skipf("pipeline build failed (likely ONNX runtime issue): %v", err)
@@ -150,7 +171,10 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 	defer func() { _ = p.Close() }()
 
 	for _, c := range cases {
-		t.Run(c.Image, func(t *testing.T) {
+		t.Run(c.Group+"/"+c.Image, func(t *testing.T) {
+			started := time.Now()
+			var regionCount int
+			defer func() { t.Logf("elapsed=%s regions=%d", time.Since(started).Round(time.Millisecond), regionCount) }()
 			f, err := os.Open(filepath.Join(root, c.Image))
 			require.NoError(t, err)
 			defer func() { _ = f.Close() }()
@@ -158,6 +182,7 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 			require.NoError(t, err)
 			res, err := p.ProcessImage(img)
 			require.NoError(t, err)
+			regionCount = len(res.Regions)
 			txt, err := ToPlainTextImage(res)
 			require.NoError(t, err)
 			sim := similarity(txt, c.Expected)
@@ -181,22 +206,6 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 					avg := sum / float64(count)
 					assert.GreaterOrEqualf(t, avg, c.MinAvgConf, "avg_rec_conf=%.3f below min %.3f", avg, c.MinAvgConf)
 				}
-			}
-
-			// Contains-any check (e.g., for specific characters like German umlauts)
-			if len(c.ContainsAny) > 0 {
-				lower := strings.ToLower(txt)
-				found := 0
-				for _, needle := range c.ContainsAny {
-					if strings.Contains(lower, strings.ToLower(needle)) {
-						found++
-					}
-				}
-				minNeedles := c.MinContains
-				if minNeedles <= 0 {
-					minNeedles = 1
-				}
-				assert.GreaterOrEqualf(t, found, minNeedles, "expected at least %d occurrences from %v in %q", minNeedles, c.ContainsAny, txt)
 			}
 		})
 	}

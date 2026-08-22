@@ -1,61 +1,87 @@
 [
   {
+    "group": "upright",
     "image": "testdata/images/simple/simple_1_Hello.png",
     "expected": "Hello",
-    "min_similarity": 0.8,
-    "min_car": 0.8,
+    "min_similarity": 1.0,
+    "min_car": 1.0,
     "min_war": 1.0,
     "min_avg_conf": 0.0
   },
   {
+    "group": "upright",
     "image": "testdata/images/simple/simple_2_World.png",
     "expected": "World",
-    "min_similarity": 0.8,
-    "min_car": 0.8,
+    "min_similarity": 1.0,
+    "min_car": 1.0,
     "min_war": 1.0,
     "min_avg_conf": 0.0
   },
   {
+    "group": "upright",
     "image": "testdata/images/simple/simple_3_OCR.png",
     "expected": "OCR",
-    "min_similarity": 0.8,
-    "min_car": 0.8,
+    "min_similarity": 1.0,
+    "min_car": 1.0,
     "min_war": 1.0,
     "min_avg_conf": 0.0
   },
   {
+    "group": "upright",
     "image": "testdata/images/simple/simple_4_Test.png",
     "expected": "Test",
-    "min_similarity": 0.8,
-    "min_car": 0.8,
+    "min_similarity": 1.0,
+    "min_car": 1.0,
     "min_war": 1.0,
     "min_avg_conf": 0.0
   },
   {
+    "group": "upright",
     "image": "testdata/images/simple/simple_5_123.png",
     "expected": "123",
-    "min_similarity": 0.95,
-    "min_car": 0.95,
+    "min_similarity": 1.0,
+    "min_car": 1.0,
     "min_war": 1.0,
     "min_avg_conf": 0.0
   },
   {
+    "group": "upright",
     "image": "testdata/images/simple/simple_6_Sample.png",
     "expected": "Sample",
-    "min_similarity": 0.8,
-    "min_car": 0.8,
+    "min_similarity": 1.0,
+    "min_car": 1.0,
     "min_war": 1.0,
     "min_avg_conf": 0.0
   },
   {
+    "group": "upright",
     "image": "testdata/images/rotated/rotated_0.png",
     "expected": "Rotated Text",
-    "min_similarity": 0.7,
-    "min_car": 0.7,
-    "min_war": 0.5,
+    "min_similarity": 1.0,
+    "min_car": 1.0,
+    "min_war": 1.0,
     "min_avg_conf": 0.0
   },
   {
+    "group": "upright",
+    "image": "testdata/images/scanned/scanned_document.png",
+    "expected": "Scanned Document Sample",
+    "min_similarity": 1.0,
+    "min_car": 1.0,
+    "min_war": 1.0,
+    "min_avg_conf": 0.0
+  },
+  {
+    "group": "upright",
+    "image": "testdata/images/german_text.png",
+    "expected": "Hallo Welt!",
+    "min_similarity": 1.0,
+    "min_car": 1.0,
+    "min_war": 1.0,
+    "min_avg_conf": 0.0
+  },
+  {
+    "group": "rotated",
     "image": "testdata/images/rotated/rotated_90.png",
     "expected": "Rotated Text",
     "min_similarity": 0.65,
@@ -64,6 +90,7 @@
     "min_avg_conf": 0.0
   },
   {
+    "group": "rotated",
     "image": "testdata/images/rotated/rotated_180.png",
     "expected": "Rotated Text",
     "min_similarity": 0.65,
@@ -72,6 +99,7 @@
     "min_avg_conf": 0.0
   },
   {
+    "group": "rotated",
     "image": "testdata/images/rotated/rotated_270.png",
     "expected": "Rotated Text",
     "min_similarity": 0.65,
@@ -80,6 +108,7 @@
     "min_avg_conf": 0.0
   },
   {
+    "group": "rotated",
     "image": "testdata/images/rotated/rotated_45.png",
     "expected": "Rotated Text",
     "min_similarity": 0.5,
@@ -88,29 +117,12 @@
     "min_avg_conf": 0.0
   },
   {
+    "group": "rotated",
     "image": "testdata/images/rotated/rotated_-45.png",
     "expected": "Rotated Text",
     "min_similarity": 0.5,
     "min_car": 0.5,
     "min_war": 0.5,
     "min_avg_conf": 0.0
-  },
-  {
-    "image": "testdata/images/scanned/scanned_document.png",
-    "expected": "Scanned Document Sample",
-    "min_similarity": 0.55,
-    "min_car": 0.55,
-    "min_war": 0.5,
-    "min_avg_conf": 0.0
-  },
-  {
-    "image": "testdata/images/german_text.png",
-    "expected": "",
-    "min_similarity": 0.0,
-    "min_car": 0.0,
-    "min_war": 0.0,
-    "min_avg_conf": 0.0,
-    "contains_any": ["ä", "ö", "ü", "Ä", "Ö", "Ü", "ß"],
-    "min_contains": 1
   }
 ]
