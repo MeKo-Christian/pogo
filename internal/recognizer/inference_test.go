@@ -551,23 +551,14 @@ func TestRecognizeBatch_ValidMultipleRegions(t *testing.T) {
 	img, err := testutil.GenerateTextImage(imgCfg)
 	require.NoError(t, err)
 
-	// Create multiple regions
+	// Create multiple regions. GenerateTextImage centres the text on the canvas,
+	// so derive the boxes from the inked area instead of hard-coding corners that
+	// happen to land on blank background. Different margins give the batch
+	// different aspect ratios, which exercises the width padding.
 	regions := []detector.DetectedRegion{
-		{
-			Polygon:    []utils.Point{{X: 20, Y: 20}, {X: 120, Y: 20}, {X: 120, Y: 60}, {X: 20, Y: 60}},
-			Box:        utils.NewBox(20, 20, 120, 60),
-			Confidence: 0.9,
-		},
-		{
-			Polygon:    []utils.Point{{X: 140, Y: 20}, {X: 240, Y: 20}, {X: 240, Y: 60}, {X: 140, Y: 60}},
-			Box:        utils.NewBox(140, 20, 240, 60),
-			Confidence: 0.8,
-		},
-		{
-			Polygon:    []utils.Point{{X: 20, Y: 80}, {X: 120, Y: 80}, {X: 120, Y: 120}, {X: 20, Y: 120}},
-			Box:        utils.NewBox(20, 80, 120, 120),
-			Confidence: 0.85,
-		},
+		textLineRegion(t, img, 2, 0.9),
+		textLineRegion(t, img, 4, 0.8),
+		textLineRegion(t, img, 8, 0.85),
 	}
 
 	// Test batch recognition
@@ -597,6 +588,8 @@ func TestRecognizeBatch_ValidMultipleRegions(t *testing.T) {
 	}
 	got := strings.ToUpper(combined.String())
 	assert.True(t, strings.Contains(got, "BATCH") || strings.Contains(got, "TEST"))
+	// The word separator must survive decoding (PP-OCRv5 space class).
+	assert.Contains(t, got, "BATCH TEST")
 }
 
 // TestRecognizeBatch_SingleRegion tests batch processing with just one region.
@@ -776,29 +769,11 @@ func TestRecognizeBatch_Integration(t *testing.T) {
 	img, err := testutil.GenerateTextImage(imgCfg)
 	require.NoError(t, err)
 
-	// Create multiple regions
-	b := img.Bounds()
+	// Create multiple regions around the rendered text line. Quadrant-sized boxes
+	// mostly cover blank canvas, which the recognizer correctly decodes as "".
 	regions := []detector.DetectedRegion{
-		{
-			Polygon: []utils.Point{
-				{X: 20, Y: 20},
-				{X: float64(b.Dx()/2 - 10), Y: 20},
-				{X: float64(b.Dx()/2 - 10), Y: float64(b.Dy()/2 - 10)},
-				{X: 20, Y: float64(b.Dy()/2 - 10)},
-			},
-			Box:        utils.NewBox(20, 20, float64(b.Dx()/2-10), float64(b.Dy()/2-10)),
-			Confidence: 0.9,
-		},
-		{
-			Polygon: []utils.Point{
-				{X: float64(b.Dx()/2 + 10), Y: 20},
-				{X: float64(b.Dx() - 20), Y: 20},
-				{X: float64(b.Dx() - 20), Y: float64(b.Dy()/2 - 10)},
-				{X: float64(b.Dx()/2 + 10), Y: float64(b.Dy()/2 - 10)},
-			},
-			Box:        utils.NewBox(float64(b.Dx()/2+10), 20, float64(b.Dx()-20), float64(b.Dy()/2-10)),
-			Confidence: 0.85,
-		},
+		textLineRegion(t, img, 4, 0.9),
+		textLineRegion(t, img, 8, 0.85),
 	}
 
 	// Test batch recognition
@@ -832,4 +807,24 @@ func TestRecognizeBatch_Integration(t *testing.T) {
 	}
 	agg := strings.ToUpper(all.String())
 	assert.True(t, strings.Contains(agg, "BATCH") || strings.Contains(agg, "TEST"))
+	// The word separators must survive decoding (PP-OCRv5 space class).
+	assert.Contains(t, agg, "BATCH INTEGRATION TEST")
+}
+
+// textLineRegion builds a detected region around the inked text of img, grown by
+// margin pixels on every side.
+func textLineRegion(t *testing.T, img image.Image, margin, confidence float64) detector.DetectedRegion {
+	t.Helper()
+
+	x0, y0, x1, y1 := inkBounds(t, img, margin)
+	return detector.DetectedRegion{
+		Polygon: []utils.Point{
+			{X: x0, Y: y0},
+			{X: x1, Y: y0},
+			{X: x1, Y: y1},
+			{X: x0, Y: y1},
+		},
+		Box:        utils.NewBox(x0, y0, x1, y1),
+		Confidence: confidence,
+	}
 }

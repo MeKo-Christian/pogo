@@ -47,9 +47,22 @@ func buildCharsetMaps(tokens []string) (map[int]string, map[string]int) {
 	return idxTo, toIdx
 }
 
-// LoadCharset loads a dictionary file where each non-empty line is a token.
-// Leading/trailing whitespace is trimmed. UTF-8 BOM is removed if present.
-func LoadCharset(path string) (*Charset, error) {
+// SpaceToken is the token used for the trailing "space" class that PaddleOCR
+// recognition models append after the dictionary entries. The full class layout
+// of a PP-OCR CTC head is ["blank"] + dictionary + [SpaceToken].
+const SpaceToken = " "
+
+// CharsetOptions controls optional post-processing applied while a charset is built.
+type CharsetOptions struct {
+	// AppendSpace appends SpaceToken as the last token unless the dictionary
+	// already contains it. PaddleOCR recognition models declare one more output
+	// class than their dictionary has lines, and that extra class is the space
+	// character. Defaults to false so the plain loaders keep their behaviour.
+	AppendSpace bool
+}
+
+// readCharsetTokens reads a dictionary file and returns its tokens in file order.
+func readCharsetTokens(path string) ([]string, error) {
 	if path == "" {
 		return nil, errors.New("dictionary path cannot be empty")
 	}
@@ -83,19 +96,58 @@ func LoadCharset(path string) (*Charset, error) {
 	if len(tokens) == 0 {
 		return nil, fmt.Errorf("dictionary is empty: %s", path)
 	}
+	return tokens, nil
+}
 
+// applyCharsetOptions applies the optional token adjustments. This is the single
+// place where the space token is appended, so the single- and multi-file loaders
+// cannot drift apart.
+func applyCharsetOptions(tokens []string, opts CharsetOptions) []string {
+	if !opts.AppendSpace {
+		return tokens
+	}
+	for _, t := range tokens {
+		if t == SpaceToken {
+			return tokens
+		}
+	}
+	return append(tokens, SpaceToken)
+}
+
+// newCharset finalises a token list into a Charset, applying opts first.
+func newCharset(tokens []string, opts CharsetOptions) *Charset {
+	tokens = applyCharsetOptions(tokens, opts)
 	idxTo, toIdx := buildCharsetMaps(tokens)
-
 	return &Charset{
 		Tokens:       tokens,
 		IndexToToken: idxTo,
 		TokenToIndex: toIdx,
-	}, nil
+	}
+}
+
+// LoadCharset loads a dictionary file where each non-empty line is a token.
+// Leading/trailing whitespace is trimmed. UTF-8 BOM is removed if present.
+func LoadCharset(path string) (*Charset, error) {
+	return LoadCharsetWithOptions(path, CharsetOptions{})
+}
+
+// LoadCharsetWithOptions loads a single dictionary file with the given options.
+func LoadCharsetWithOptions(path string, opts CharsetOptions) (*Charset, error) {
+	tokens, err := readCharsetTokens(path)
+	if err != nil {
+		return nil, err
+	}
+	return newCharset(tokens, opts), nil
 }
 
 // LoadCharsets merges multiple dictionary files into a single Charset.
 // Tokens are appended in file order with de-duplication (first occurrence wins).
 func LoadCharsets(paths []string) (*Charset, error) {
+	return LoadCharsetsWithOptions(paths, CharsetOptions{})
+}
+
+// LoadCharsetsWithOptions merges multiple dictionary files with the given options.
+func LoadCharsetsWithOptions(paths []string, opts CharsetOptions) (*Charset, error) {
 	if len(paths) == 0 {
 		return nil, errors.New("no dictionary paths provided")
 	}
@@ -106,11 +158,11 @@ func LoadCharsets(paths []string) (*Charset, error) {
 		if p == "" {
 			continue
 		}
-		cs, err := LoadCharset(p)
+		fileTokens, err := readCharsetTokens(p)
 		if err != nil {
 			return nil, err
 		}
-		for _, t := range cs.Tokens {
+		for _, t := range fileTokens {
 			if _, ok := seen[t]; ok {
 				continue
 			}
@@ -121,15 +173,7 @@ func LoadCharsets(paths []string) (*Charset, error) {
 	if len(tokens) == 0 {
 		return nil, errors.New("merged dictionary is empty")
 	}
-	idxTo := make(map[int]string, len(tokens))
-	toIdx := make(map[string]int, len(tokens))
-	for i, t := range tokens {
-		if _, ok := toIdx[t]; !ok {
-			toIdx[t] = i
-		}
-		idxTo[i] = t
-	}
-	return &Charset{Tokens: tokens, IndexToToken: idxTo, TokenToIndex: toIdx}, nil
+	return newCharset(tokens, opts), nil
 }
 
 // Size returns the number of tokens in the charset.
