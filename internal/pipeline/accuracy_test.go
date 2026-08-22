@@ -126,15 +126,6 @@ func wordAccuracyRate(a, b string) float64 {
 // TestOCRAccuracy_SimpleFixtures validates text output against ground truth fixtures
 // using a similarity threshold to be robust to minor decoding differences.
 func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
-	// This is an accuracy gate, not a unit test: a full run is ~370 s, of which
-	// scanned_document (145 s), rotated_45 (102 s) and rotated_-45 (83 s) are
-	// 89 %. Those three are large canvases holding very little text, and the
-	// detector spends minutes on them to return one or two regions — a real
-	// performance defect, tracked separately. Keep `go test -short` fast.
-	if testing.Short() {
-		t.Skip("accuracy corpus is slow; run without -short")
-	}
-
 	// The pipeline builder defaults to the mobile variants, so gate on the models
 	// that are actually loaded. Set POGO_ACCURACY_MODELS=server to run the server
 	// weights instead.
@@ -175,7 +166,11 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 		t.Run(c.Group+"/"+c.Image, func(t *testing.T) {
 			started := time.Now()
 			var regionCount int
-			defer func() { t.Logf("elapsed=%s regions=%d", time.Since(started).Round(time.Millisecond), regionCount) }()
+			var recognized string
+			defer func() {
+				t.Logf("elapsed=%s regions=%d text=%q",
+					time.Since(started).Round(time.Millisecond), regionCount, recognized)
+			}()
 			//nolint:gosec // G304: the path comes from the checked-in fixture file, not from user input.
 			f, err := os.Open(filepath.Join(root, c.Image))
 			require.NoError(t, err)
@@ -187,6 +182,7 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 			regionCount = len(res.Regions)
 			txt, err := ToPlainTextImage(res)
 			require.NoError(t, err)
+			recognized = txt
 			sim := similarity(txt, c.Expected)
 			assert.GreaterOrEqualf(t, sim, c.MinSimilarity, "similarity=%.3f text=%q expected=%q", sim, txt, c.Expected)
 			car := charAccuracyRate(txt, c.Expected)

@@ -36,18 +36,35 @@ func dpSimplify(pts []Point, start, end int, eps float64, keep []bool) {
 	if end <= start+1 {
 		return
 	}
-	maxDist := -1.0
-	index := -1
 	a := pts[start]
 	b := pts[end]
+	// The segment ab is fixed for the whole scan, so its length is a loop
+	// invariant: comparing the (unnormalized) parallelogram areas picks the same
+	// farthest point as comparing the true distances, and the threshold test
+	// becomes area > eps*len(ab). That keeps one hypot and one division per
+	// recursion instead of per point.
+	vx, vy := b.X-a.X, b.Y-a.Y
+	den := math.Hypot(vx, vy)
+	maxArea := -1.0
+	index := -1
 	for i := start + 1; i < end; i++ {
-		d := perpendicularDistance(pts[i], a, b)
-		if d > maxDist {
-			maxDist = d
+		p := pts[i]
+		var area float64
+		if den == 0 {
+			area = math.Hypot(p.X-a.X, p.Y-a.Y)
+		} else {
+			area = math.Abs((p.X-a.X)*vy - (p.Y-a.Y)*vx)
+		}
+		if area > maxArea {
+			maxArea = area
 			index = i
 		}
 	}
-	if maxDist > eps {
+	threshold := eps
+	if den != 0 {
+		threshold = eps * den
+	}
+	if maxArea > threshold {
 		// Keep the farthest point and recurse
 		dpSimplify(pts, start, index, eps, keep)
 		keep[index] = true
