@@ -6,10 +6,12 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/MeKo-Tech/pogo/internal/models"
+	"github.com/MeKo-Tech/pogo/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -128,8 +130,11 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 		}
 	}
 
-	// Load fixtures
-	data, err := os.ReadFile("testdata/fixtures/ocr_accuracy.json")
+	// Load fixtures. Paths are resolved against the project root rather than
+	// the package working directory, so no testdata symlink is required.
+	root, err := testutil.GetProjectRoot()
+	require.NoError(t, err)
+	data, err := os.ReadFile(filepath.Join(testutil.GetFixturesDir(t), "ocr_accuracy.json"))
 	require.NoError(t, err)
 	var cases []accuracyCase
 	require.NoError(t, json.Unmarshal(data, &cases))
@@ -146,7 +151,7 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.Image, func(t *testing.T) {
-			f, err := os.Open(c.Image)
+			f, err := os.Open(filepath.Join(root, c.Image))
 			require.NoError(t, err)
 			defer func() { _ = f.Close() }()
 			img, _, err := image.Decode(f)
