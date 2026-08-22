@@ -1,0 +1,29 @@
+{
+  "models": {
+    "variant": "mobile",
+    "fingerprint": "2a3538c9dda1b477"
+  },
+  "groups": [
+    {
+      "group": "rotated",
+      "n": 5,
+      "exact": 0,
+      "mean_cer": 0.8333333333333333,
+      "mean_wer": 1
+    },
+    {
+      "group": "upright",
+      "n": 9,
+      "exact": 4,
+      "mean_cer": 0.18665641926511492,
+      "mean_wer": 0.5555555555555556
+    },
+    {
+      "group": "overall",
+      "n": 14,
+      "exact": 4,
+      "mean_cer": 0.41761246000376434,
+      "mean_wer": 0.7142857142857143
+    }
+  ]
+}

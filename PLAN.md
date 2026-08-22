@@ -615,22 +615,38 @@ that silences it short of changing the gate itself.
 
 ### Task 2.3 — Promote the harness into `pogo eval`
 
-- [ ] Move the CER/WER measurement out of `accuracy_test.go` into a command
-- [ ] Print per-case rows plus the aggregate
-- [ ] Keep the Go test as a thin caller so `go test` still gates the corpus
+- [x] Move the CER/WER measurement out of `accuracy_test.go` into a command
+      (`cmd/ocr/cmd/eval.go`, over `internal/eval`)
+- [x] Print per-case rows plus the aggregate, in text or JSON
+- [x] Keep the Go test as a thin caller so `go test` still gates the corpus —
+      both go through `eval.Run`, so the two cannot drift
+- [x] Give the corpus a directory of its own: `testdata/corpus/synthetic/`,
+      with image paths relative to the manifest, so a corpus is self-contained
 
-**Accept:** `pogo eval ./testdata/corpus` prints a table and exits 0.
+**Accept:** `pogo eval ./testdata/corpus` prints a table. It exits **1**, not 0,
+because the upright gate fails — six fixtures are still misread. That is the
+engine's fault, not the harness's; the command is doing what it must. It will
+exit 0 when the remaining Phase 1 defects are fixed.
 
 ### Task 2.4 — Commit a baseline and compare against it
 
-- [ ] Write a baseline file per corpus
-- [ ] Have `eval` compare and exit non-zero on regression, naming the metric
-- [ ] Prove it by truncating the dictionary and watching it fail
+- [x] Write a baseline file per corpus (`baseline.json` beside the manifest),
+      recording which weights measured it — comparing mobile numbers against
+      server numbers is an error, not a regression
+- [x] Have `eval` compare and exit non-zero on regression, naming the metric,
+      the group and the delta; an improvement is reported but still exits 0
+- [x] A group that disappears from a run is a regression, not silence
+- [x] Prove it by truncating the dictionary and watching it fail
 
 **Accept:** a deliberate regression makes `pogo eval` exit 1 and say which metric
 moved and by how much.
 
 ### Task 2.5 — Add a corpus that isn't synthetic
+
+_Deferred by decision: real captures cannot be produced from inside the repo.
+Tracked as issue #8; the corpus layout (`testdata/corpus/<name>/manifest.json`
+plus `baseline.json`) is in place and takes a `real/` sibling with no code
+change._
 
 - [ ] Collect at least 10 real scans, German included
 - [ ] Hand-key ground truth for each
@@ -649,6 +665,11 @@ the repo, so the next change has something to be compared against.
 
 _Phase 2 exit: one committed CER/WER baseline per corpus. Nothing merges
 afterwards that moves CER the wrong way._
+
+_Half met. The synthetic corpus has a gate, a command and a committed baseline,
+and a regression against it fails. The real corpus (Tasks 2.5–2.6) does not
+exist yet, so every measured case is still a render — which is exactly how a
+wrong normalization constant survived in the first place._
 
 ## Phase 3 — Cut
 

@@ -2,13 +2,10 @@ package pipeline
 
 import (
 	"image"
-	_ "image/jpeg"
-	_ "image/png"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/MeKo-Tech/pogo/internal/eval"
 	"github.com/MeKo-Tech/pogo/internal/models"
@@ -41,11 +38,13 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 		}
 	}
 
-	// Fixture paths are resolved against the project root rather than the package
-	// working directory, so no testdata symlink is required.
+	// The corpus is located from the project root rather than the package working
+	// directory, so no testdata symlink is required; inside it, image paths are
+	// resolved against the corpus itself.
 	root, err := testutil.GetProjectRoot()
 	require.NoError(t, err)
-	cases, err := eval.LoadManifest(filepath.Join(testutil.GetFixturesDir(t), "ocr_accuracy.json"), root)
+	corpus := filepath.Join(root, "testdata", "corpus", "synthetic")
+	cases, err := eval.LoadManifest(filepath.Join(corpus, eval.ManifestFileName))
 	require.NoError(t, err)
 
 	b := NewBuilder().WithModelsDir(models.GetModelsDir(""))
@@ -57,10 +56,10 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 	}
 	defer func() { _ = p.Close() }()
 
-	results := make([]eval.CaseResult, 0, len(cases))
-	for _, c := range cases {
-		results = append(results, runAccuracyCase(t, p, root, c))
-	}
+	// The command and the test measure through the same code: this test is a
+	// thin caller of eval.Run, and `pogo eval` is another.
+	results, err := eval.Run(corpus, cases, recognizeWith(p))
+	require.NoError(t, err)
 
 	groups, overall := eval.Summarize(results)
 	// Logged on every run, not only on failure: this table is the measurement,
@@ -74,21 +73,19 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 	assert.Emptyf(t, violations, "corpus gate failed; see the table above for the offending cases")
 }
 
-// runAccuracyCase reads one fixture through the pipeline and scores it.
-func runAccuracyCase(t *testing.T, p *Pipeline, root string, c eval.Case) eval.CaseResult {
-	t.Helper()
-	started := time.Now()
-	//nolint:gosec // G304: the path comes from the checked-in manifest, not from user input.
-	f, err := os.Open(filepath.Join(root, c.Image))
-	require.NoError(t, err)
-	defer func() { _ = f.Close() }()
-	img, _, err := image.Decode(f)
-	require.NoError(t, err)
-	res, err := p.ProcessImage(img)
-	require.NoError(t, err)
-	txt, err := ToPlainTextImage(res)
-	require.NoError(t, err)
-	return eval.Score(c, txt, len(res.Regions), avgRecConfidence(res), time.Since(started))
+// recognizeWith adapts a pipeline to the eval seam.
+func recognizeWith(p *Pipeline) eval.RecognizeFunc {
+	return func(img image.Image) (eval.Reading, error) {
+		res, err := p.ProcessImage(img)
+		if err != nil {
+			return eval.Reading{}, err
+		}
+		txt, err := ToPlainTextImage(res)
+		if err != nil {
+			return eval.Reading{}, err
+		}
+		return eval.Reading{Text: txt, Regions: len(res.Regions), AvgConf: avgRecConfidence(res)}, nil
+	}
 }
 
 // avgRecConfidence averages recognition confidence over the regions that
