@@ -62,7 +62,7 @@ Feature: CLI Configuration
     And the recognizer should use 48 pixel height input
 
   Scenario: Orientation detection configuration
-    When I run "pogo image testdata/images/rotated_text.png --detect-orientation --orientation-threshold 0.8"
+    When I run "pogo image testdata/images/rotated/rotated_45.png --detect-orientation --orientation-threshold 0.8"
     Then the command should succeed
     And orientation detection should be enabled with threshold 0.8
 

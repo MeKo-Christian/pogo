@@ -47,7 +47,7 @@ Feature: Orientation Detection Integration
     And regions with different orientations should be corrected separately
 
   Scenario: Orientation with overlay visualization
-    Given an image "testdata/images/rotated_text.png"
+    Given an image "testdata/images/rotated/rotated_45.png"
     When I run OCR with orientation detection and overlay enabled
     Then the overlay image should be generated
     And the overlay should show the corrected orientation
