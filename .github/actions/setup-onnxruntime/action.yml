@@ -1,0 +1,24 @@
+name: Setup ONNX Runtime
+description: Download ONNX Runtime into the workspace and export the cgo environment
+runs:
+  using: composite
+  steps:
+    - name: Restore ONNX Runtime cache
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: onnxruntime
+        key: onnxruntime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/setup-onnxruntime.sh') }}
+    - name: Download ONNX Runtime
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: ./scripts/setup-onnxruntime.sh
+    - name: Export ONNX Runtime environment
+      shell: bash
+      run: |
+        onnx_lib="${{ github.workspace }}/onnxruntime/lib"
+        {
+          echo "CGO_CFLAGS=${CGO_CFLAGS:+$CGO_CFLAGS }-I${{ github.workspace }}/onnxruntime/include"
+          echo "CGO_LDFLAGS=${CGO_LDFLAGS:+$CGO_LDFLAGS }-L$onnx_lib -lonnxruntime"
+          echo "LD_LIBRARY_PATH=$onnx_lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        } >>"$GITHUB_ENV"

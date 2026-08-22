@@ -52,6 +52,10 @@ func InitializeScenario(sc *godog.ScenarioContext) {
 
 // TestFeatures runs the Godog test suite.
 func TestFeatures(t *testing.T) {
+	if testing.Short() {
+		t.Skip("CLI feature tests drive the built binary end-to-end; skipped in -short mode")
+	}
+
 	// Discover all feature files under the local features directory.
 	entries, err := os.ReadDir("features")
 	if err != nil {

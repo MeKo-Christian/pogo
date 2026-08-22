@@ -22,6 +22,8 @@ jobs:
         uses: extractions/setup-just@v2
         with:
           just-version: 1.14.0
+      - name: Setup ONNX Runtime
+        uses: ./.github/actions/setup-onnxruntime
       - name: Download dependencies
         run: just deps
       - name: Run tests

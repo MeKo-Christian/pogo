@@ -60,6 +60,11 @@ go-onnx *ARGS:
 test:
     just go-onnx test -v ./...
 
+# Run the full suite without -short, with a timeout that fits the slow
+# end-to-end packages (the CLI feature suite exceeds go test's 10m default)
+test-full:
+    just go-onnx test -v -timeout 30m ./...
+
 # Run tests with coverage
 test-coverage:
     just go-onnx test -v -coverprofile=coverage.out ./...
@@ -173,15 +178,15 @@ setup-deps:
     @echo "Installing development tools..."
     command -v go >/dev/null 2>&1 || { echo "Go is required but not installed. Please install Go first."; exit 1; }
     @echo "Installing Go tools..."
-    command -v golangci-lint >/dev/null 2>&1 || { echo "Installing golangci-lint..."; curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.60.3; }
+    command -v golangci-lint >/dev/null 2>&1 || { echo "Installing golangci-lint..."; go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2; }
     command -v gofumpt >/dev/null 2>&1 || { echo "Installing gofumpt..."; go install mvdan.cc/gofumpt@latest; }
     command -v gci >/dev/null 2>&1 || { echo "Installing gci..."; go install github.com/daixiang0/gci@latest; }
     @echo "Installing formatters..."
-    command -v treefmt >/dev/null 2>&1 || { echo "Installing treefmt..."; cargo install treefmt || echo "treefmt installation failed - cargo not found. Please install Rust/Cargo or treefmt manually."; }
+    command -v treefmt >/dev/null 2>&1 || { echo "Installing treefmt..."; ./scripts/install-treefmt.sh; }
     command -v prettier >/dev/null 2>&1 || { echo "Installing prettier..."; npm install -g prettier || echo "prettier installation failed - npm not found. Please install Node.js/npm or prettier manually."; }
     command -v shfmt >/dev/null 2>&1 || { echo "Installing shfmt..."; go install mvdan.cc/sh/v3/cmd/shfmt@latest; }
     command -v shellcheck >/dev/null 2>&1 || { echo "Installing shellcheck..."; echo "Please install shellcheck manually: https://github.com/koalaman/shellcheck#installing"; }
-    command -v taplo >/dev/null 2>&1 || { echo "Installing taplo..."; cargo install taplo-cli --locked || echo "taplo installation failed - cargo not found. Please install Rust/Cargo or taplo manually."; }
+    command -v taplo >/dev/null 2>&1 || { echo "Installing taplo..."; npm install -g @taplo/cli || cargo install taplo-cli --locked || echo "taplo installation failed. Please install taplo manually."; }
     command -v yamlfmt >/dev/null 2>&1 || { echo "Installing yamlfmt..."; go install github.com/google/yamlfmt/cmd/yamlfmt@latest; }
     command -v dockerfmt >/dev/null 2>&1 || { echo "Installing dockerfmt..."; go install github.com/reteps/dockerfmt@latest; }
     @echo "Development tools setup complete!"
