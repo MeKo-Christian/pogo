@@ -279,8 +279,14 @@ func TestFindNextBoundaryPixel_Basic(t *testing.T) {
 	nx, ny, nbx, nby, found := findNextBoundaryPixel(labels, w, h, 1, cx, cy, bx, by)
 
 	assert.True(t, found)
-	assert.Equal(t, cx, nbx) // New backtrack should be old current
-	assert.Equal(t, cy, nby)
+	// The new backtrack is the last background cell examined before the hit,
+	// never the previous current pixel: the stopping criterion compares it
+	// against the background cell the walk started from, so a labelled pixel
+	// there can never match and the trace would run until maxSteps.
+	assert.False(t, isLabelPixel(labels, w, h, 1, nbx, nby),
+		"backtrack must be a background cell, got (%d,%d)", nbx, nby)
+	assert.True(t, nbx >= cx-1 && nbx <= cx+1)
+	assert.True(t, nby >= cy-1 && nby <= cy+1)
 
 	// New position should be a valid neighbor
 	assert.True(t, nx >= cx-1 && nx <= cx+1)

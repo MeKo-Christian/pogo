@@ -31,7 +31,10 @@ func traceContourMoore(labels []int, w, h, label int, st compStats) []utils.Poin
 			v1x, v1y := b.X-a.X, b.Y-a.Y
 			v2x, v2y := p.X-b.X, p.Y-b.Y
 			cross := v1x*v2y - v1y*v2x
-			if cross == 0 {
+			// Drop b only when it lies *between* a and p. A 180 degree
+			// reversal is also cross == 0, but there b is the tip of a
+			// one-pixel-wide spur and dropping it erases the spur.
+			if cross == 0 && v1x*v2x+v1y*v2y > 0 {
 				// remove middle point b
 				pts = pts[:n-1]
 			}
@@ -44,36 +47,65 @@ func traceContourMoore(labels []int, w, h, label int, st compStats) []utils.Poin
 	// Moore-Neighbor tracing
 	startCx, startCy := cx, cy
 	startBx, startBy := bx, by
-	maxSteps := w*h*4 + 8
+	// A contour cannot be longer than four times the component's own bounding
+	// box area, so bound the walk by that rather than by the whole probability
+	// map: on a large canvas holding a few small components, w*h*4 lets a single
+	// 100x7 component spin for millions of steps and emit a polygon with
+	// hundreds of thousands of points.
+	bw := st.maxX - st.minX + 1
+	bh := st.maxY - st.minY + 1
+	maxSteps := (bw+2)*(bh+2)*4 + 8
 
 	return traceContourLoop(labels, w, h, label, &cx, &cy, &bx, &by,
 		startCx, startCy, startBx, startBy, maxSteps, &pts, addPoint)
 }
 
 // traceContourLoop performs the main contour tracing loop.
+//
+// The walk is a deterministic function of the state (current pixel, backtrack
+// cell), so the state sequence is eventually periodic. Jacob's criterion —
+// "stop on re-entering the start pixel from the same direction" — is stated
+// against the *initial* state, but that state is synthetic: the caller invents
+// the backtrack as the cell west of the raster-scan start, and for shapes such
+// as a one-pixel-wide run the walk re-enters the start pixel from the south
+// instead and never reproduces it. The loop then only ends by exhausting
+// maxSteps. Keying the criterion on the state after the first step instead
+// makes it a state the walk demonstrably reaches, so the cycle always closes.
 func traceContourLoop(labels []int, w, h, label int, cx, cy, bx, by *int,
 	startCx, startCy, startBx, startBy, maxSteps int,
 	pts *[]utils.Point, addPoint func(int, int),
 ) []utils.Point {
-	steps := 0
+	var sentinelCx, sentinelCy, sentinelBx, sentinelBy int
+	haveSentinel := false
 
-	for steps < maxSteps {
-		steps++
-
+	for range maxSteps {
 		nx, ny, nbx, nby, found := findNextBoundaryPixel(labels, w, h, label, *cx, *cy, *bx, *by)
 		if !found {
 			break
 		}
 
-		// Set new backtrack as previous current
+		if haveSentinel && hasReturnedToStart(nx, ny, nbx, nby,
+			sentinelCx, sentinelCy, sentinelBx, sentinelBy) {
+			// The cycle has closed; the point was already recorded on the
+			// first pass, so stop before appending it a second time.
+			break
+		}
+
 		*bx, *by = nbx, nby
 		*cx, *cy = nx, ny
+
+		if !haveSentinel {
+			sentinelCx, sentinelCy, sentinelBx, sentinelBy = nx, ny, nbx, nby
+			haveSentinel = true
+		}
 
 		// Append point if different from last
 		if shouldAddPoint(*pts, *cx, *cy) {
 			addPoint(*cx, *cy)
 		}
 
+		// The synthetic start state can still be reached on well-formed
+		// contours, and it closes the loop one step earlier when it is.
 		if hasReturnedToStart(*cx, *cy, *bx, *by, startCx, startCy, startBx, startBy) {
 			break
 		}
@@ -175,12 +207,17 @@ func findNextBoundaryPixel(labels []int, w, h, label int, cx, cy, bx, by int) (i
 	dx, dy := bx-cx, by-cy
 	start := (dirIndex(dx, dy) + 1) % 8
 
-	// Search for next boundary pixel
+	// Search for next boundary pixel. The new backtrack is the last background
+	// cell examined before the hit, which is what Jacob's stopping criterion in
+	// traceContourLoop compares against: returning the previous *current* pixel
+	// instead makes the backtrack always a labelled pixel, so it can never equal
+	// the background cell the walk started from and the loop only ever ends by
+	// exhausting maxSteps.
 	for k := range 8 {
 		i := (start + k) % 8
 		tx, ty := cx+ndx[i], cy+ndy[i]
 		if isLabel(tx, ty) {
-			return tx, ty, cx, cy, true
+			return tx, ty, bx, by, true
 		}
 		// advance b to this neighbor for clockwise scanning
 		bx, by = tx, ty

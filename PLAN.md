@@ -412,27 +412,68 @@ the per-case timing table shows where the wall clock actually goes.
 
 ### Task 1.12 — Find out why three fixtures take five and a half minutes
 
-Measured in Task 1.3. `TestOCRAccuracy` is 370 s, and three cases are 89 % of it:
+Measured in Task 1.3. `TestOCRAccuracy` was 370 s, and three cases were 89 % of
+it. All three are large canvases holding very little text — spending 145 s to
+return two regions from a 1024×768 image is not a slow model, it is a defect.
 
-| Case                           | Elapsed | Regions found |
-| ------------------------------ | ------- | ------------- |
-| `scanned/scanned_document.png` | 2m25s   | 2             |
-| `rotated/rotated_45.png`       | 1m42s   | 1             |
-| `rotated/rotated_-45.png`      | 1m23s   | 1             |
-| all eleven others, combined    | 40s     | 1 each        |
+The profile named it outright: 180 s of a 189 s run sat in
+`utils.dpSimplify`/`utils.perpendicularDistance`, the Douglas–Peucker polygon
+simplifier. It was not the simplifier's fault. Instrumenting
+`regionsFromComponents` showed the contour handed to it: a 476-pixel component
+in a 102×7 bounding box arrived as a polygon of **613 802 points**.
 
-All three are large canvases holding very little text. Spending 145 s to return
-two regions from a 1024×768 image is not a slow model, it is a defect. The other
-eleven cases average 3.6 s on the same weights.
+`traceContourMoore` never terminated. `findNextBoundaryPixel` returned the
+previous _current_ pixel as the new backtrack, so the backtrack was always a
+labelled pixel, while `traceContourLoop`'s stopping criterion compared it
+against the background cell west of the start — a value it could never take.
+The walk therefore circled the component until it burned `maxSteps`, which was
+sized `w*h*4` from the whole probability map, appending the same perimeter over
+and over. Large canvas ⇒ large `maxSteps` ⇒ a polygon with hundreds of thousands
+of points ⇒ O(n²) Douglas–Peucker. That is precisely why only the big fixtures
+were slow.
 
-- [ ] Profile one of the three; find where the time goes (DB post-processing,
+Three changes: `findNextBoundaryPixel` now returns the last background cell it
+examined; the stopping criterion keys on the state after the first step, which
+the walk demonstrably reaches, rather than on the synthetic initial state; and
+`maxSteps` is bounded by the component's own bounding box instead of the whole
+map. Separately, `dpSimplify` no longer recomputes the loop-invariant segment
+length per point, which removes one `hypot` and one division per candidate.
+
+Full corpus, mobile weights, single clean run:
+
+| Case                           | Before | After  | Regions (before → after) |
+| ------------------------------ | ------ | ------ | ------------------------ |
+| `simple/simple_1_Hello.png`    | 1.797s | 226ms  | 1 → 1                    |
+| `simple/simple_2_World.png`    | 1.047s | 218ms  | 1 → 1                    |
+| `simple/simple_3_OCR.png`      | 2.441s | 117ms  | 1 → 1                    |
+| `simple/simple_4_Test.png`     | 1.886s | 118ms  | 1 → 1                    |
+| `simple/simple_5_123.png`      | 2.952s | 139ms  | 1 → 1                    |
+| `simple/simple_6_Sample.png`   | 1.893s | 211ms  | 1 → 1                    |
+| `rotated/rotated_0.png`        | 4.294s | 719ms  | 1 → 1                    |
+| `scanned/scanned_document.png` | 2m11s  | 2.022s | 2 → 2                    |
+| `german_text.png`              | 91ms   | 183ms  | 1 → 1                    |
+| `rotated/rotated_90.png`       | 4.646s | 424ms  | 1 → 1                    |
+| `rotated/rotated_180.png`      | 8.879s | 431ms  | 1 → 1                    |
+| `rotated/rotated_270.png`      | 8.897s | 525ms  | 1 → 1                    |
+| `rotated/rotated_45.png`       | 1m48s  | 1.371s | 1 → 1                    |
+| `rotated/rotated_-45.png`      | 1m43s  | 828ms  | 1 → 1                    |
+| **package total**              | 383s   | 8.7s   |                          |
+
+Detection output is unchanged: the region count is identical on all 14 cases,
+and 12 of the 14 recognized strings are byte-identical. The two that moved both
+moved for a stated reason. `simple_1_Hello` went `"Hel1o"` → `"Hello"` and the
+case now passes. `german_text` went `"HaloWeitr"` → `"Haloet"`: its single box
+moved from `{X:20 Y:21 W:265 H:24}` to `{X:18 Y:20 W:265 H:25}`, so the crop
+shifted two pixels and the recognizer read the same (already failing) line
+differently — both are wrong against `"Hallo Welt!"`.
+
+- [x] Profile one of the three; find where the time goes (DB post-processing,
       contour extraction and NMS on the graph-paper grid are the first suspects)
-- [ ] Fix the pathology, or record why it is inherent
-- [ ] Re-measure and put the new table in the commit message
+- [x] Fix the pathology, or record why it is inherent
+- [x] Re-measure and put the new table in the commit message
 
-**Accept:** the full accuracy corpus runs in under 60 s, which is what Task 1.3
-originally promised. Until then `go test -short` skips the corpus so the unit
-suite stays fast — that is a workaround, not the fix.
+**Accept:** met. The full accuracy corpus runs in 8.7 s, so the `testing.Short()`
+skip that stood in for the fix is gone.
 
 ### Task 1.4 — Read the model's real class count
 
