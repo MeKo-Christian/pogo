@@ -173,11 +173,11 @@ setup-deps:
     @echo "Installing development tools..."
     command -v go >/dev/null 2>&1 || { echo "Go is required but not installed. Please install Go first."; exit 1; }
     @echo "Installing Go tools..."
-    command -v golangci-lint >/dev/null 2>&1 || { echo "Installing golangci-lint..."; curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.60.3; }
+    command -v golangci-lint >/dev/null 2>&1 || { echo "Installing golangci-lint..."; curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.12.2; }
     command -v gofumpt >/dev/null 2>&1 || { echo "Installing gofumpt..."; go install mvdan.cc/gofumpt@latest; }
     command -v gci >/dev/null 2>&1 || { echo "Installing gci..."; go install github.com/daixiang0/gci@latest; }
     @echo "Installing formatters..."
-    command -v treefmt >/dev/null 2>&1 || { echo "Installing treefmt..."; go install github.com/numtide/treefmt/v2/cmd/treefmt@v2.5.0; }
+    command -v treefmt >/dev/null 2>&1 || { echo "Installing treefmt..."; ./scripts/install-treefmt.sh; }
     command -v prettier >/dev/null 2>&1 || { echo "Installing prettier..."; npm install -g prettier || echo "prettier installation failed - npm not found. Please install Node.js/npm or prettier manually."; }
     command -v shfmt >/dev/null 2>&1 || { echo "Installing shfmt..."; go install mvdan.cc/sh/v3/cmd/shfmt@latest; }
     command -v shellcheck >/dev/null 2>&1 || { echo "Installing shellcheck..."; echo "Please install shellcheck manually: https://github.com/koalaman/shellcheck#installing"; }
