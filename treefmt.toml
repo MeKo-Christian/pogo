@@ -30,16 +30,7 @@ excludes = [
 [formatter.prettier]
 command = "prettier"
 options = ["-w"]
-includes = [
-  "*.graphql",
-  "*.html",
-  "*.css",
-  "*.yaml",
-  "*.yml",
-  "*.js",
-  "*.json",
-  "*.md",
-]
+includes = ["*.graphql", "*.html", "*.css", "*.js", "*.json", "*.md"]
 excludes = [".release-please-manifest.json"]
 
 ### Go
