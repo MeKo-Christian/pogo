@@ -13,15 +13,16 @@ const BaselineFileName = "baseline.json"
 // Baseline is a committed measurement of one corpus: what the engine achieved,
 // so that the next change has something to be compared against.
 type Baseline struct {
-	// Models records which weights produced these numbers ("mobile" or
-	// "server"). Comparing across model sets is an error, not a regression.
-	Models string `json:"models"`
+	// Models identifies the weights that produced these numbers, by variant and
+	// by content fingerprint. Comparing across model sets is an error, not a
+	// regression.
+	Models ModelIdentity `json:"models"`
 	// Groups holds one summary per group plus the corpus-wide "overall".
 	Groups []GroupSummary `json:"groups"`
 }
 
 // NewBaseline builds a baseline from a measured run.
-func NewBaseline(models string, groups []GroupSummary, overall GroupSummary) Baseline {
+func NewBaseline(models ModelIdentity, groups []GroupSummary, overall GroupSummary) Baseline {
 	all := make([]GroupSummary, 0, len(groups)+1)
 	all = append(all, groups...)
 	all = append(all, overall)
@@ -38,8 +39,9 @@ func LoadBaseline(path string) (Baseline, error) {
 	if err := json.Unmarshal(data, &b); err != nil {
 		return b, fmt.Errorf("parse baseline %s: %w", path, err)
 	}
-	if b.Models == "" {
-		return b, fmt.Errorf("baseline %s does not record which models it was measured with", path)
+	if b.Models.Variant == "" || b.Models.Fingerprint == "" {
+		return b, fmt.Errorf("baseline %s does not record which models it was measured with; "+
+			"re-record it with --update-baseline", path)
 	}
 	return b, nil
 }
@@ -87,10 +89,10 @@ func (c Change) String() string {
 // reverse — is reported as a regression, because a silently dropped group is
 // how a corpus stops measuring anything.
 func (b Baseline) Compare(groups []GroupSummary, overall GroupSummary,
-	models string, tolerance float64,
+	models ModelIdentity, tolerance float64,
 ) ([]Change, error) {
-	if b.Models != models {
-		return nil, fmt.Errorf("baseline was measured with %q models but this run used %q; "+
+	if !b.Models.Matches(models) {
+		return nil, fmt.Errorf("baseline was measured with %s but this run used %s; "+
 			"re-run with the same models or record a separate baseline", b.Models, models)
 	}
 	current := append(append([]GroupSummary{}, groups...), overall)

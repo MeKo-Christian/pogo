@@ -9,12 +9,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func baselineFor(cer, wer float64, exact, n int) Baseline {
-	groups, overall := summaries(cer, wer, exact, n)
-	return NewBaseline("mobile", groups, overall)
+var (
+	mobileModels = ModelIdentity{Variant: "mobile", Fingerprint: "0123456789abcdef"}
+	serverModels = ModelIdentity{Variant: "server", Fingerprint: "fedcba9876543210"}
+	// Same variant, different weights: --models-dir pointed somewhere else.
+	otherMobileModels = ModelIdentity{Variant: "mobile", Fingerprint: "aaaaaaaaaaaaaaaa"}
+)
+
+// baselineFor is the reference measurement the Compare tests move away from.
+func baselineFor() Baseline {
+	groups, overall := summaries(0.2, 0.6, 3)
+	return NewBaseline(mobileModels, groups, overall)
 }
 
-func summaries(cer, wer float64, exact, n int) ([]GroupSummary, GroupSummary) {
+// summaries builds one group of nine cases plus its overall mirror.
+func summaries(cer, wer float64, exact int) ([]GroupSummary, GroupSummary) {
+	const n = 9
 	g := GroupSummary{Group: GroupUpright, N: n, Exact: exact, MeanCER: cer, MeanWER: wer}
 	o := g
 	o.Group = OverallGroup
@@ -22,13 +32,13 @@ func summaries(cer, wer float64, exact, n int) ([]GroupSummary, GroupSummary) {
 }
 
 func TestBaselineRoundTrip(t *testing.T) {
-	groups, overall := summaries(0.2, 0.6, 3, 9)
+	groups, overall := summaries(0.2, 0.6, 3)
 	path := filepath.Join(t.TempDir(), BaselineFileName)
-	require.NoError(t, NewBaseline("mobile", groups, overall).Save(path))
+	require.NoError(t, NewBaseline(mobileModels, groups, overall).Save(path))
 
 	got, err := LoadBaseline(path)
 	require.NoError(t, err)
-	assert.Equal(t, "mobile", got.Models)
+	assert.Equal(t, mobileModels, got.Models)
 	require.Len(t, got.Groups, 2)
 	assert.Equal(t, OverallGroup, got.Groups[1].Group)
 }
@@ -42,7 +52,7 @@ func TestLoadBaselineRejectsAFileWithoutAModelSet(t *testing.T) {
 }
 
 func TestCompare(t *testing.T) {
-	base := baselineFor(0.2, 0.6, 3, 9)
+	base := baselineFor()
 
 	tests := []struct {
 		name           string
@@ -60,8 +70,8 @@ func TestCompare(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			groups, overall := summaries(tt.cer, tt.wer, tt.exact, 9)
-			changes, err := base.Compare(groups, overall, "mobile", 0.005)
+			groups, overall := summaries(tt.cer, tt.wer, tt.exact)
+			changes, err := base.Compare(groups, overall, mobileModels, 0.005)
 			require.NoError(t, err)
 			// One change per group, and "overall" mirrors the single group here.
 			assert.Len(t, changes, tt.wantChanges)
@@ -77,9 +87,9 @@ func TestCompare(t *testing.T) {
 // Numbers from different weights are not comparable, so a mismatch is an error
 // rather than a regression that would send someone hunting for a bug.
 func TestCompareRejectsADifferentModelSet(t *testing.T) {
-	base := baselineFor(0.2, 0.6, 3, 9)
-	groups, overall := summaries(0.2, 0.6, 3, 9)
-	_, err := base.Compare(groups, overall, "server", 0.005)
+	base := baselineFor()
+	groups, overall := summaries(0.2, 0.6, 3)
+	_, err := base.Compare(groups, overall, serverModels, 0.005)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "mobile")
 	assert.Contains(t, err.Error(), "server")
@@ -87,12 +97,24 @@ func TestCompareRejectsADifferentModelSet(t *testing.T) {
 
 // A group that stops being measured must not read as "nothing moved".
 func TestCompareFlagsAMissingGroup(t *testing.T) {
-	base := baselineFor(0.2, 0.6, 3, 9)
+	base := baselineFor()
 	base.Groups = append(base.Groups, GroupSummary{Group: GroupRotated, N: 5})
-	groups, overall := summaries(0.2, 0.6, 3, 9)
-	changes, err := base.Compare(groups, overall, "mobile", 0.005)
+	groups, overall := summaries(0.2, 0.6, 3)
+	changes, err := base.Compare(groups, overall, mobileModels, 0.005)
 	require.NoError(t, err)
 	regressions := Regressions(changes)
 	require.Len(t, regressions, 1)
 	assert.Contains(t, regressions[0].String(), "missing")
+}
+
+// The variant alone is not an identity: --models-dir can point "mobile" at
+// entirely different weights, and comparing across them would read as an
+// accuracy change.
+func TestCompareRejectsTheSameVariantWithDifferentWeights(t *testing.T) {
+	base := baselineFor()
+	groups, overall := summaries(0.2, 0.6, 3)
+	_, err := base.Compare(groups, overall, otherMobileModels, 0.005)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "0123456789abcdef")
+	assert.Contains(t, err.Error(), "aaaaaaaaaaaaaaaa")
 }

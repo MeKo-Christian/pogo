@@ -80,39 +80,43 @@ func runEval(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	recognize, closePipeline, err := buildEvalRecognizer()
+	recognize, identity, closePipeline, err := buildEvalRecognizer()
 	if err != nil {
 		return err
 	}
 	defer closePipeline()
 
-	var failed bool
+	reports := make([]evalReport, 0, len(manifests))
 	for _, m := range manifests {
-		ok, err := evalCorpus(cmd, m, recognize)
+		r, err := evalCorpus(m, recognize, identity)
 		if err != nil {
 			return err
 		}
-		if !ok {
-			failed = true
-		}
+		reports = append(reports, r)
 	}
-	if failed {
-		return errors.New("evaluation failed: see the violations above")
+
+	if err := writeEvalReports(cmd.OutOrStdout(), reports); err != nil {
+		return err
+	}
+	for _, r := range reports {
+		if !r.passed() {
+			return errors.New("evaluation failed: see the violations above")
+		}
 	}
 	return nil
 }
 
-// evalCorpus runs one corpus and reports whether it passed.
-func evalCorpus(cmd *cobra.Command, manifest string, recognize eval.RecognizeFunc) (bool, error) {
-	out := cmd.OutOrStdout()
+// evalCorpus measures one corpus. Rendering happens afterwards, once, so that a
+// tree of corpora produces a single document rather than one per corpus.
+func evalCorpus(manifest string, recognize eval.RecognizeFunc, identity eval.ModelIdentity) (evalReport, error) {
 	dir := filepath.Dir(manifest)
 	cases, err := eval.LoadManifest(manifest)
 	if err != nil {
-		return false, err
+		return evalReport{}, err
 	}
 	results, err := eval.Run(dir, cases, recognize)
 	if err != nil {
-		return false, err
+		return evalReport{}, err
 	}
 	groups, overall := eval.Summarize(results)
 	violations := eval.CheckAll(groups)
@@ -127,28 +131,22 @@ func evalCorpus(cmd *cobra.Command, manifest string, recognize eval.RecognizeFun
 	if evalOpts.updateBaseline {
 		// Recording is not comparing: comparing a run against the baseline it
 		// just wrote could only ever say "nothing moved".
-		baselineErr = eval.NewBaseline(modelSet(), groups, overall).Save(baselinePath)
+		baselineErr = eval.NewBaseline(identity, groups, overall).Save(baselinePath)
 	} else {
-		changes, compared, baselineErr = compareToBaseline(baselinePath, groups, overall)
+		changes, compared, baselineErr = compareToBaseline(baselinePath, groups, overall, identity)
 	}
 
-	if evalOpts.format == outputFormatJSON {
-		if err := writeEvalJSON(out, dir, results, groups, overall, violations, changes, baselineErr); err != nil {
-			return false, err
-		}
-	} else {
-		writeEvalText(out, evalReport{
-			dir: dir, baselinePath: baselinePath, compared: compared,
-			results: results, groups: groups, overall: overall,
-			violations: violations, changes: changes, baselineErr: baselineErr,
-		})
-	}
-	return baselineErr == nil && len(violations) == 0 && len(eval.Regressions(changes)) == 0, nil
+	return evalReport{
+		dir: dir, models: identity, baselinePath: baselinePath, compared: compared,
+		results: results, groups: groups, overall: overall,
+		violations: violations, changes: changes, baselineErr: baselineErr,
+	}, nil
 }
 
 // compareToBaseline loads the baseline and compares. A missing baseline is not
 // an error: the first run of a new corpus has nothing to compare against.
 func compareToBaseline(path string, groups []eval.GroupSummary, overall eval.GroupSummary,
+	identity eval.ModelIdentity,
 ) ([]eval.Change, bool, error) {
 	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 		return nil, false, nil
@@ -157,7 +155,7 @@ func compareToBaseline(path string, groups []eval.GroupSummary, overall eval.Gro
 	if err != nil {
 		return nil, false, err
 	}
-	changes, err := base.Compare(groups, overall, modelSet(), evalOpts.tolerance)
+	changes, err := base.Compare(groups, overall, identity, evalOpts.tolerance)
 	return changes, err == nil, err
 }
 
@@ -207,25 +205,41 @@ func findCorpora(dir string) ([]string, error) {
 	return manifests, nil
 }
 
-// modelSet names the weights a run used, so a baseline cannot be compared
-// against numbers produced by a different model.
-func modelSet() string {
+// modelVariant names the bundled variant a run asked for. It is a label, not an
+// identity: eval.Fingerprint supplies the identity a baseline is keyed on.
+func modelVariant() string {
 	if evalOpts.serverModels {
 		return "server"
 	}
 	return "mobile"
 }
 
+// modelIdentity fingerprints the artifacts the pipeline actually resolved, so a
+// baseline recorded with one --models-dir cannot be silently compared against a
+// run that used another.
+func modelIdentity(cfg pipeline.Config) (eval.ModelIdentity, error) {
+	paths := []string{cfg.Detector.ModelPath, cfg.Recognizer.ModelPath}
+	if cfg.Recognizer.DictPath != "" {
+		paths = append(paths, cfg.Recognizer.DictPath)
+	}
+	paths = append(paths, cfg.Recognizer.DictPaths...)
+	return eval.Fingerprint(modelVariant(), paths)
+}
+
 // buildEvalRecognizer builds the same pipeline the accuracy test builds, so the
 // command and the test cannot drift apart.
-func buildEvalRecognizer() (eval.RecognizeFunc, func(), error) {
+func buildEvalRecognizer() (eval.RecognizeFunc, eval.ModelIdentity, func(), error) {
 	cfg := GetConfig()
 	b := pipeline.NewBuilder().WithModelsDir(models.GetModelsDir(cfg.ModelsDir))
 	b.WithImageHeight(48)
 	b.WithServerModels(evalOpts.serverModels)
+	identity, err := modelIdentity(b.Config())
+	if err != nil {
+		return nil, eval.ModelIdentity{}, nil, err
+	}
 	p, err := b.Build()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to build OCR pipeline: %w", err)
+		return nil, eval.ModelIdentity{}, nil, fmt.Errorf("failed to build OCR pipeline: %w", err)
 	}
 	recognize := func(img image.Image) (eval.Reading, error) {
 		res, err := p.ProcessImage(img)
@@ -243,7 +257,7 @@ func buildEvalRecognizer() (eval.RecognizeFunc, func(), error) {
 			fmt.Fprintf(os.Stderr, "Error closing pipeline: %v\n", err)
 		}
 	}
-	return recognize, closer, nil
+	return recognize, identity, closer, nil
 }
 
 func avgRecognitionConfidence(res *pipeline.OCRImageResult) float64 {
@@ -261,9 +275,11 @@ func avgRecognitionConfidence(res *pipeline.OCRImageResult) float64 {
 	return sum / float64(n)
 }
 
-// evalReport is what the text renderer needs about one corpus run.
+// evalReport is one corpus's measurement, kept until every corpus has been
+// measured so that the whole tree renders as one document.
 type evalReport struct {
 	dir          string
+	models       eval.ModelIdentity
 	baselinePath string
 	compared     bool
 	results      []eval.CaseResult
@@ -274,8 +290,29 @@ type evalReport struct {
 	baselineErr  error
 }
 
+func (r evalReport) passed() bool {
+	return r.baselineErr == nil && len(r.violations) == 0 && len(eval.Regressions(r.changes)) == 0
+}
+
+// writeEvalReports renders every corpus of the run. Under --format json this is
+// a single JSON document covering the whole tree, not one object per corpus:
+// a directory of corpora is explicitly supported, and a `{...}{...}` stream
+// would not be parseable.
+func writeEvalReports(out io.Writer, reports []evalReport) error {
+	if evalOpts.format == outputFormatJSON {
+		return writeEvalJSON(out, reports)
+	}
+	for i, r := range reports {
+		if i > 0 {
+			_, _ = fmt.Fprintln(out)
+		}
+		writeEvalText(out, r)
+	}
+	return nil
+}
+
 func writeEvalText(out io.Writer, r evalReport) {
-	_, _ = fmt.Fprintf(out, "Corpus: %s (%s models)\n", r.dir, modelSet())
+	_, _ = fmt.Fprintf(out, "Corpus: %s (%s models)\n", r.dir, r.models)
 	_, _ = fmt.Fprintln(out, strings.Repeat("=", 40))
 	_, _ = fmt.Fprint(out, eval.FormatResults(r.results, r.groups, r.overall))
 
@@ -312,9 +349,16 @@ func writeBaselineSection(out io.Writer, r evalReport) {
 	}
 }
 
-type evalJSON struct {
+// evalRunJSON is the whole run: one document, however many corpora it covers.
+type evalRunJSON struct {
+	Corpora []evalCorpusJSON `json:"corpora"`
+	Passed  bool             `json:"passed"`
+}
+
+type evalCorpusJSON struct {
 	Corpus      string              `json:"corpus"`
-	Models      string              `json:"models"`
+	Models      eval.ModelIdentity  `json:"models"`
+	Baseline    string              `json:"baseline"`
 	Cases       []eval.CaseResult   `json:"cases"`
 	Groups      []eval.GroupSummary `json:"groups"`
 	Overall     eval.GroupSummary   `json:"overall"`
@@ -324,26 +368,29 @@ type evalJSON struct {
 	Passed      bool                `json:"passed"`
 }
 
-func writeEvalJSON(out io.Writer, dir string, results []eval.CaseResult,
-	groups []eval.GroupSummary, overall eval.GroupSummary,
-	violations []eval.Violation, changes []eval.Change, baselineErr error,
-) error {
-	doc := evalJSON{
-		Corpus:  dir,
-		Models:  modelSet(),
-		Cases:   results,
-		Groups:  groups,
-		Overall: overall,
-		Passed:  baselineErr == nil && len(violations) == 0 && len(eval.Regressions(changes)) == 0,
-	}
-	for _, v := range violations {
-		doc.Violations = append(doc.Violations, v.String())
-	}
-	for _, c := range changes {
-		doc.Changes = append(doc.Changes, c.String())
-	}
-	if baselineErr != nil {
-		doc.BaselineErr = baselineErr.Error()
+func writeEvalJSON(out io.Writer, reports []evalReport) error {
+	doc := evalRunJSON{Corpora: make([]evalCorpusJSON, 0, len(reports)), Passed: true}
+	for _, r := range reports {
+		c := evalCorpusJSON{
+			Corpus:   r.dir,
+			Models:   r.models,
+			Baseline: r.baselinePath,
+			Cases:    r.results,
+			Groups:   r.groups,
+			Overall:  r.overall,
+			Passed:   r.passed(),
+		}
+		for _, v := range r.violations {
+			c.Violations = append(c.Violations, v.String())
+		}
+		for _, ch := range r.changes {
+			c.Changes = append(c.Changes, ch.String())
+		}
+		if r.baselineErr != nil {
+			c.BaselineErr = r.baselineErr.Error()
+		}
+		doc.Passed = doc.Passed && c.Passed
+		doc.Corpora = append(doc.Corpora, c)
 	}
 	data, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {

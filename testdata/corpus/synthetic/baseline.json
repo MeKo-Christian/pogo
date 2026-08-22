@@ -1,5 +1,8 @@
 {
-  "models": "mobile",
+  "models": {
+    "variant": "mobile",
+    "fingerprint": "453f0068072537aa"
+  },
   "groups": [
     {
       "group": "rotated",

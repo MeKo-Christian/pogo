@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Case is one ground-truth entry of a corpus manifest.
@@ -57,6 +58,16 @@ func (c Case) Path(root string) string { return filepath.Join(root, c.Image) }
 func (c Case) validate(root string) error {
 	if c.Image == "" {
 		return errors.New("empty image path")
+	}
+	// A corpus must contain its own images. Escaping the corpus directory would
+	// make it depend on the tree that happens to surround it, which is exactly
+	// what "the manifest resolves its own paths" is meant to avoid.
+	if filepath.IsAbs(c.Image) {
+		return fmt.Errorf("%s: image path must be relative to the corpus, not absolute", c.Image)
+	}
+	rel, err := filepath.Rel(root, c.Path(root))
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("%s: image path escapes the corpus directory %s", c.Image, root)
 	}
 	if Normalize(c.Expected) == "" {
 		return fmt.Errorf("%s: empty expected text; every case needs hand-keyed ground truth", c.Image)

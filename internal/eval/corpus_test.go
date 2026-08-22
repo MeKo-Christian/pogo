@@ -63,3 +63,36 @@ func TestShippedManifestHasNoThresholds(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(raw), "min_", "the manifest must carry ground truth only")
 }
+
+// A corpus must contain its images. Escaping the corpus directory is what makes
+// one non-portable, so it is rejected at load rather than discovered later as a
+// missing file.
+func TestLoadManifestRejectsPathsOutsideTheCorpus(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "a.png")
+	require.NoError(t, os.WriteFile(outside, []byte("x"), 0o600))
+
+	p := writeManifest(t, root, `[{"group":"upright","image":"../a.png","expected":"Hi"}]`)
+	_, err := LoadManifest(p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "escapes the corpus directory")
+
+	p = writeManifest(t, root, `[{"group":"upright","image":"`+outside+`","expected":"Hi"}]`)
+	_, err = LoadManifest(p)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must be relative")
+}
+
+// The bundled corpus must satisfy that contract: every image lives inside it.
+func TestShippedCorpusIsSelfContained(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	require.NoError(t, err)
+	corpus := filepath.Join(root, "testdata", "corpus", "synthetic")
+	cases, err := LoadManifest(filepath.Join(corpus, ManifestFileName))
+	require.NoError(t, err)
+	for _, c := range cases {
+		rel, err := filepath.Rel(corpus, c.Path(corpus))
+		require.NoError(t, err)
+		assert.NotContains(t, rel, "..", "case %s reaches outside the corpus", c.Image)
+	}
+}
