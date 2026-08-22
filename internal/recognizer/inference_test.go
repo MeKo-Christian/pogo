@@ -504,27 +504,6 @@ func TestBuildBatchTensor(t *testing.T) {
 	assert.Equal(t, int64(100), tensor.Shape[3])          // max width
 }
 
-func TestDetermineClassesFirst(t *testing.T) {
-	tests := []struct {
-		name         string
-		shape        []int64
-		classesGuess int
-		expected     bool
-	}{
-		{"TxC format", []int64{1, 10, 100}, 100, false}, // T=10, C=100
-		{"CxT format", []int64{1, 100, 10}, 100, true},  // C=100, T=10
-		{"Ambiguous", []int64{1, 50, 50}, 100, false},   // unclear, defaults to false
-		{"Too short", []int64{1, 100}, 100, false},      // invalid shape
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := determineClassesFirst(tt.shape, tt.classesGuess)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 // TestRecognizeBatch_ValidMultipleRegions tests successful batch processing with multiple regions.
 func TestRecognizeBatch_ValidMultipleRegions(t *testing.T) {
 	// Skip if models not available for this complex test

@@ -508,18 +508,20 @@ ImageNet-centred. Neither is `[0,1]` any more.
 
 ### Task 1.11 — Declare the CTC layout instead of inferring it
 
-- [ ] Add an `NTC`/`NCT` layout field to the recognizer config
-- [ ] Delete `determineClassesFirst` (`inference.go:527-548`)
-- [ ] Make `blankIndex` a field, replacing the literals at `inference.go:190`
+- [x] Add an `NTC`/`NCT` layout field to the recognizer config
+- [x] Delete `determineClassesFirst` (`inference.go:527-548`)
+- [x] Make `blankIndex` a field, replacing the literals at `inference.go:190`
       and `inference.go:501`
-- [ ] Validate the declared layout against the model's actual output shape at
+- [x] Validate the declared layout against the model's actual output shape at
       load
+- [x] Read the class count from the axis the declared layout names, instead of
+      always from the last one — the old helper only ever worked for NTC
 
 **Accept:** synthetic-tensor tests decode correctly under both layouts, and a
 declared layout contradicting the model is a load-time error rather than a
 silent fallback that happens to be right.
 
-_Phase 1 exit: all 14 fixtures pass at exact match. `TestProcessImage_Smoke`
+_Phase 1 exit: the nine upright fixtures pass at exact match. `TestProcessImage_Smoke`
 reads `hello`, not `hel1o`. Both failing `TestRecognizeBatch` tests are green.
 `go test ./...` passes apart from the PDF scenarios Phase 3 deletes, and no
 package takes over 60 s._

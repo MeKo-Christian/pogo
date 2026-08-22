@@ -66,35 +66,49 @@ func TestOutputClasses_BundledModels(t *testing.T) {
 	}
 }
 
-func TestResolveOutputClasses(t *testing.T) {
+func TestOutputClassCount(t *testing.T) {
 	tests := []struct {
-		name     string
-		dims     []int64
-		expected int
-		want     int
+		name   string
+		dims   []int64
+		layout CTCLayout
+		want   int
 	}{
-		{name: "classes last, static", dims: []int64{-1, -1, 18385}, expected: 18385, want: 18385},
-		{name: "classes first, static", dims: []int64{-1, 18385, -1}, expected: 18385, want: 18385},
-		{name: "classes first, both static", dims: []int64{1, 18385, 40}, expected: 18385, want: 18385},
-		{name: "classes last, both static", dims: []int64{1, 40, 18385}, expected: 18385, want: 18385},
-		{name: "no match falls back to trailing axis", dims: []int64{-1, -1, 6625}, expected: 18385, want: 6625},
-		{name: "dynamic class dim", dims: []int64{-1, -1, -1}, expected: 18385, want: 0},
-		{name: "zero class dim", dims: []int64{1, 1, 0}, expected: 18385, want: 1},
-		{name: "empty", dims: nil, expected: 18385, want: 0},
+		{name: "classes last, static", dims: []int64{-1, -1, 18385}, layout: LayoutNTC, want: 18385},
+		{name: "classes last, both static", dims: []int64{1, 40, 18385}, layout: LayoutNTC, want: 18385},
+		{name: "classes first, static", dims: []int64{-1, 18385, -1}, layout: LayoutNCT, want: 18385},
+		{name: "classes first, both static", dims: []int64{1, 18385, 40}, layout: LayoutNCT, want: 18385},
+		// The layout decides which axis is read; it is not inferred from the sizes.
+		{name: "classes first read as classes last", dims: []int64{1, 18385, 40}, layout: LayoutNTC, want: 40},
+		{name: "trailing unit dims are stripped", dims: []int64{1, 40, 18385, 1}, layout: LayoutNTC, want: 18385},
+		{name: "dynamic class dim", dims: []int64{-1, -1, -1}, layout: LayoutNTC, want: 0},
+		{name: "zero class dim", dims: []int64{1, 1, 0}, layout: LayoutNTC, want: 0},
+		{name: "empty", dims: nil, layout: LayoutNTC, want: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, resolveOutputClasses(tt.dims, tt.expected))
+			assert.Equal(t, tt.want, outputClassCount(tt.dims, tt.layout))
 		})
 	}
 }
 
-// A classes-first [N, C, T] output must not be rejected: determineClassesFirst
-// supports that layout, so validation has to identify the same axis.
+// A classes-first [N, C, T] output must not be rejected: the model declares
+// LayoutNCT, and validation has to read the class count from the axis that
+// declaration names.
 func TestValidateCharsetAgainstModel_ClassesFirstLayout(t *testing.T) {
 	cs := newCharset([]string{"a", "b", "c"}, CharsetOptions{})
 	info := onnxrt.InputOutputInfo{Name: recOutputName, Dimensions: onnxrt.NewShape(-1, 4, 25)}
-	require.NoError(t, validateCharsetAgainstModel(cs, info, Config{DictPath: stubDictPath}))
+	require.NoError(t, validateCharsetAgainstModel(cs, info,
+		Config{DictPath: stubDictPath, CTCLayout: LayoutNCT}))
+}
+
+// The same output under the default layout is a mismatch, and validateCTCLayout
+// says so: the classes sit in the axis the declaration calls "time".
+func TestValidateCTCLayout_ContradictedByModel(t *testing.T) {
+	cs := newCharset([]string{"a", "b", "c"}, CharsetOptions{})
+	info := onnxrt.InputOutputInfo{Name: recOutputName, Dimensions: onnxrt.NewShape(-1, 4, 25)}
+	err := validateCTCLayout(cs, info, Config{DictPath: stubDictPath, CTCLayout: LayoutNTC})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "contradicts the model")
 }
 
 func TestValidateCharsetAgainstModel_MismatchHintsAtSpaceToken(t *testing.T) {
