@@ -231,14 +231,18 @@ func loadCharsetForRecognizer(config Config) (*Charset, error) {
 	return charset, nil
 }
 
-// loadAndValidateCharset loads the model dictionary and rejects it when it
-// cannot match the model's CTC head.
+// loadAndValidateCharset loads the model dictionary and rejects the whole CTC
+// configuration - layout, blank index and dictionary - when it cannot match the
+// model's CTC head.
 func loadAndValidateCharset(config Config, outputInfo onnxrt.InputOutputInfo) (*Charset, error) {
 	charset, err := loadCharsetForRecognizer(config)
 	if err != nil {
 		return nil, err
 	}
 	if err := validateCTCLayout(charset, outputInfo, config); err != nil {
+		return nil, err
+	}
+	if err := validateBlankIndexAgainstModel(outputInfo, config); err != nil {
 		return nil, err
 	}
 	if err := validateCharsetAgainstModel(charset, outputInfo, config); err != nil {
@@ -269,19 +273,17 @@ func classDimIndex(layout CTCLayout) int {
 
 // outputClassCount returns the number of output classes declared by the model,
 // reading whichever dimension the declared layout says carries the classes. It
-// returns 0 when that dimension is dynamic or absent, in which case the class
+// returns 0 when that dimension is dynamic, or when the output has fewer than
+// three dimensions and therefore no class axis at all, in which case the class
 // count is unknown.
 func outputClassCount(dims []int64, layout CTCLayout) int {
 	norm := normalizeOutputDims(dims)
+	// Below rank 3 the layout names no class axis at all, and the CTC decoders
+	// reject such a shape outright. Reporting the last dimension here would let
+	// a rank-2 output pass the dictionary check by coincidence, so report the
+	// class count as unknown instead.
 	if len(norm) < 3 {
-		if len(norm) == 0 {
-			return 0
-		}
-		last := norm[len(norm)-1]
-		if last <= 0 {
-			return 0
-		}
-		return int(last)
+		return 0
 	}
 	if d := norm[classDimIndex(layout)]; d > 0 {
 		return int(d)
@@ -350,6 +352,27 @@ func validateCharsetAgainstModel(charset *Charset, outputInfo onnxrt.InputOutput
 			"(%d tokens + 1 CTC blank)%s",
 		classes, dictionaryDescription(config), expected, charset.Size(), hint,
 	)
+}
+
+// validateBlankIndexAgainstModel rejects a blank index that no predicted class
+// can ever take. Such an index leaves every blank in the sequence, so the model
+// would load happily and then emit text riddled with blank tokens. The check is
+// skipped when the model leaves its class dimension dynamic, because there is
+// nothing to compare against until inference time.
+func validateBlankIndexAgainstModel(outputInfo onnxrt.InputOutputInfo, config Config) error {
+	classes := outputClassCount(outputInfo.Dimensions, config.ctcLayout())
+	if classes == 0 {
+		slog.Debug("Model output class dimension is dynamic; skipping blank index range check",
+			"output_shape", outputInfo.Dimensions, "blank_index", config.BlankIndex)
+		return nil
+	}
+	if config.BlankIndex >= classes {
+		return fmt.Errorf(
+			"blank index %d is out of range: the model declares %d output classes (valid range 0..%d)",
+			config.BlankIndex, classes, classes-1,
+		)
+	}
+	return nil
 }
 
 func loadFilterCharsetForRecognizer(config Config) (*Charset, error) {

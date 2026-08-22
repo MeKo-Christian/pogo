@@ -106,6 +106,12 @@ type RecognizerConfig struct {
 	// PP-OCRv5 models) and set it to false for a custom model whose class count
 	// is dictionary tokens + blank only.
 	AppendSpaceToken *bool `mapstructure:"append_space_token" yaml:"append_space_token,omitempty" json:"append_space_token,omitempty"`
+	// CTCLayout declares the recognition model's output axis order: "ntc"
+	// ([N, T, C], PaddleOCR's default) or "nct" ([N, C, T]). Custom models that
+	// are not laid out the PaddleOCR way need this set.
+	CTCLayout string `mapstructure:"ctc_layout" yaml:"ctc_layout" json:"ctc_layout"`
+	// BlankIndex is the CTC blank class of the recognition model.
+	BlankIndex int `mapstructure:"blank_index" yaml:"blank_index" json:"blank_index"`
 }
 
 // ParallelConfig contains parallel processing settings.
