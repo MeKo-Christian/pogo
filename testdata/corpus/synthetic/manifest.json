@@ -1,72 +1,72 @@
 [
   {
     "group": "upright",
-    "image": "testdata/images/simple/simple_1_Hello.png",
+    "image": "../../images/simple/simple_1_Hello.png",
     "expected": "Hello"
   },
   {
     "group": "upright",
-    "image": "testdata/images/simple/simple_2_World.png",
+    "image": "../../images/simple/simple_2_World.png",
     "expected": "World"
   },
   {
     "group": "upright",
-    "image": "testdata/images/simple/simple_3_OCR.png",
+    "image": "../../images/simple/simple_3_OCR.png",
     "expected": "OCR"
   },
   {
     "group": "upright",
-    "image": "testdata/images/simple/simple_4_Test.png",
+    "image": "../../images/simple/simple_4_Test.png",
     "expected": "Test"
   },
   {
     "group": "upright",
-    "image": "testdata/images/simple/simple_5_123.png",
+    "image": "../../images/simple/simple_5_123.png",
     "expected": "123"
   },
   {
     "group": "upright",
-    "image": "testdata/images/simple/simple_6_Sample.png",
+    "image": "../../images/simple/simple_6_Sample.png",
     "expected": "Sample"
   },
   {
     "group": "upright",
-    "image": "testdata/images/rotated/rotated_0.png",
+    "image": "../../images/rotated/rotated_0.png",
     "expected": "Rotated Text"
   },
   {
     "group": "upright",
-    "image": "testdata/images/scanned/scanned_document.png",
+    "image": "../../images/scanned/scanned_document.png",
     "expected": "Scanned Document Sample"
   },
   {
     "group": "upright",
-    "image": "testdata/images/german_text.png",
+    "image": "../../images/german_text.png",
     "expected": "Hallo Welt!"
   },
   {
     "group": "rotated",
-    "image": "testdata/images/rotated/rotated_90.png",
+    "image": "../../images/rotated/rotated_90.png",
     "expected": "Rotated Text"
   },
   {
     "group": "rotated",
-    "image": "testdata/images/rotated/rotated_180.png",
+    "image": "../../images/rotated/rotated_180.png",
     "expected": "Rotated Text"
   },
   {
     "group": "rotated",
-    "image": "testdata/images/rotated/rotated_270.png",
+    "image": "../../images/rotated/rotated_270.png",
     "expected": "Rotated Text"
   },
   {
     "group": "rotated",
-    "image": "testdata/images/rotated/rotated_45.png",
+    "image": "../../images/rotated/rotated_45.png",
     "expected": "Rotated Text"
   },
   {
     "group": "rotated",
-    "image": "testdata/images/rotated/rotated_-45.png",
+    "image": "../../images/rotated/rotated_-45.png",
     "expected": "Rotated Text"
   }
 ]

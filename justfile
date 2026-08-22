@@ -94,6 +94,14 @@ test-integration-cli-verbose:
 test-benchmark:
     just go-onnx test -v -run="^$$" -bench=. ./...
 
+# Measure OCR accuracy against a ground-truth corpus
+eval corpus="./testdata/corpus" *ARGS:
+    just go-onnx run ./cmd/ocr eval {{ corpus }} {{ ARGS }}
+
+# Record the measured accuracy as the corpus baseline
+eval-update corpus="./testdata/corpus":
+    just go-onnx run ./cmd/ocr eval {{ corpus }} --update-baseline
+
 # Run ONNX Runtime smoke tests
 test-onnx:
     just go-onnx test -v ./internal/onnx

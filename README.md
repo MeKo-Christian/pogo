@@ -120,6 +120,7 @@ just run -- image doc.jpg   # → Run from source instantly
 # Quality Assurance
 just test                   # → Full test suite
 just test-coverage          # → Generate coverage.html report
+just eval                   # → Measure OCR accuracy (CER/WER) against the corpus
 just fmt                    # → Auto-format (treefmt + gofumpt + gci)
 just lint                   # → Comprehensive linting
 just lint-fix              # → Auto-fix lint issues

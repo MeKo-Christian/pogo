@@ -17,15 +17,21 @@ import (
 type Case struct {
 	// Group tiers the corpus. Every group must have a Gate.
 	Group string `json:"group"`
-	// Image is the path to the fixture, relative to the project root.
+	// Image is the path to the fixture, relative to the manifest that names it.
 	Image string `json:"image"`
 	// Expected is the hand-keyed ground truth.
 	Expected string `json:"expected"`
 }
 
-// LoadManifest reads a corpus manifest and validates every row against the
-// project root the images are resolved from.
-func LoadManifest(path, root string) ([]Case, error) {
+// ManifestFileName is the file that marks a directory as a corpus.
+const ManifestFileName = "manifest.json"
+
+// LoadManifest reads a corpus manifest and validates every row.
+//
+// Image paths are resolved against the manifest's own directory, so a corpus is
+// a self-contained directory that can be moved or shipped without rewriting it.
+func LoadManifest(path string) ([]Case, error) {
+	root := filepath.Dir(path)
 	data, err := os.ReadFile(path) //nolint:gosec // G304: corpus path comes from the operator, not from a request.
 	if err != nil {
 		return nil, fmt.Errorf("read manifest %s: %w", path, err)
@@ -45,6 +51,9 @@ func LoadManifest(path, root string) ([]Case, error) {
 	return cases, nil
 }
 
+// Path resolves the case's image against the corpus directory root.
+func (c Case) Path(root string) string { return filepath.Join(root, c.Image) }
+
 func (c Case) validate(root string) error {
 	if c.Image == "" {
 		return errors.New("empty image path")
@@ -55,7 +64,7 @@ func (c Case) validate(root string) error {
 	if _, ok := Gates[c.Group]; !ok {
 		return fmt.Errorf("%s: unknown group %q; add a gate for it or fix the typo", c.Image, c.Group)
 	}
-	p := filepath.Join(root, c.Image)
+	p := c.Path(root)
 	if _, err := os.Stat(p); err != nil {
 		return fmt.Errorf("%s: image not found at %s: %w", c.Image, p, err)
 	}

@@ -19,14 +19,14 @@ func results(group string, pairs ...[2]string) []CaseResult {
 
 func TestSummarize(t *testing.T) {
 	rs := append(
-		results("upright", [2]string{hello, hello}, [2]string{world, "Werld"}),
-		results("rotated", [2]string{rotatedText, ""})...,
+		results(GroupUpright, [2]string{hello, hello}, [2]string{world, "Werld"}),
+		results(GroupRotated, [2]string{rotatedText, ""})...,
 	)
 	groups, overall := Summarize(rs)
 	require.Len(t, groups, 2)
 	// Sorted by name, so the output is stable across runs.
-	assert.Equal(t, "rotated", groups[0].Group)
-	assert.Equal(t, "upright", groups[1].Group)
+	assert.Equal(t, GroupRotated, groups[0].Group)
+	assert.Equal(t, GroupUpright, groups[1].Group)
 
 	up := groups[1]
 	assert.Equal(t, 2, up.N)
@@ -45,7 +45,7 @@ func TestGateCheck(t *testing.T) {
 
 	vs := g.Check(GroupSummary{Group: "g", N: 2, Exact: 0, MeanCER: 0.3, MeanWER: 0.4})
 	require.Len(t, vs, 3)
-	assert.Contains(t, vs[0].String(), "mean CER")
+	assert.Contains(t, vs[0].String(), MetricMeanCER)
 	assert.Contains(t, vs[0].String(), "0.3000")
 	assert.Contains(t, vs[2].String(), "at least")
 }
@@ -72,7 +72,7 @@ func TestRotatedGateAdmitsTheMeasuredBaseline(t *testing.T) {
 // data outside this package can soften that.
 func TestUprightGateRejectsASingleWrongCharacter(t *testing.T) {
 	perfect := results(
-		"upright",
+		GroupUpright,
 		[2]string{hello, hello},
 		[2]string{world, world},
 	)
@@ -80,7 +80,7 @@ func TestUprightGateRejectsASingleWrongCharacter(t *testing.T) {
 	assert.Empty(t, CheckAll(groups))
 
 	degraded := results(
-		"upright",
+		GroupUpright,
 		[2]string{hello, hellg},
 		[2]string{world, world},
 	)
@@ -90,7 +90,7 @@ func TestUprightGateRejectsASingleWrongCharacter(t *testing.T) {
 }
 
 func TestFormatResultsShowsExpectedAndGot(t *testing.T) {
-	rs := results("upright", [2]string{hello, hellg})
+	rs := results(GroupUpright, [2]string{hello, hellg})
 	groups, overall := Summarize(rs)
 	out := FormatResults(rs, groups, overall)
 	assert.Contains(t, out, `expected "`+hello+`"`)

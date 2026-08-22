@@ -2,6 +2,20 @@ package eval
 
 import "fmt"
 
+// Metric names, shared by the gate and the baseline comparison so a violation
+// and a regression name the same thing.
+const (
+	MetricMeanCER       = "mean CER"
+	MetricMeanWER       = "mean WER"
+	MetricExactFraction = "exact fraction"
+)
+
+// Group names of the bundled corpus.
+const (
+	GroupUpright = "upright"
+	GroupRotated = "rotated"
+)
+
 // Gate is what a group of the corpus must achieve. There is one gate per group
 // and no per-case knob anywhere: a case that regresses can only be answered by
 // fixing the engine or by changing a gate here, in code, in a reviewable diff.
@@ -39,8 +53,8 @@ type Gate struct {
 // literal such as 0.8333 would sit below it and fail the unrounded comparison
 // in Check.
 var Gates = map[string]Gate{
-	"upright": {MaxMeanCER: 0, MaxMeanWER: 0, MinExactFraction: 1.0},
-	"rotated": {MaxMeanCER: 5.0 / 6.0, MaxMeanWER: 1.0, MinExactFraction: 0},
+	GroupUpright: {MaxMeanCER: 0, MaxMeanWER: 0, MinExactFraction: 1.0},
+	GroupRotated: {MaxMeanCER: 5.0 / 6.0, MaxMeanWER: 1.0, MinExactFraction: 0},
 }
 
 // Violation is one broken gate condition, named so the failure says which
@@ -61,7 +75,7 @@ func (v Violation) String() string {
 		return fmt.Sprintf("group %q: %s", v.Group, v.Metric)
 	}
 	rel := "at most"
-	if v.Metric == "exact fraction" {
+	if v.Metric == MetricExactFraction {
 		rel = "at least"
 	}
 	return fmt.Sprintf("group %q: %s = %.4f, want %s %.4f", v.Group, v.Metric, v.Got, rel, v.Want)
@@ -71,13 +85,13 @@ func (v Violation) String() string {
 func (g Gate) Check(s GroupSummary) []Violation {
 	var vs []Violation
 	if s.MeanCER > g.MaxMeanCER {
-		vs = append(vs, Violation{s.Group, "mean CER", g.MaxMeanCER, s.MeanCER})
+		vs = append(vs, Violation{s.Group, MetricMeanCER, g.MaxMeanCER, s.MeanCER})
 	}
 	if s.MeanWER > g.MaxMeanWER {
-		vs = append(vs, Violation{s.Group, "mean WER", g.MaxMeanWER, s.MeanWER})
+		vs = append(vs, Violation{s.Group, MetricMeanWER, g.MaxMeanWER, s.MeanWER})
 	}
 	if f := s.ExactFraction(); f < g.MinExactFraction {
-		vs = append(vs, Violation{s.Group, "exact fraction", g.MinExactFraction, f})
+		vs = append(vs, Violation{s.Group, MetricExactFraction, g.MinExactFraction, f})
 	}
 	return vs
 }

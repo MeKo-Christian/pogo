@@ -21,7 +21,7 @@ func TestLoadManifest(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.png"), []byte("not really a png"), 0o600))
 
 	p := writeManifest(t, root, `[{"group":"upright","image":"a.png","expected":"Hello"}]`)
-	cases, err := LoadManifest(p, root)
+	cases, err := LoadManifest(p)
 	require.NoError(t, err)
 	require.Len(t, cases, 1)
 	assert.Equal(t, "Hello", cases[0].Expected)
@@ -43,7 +43,7 @@ func TestLoadManifestRejectsBadRows(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := LoadManifest(writeManifest(t, root, tt.body), root)
+			_, err := LoadManifest(writeManifest(t, root, tt.body))
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
@@ -54,8 +54,8 @@ func TestLoadManifestRejectsBadRows(t *testing.T) {
 func TestShippedManifestHasNoThresholds(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	require.NoError(t, err)
-	p := filepath.Join(root, "testdata", "fixtures", "ocr_accuracy.json")
-	cases, err := LoadManifest(p, root)
+	p := filepath.Join(root, "testdata", "corpus", "synthetic", ManifestFileName)
+	cases, err := LoadManifest(p)
 	require.NoError(t, err)
 	assert.Len(t, cases, 14)
 
