@@ -233,10 +233,17 @@ func NormalizeForRecognitionWithPoolAnd(
 	img image.Image,
 	p utils.NormalizeParams,
 ) (onnx.Tensor, []float32, error) {
-	// Estimate required size from bounds
-	b := img.Bounds()
-	need := p.Channels * b.Dx() * b.Dy()
-	buf := mempool.GetFloat32(need)
+	// Estimate the required size from the bounds. The estimate is only used to
+	// pre-size the pooled buffer, so it must not be trusted: img may be nil and
+	// p.Channels may be out of range. In that case pass no buffer at all and let
+	// NormalizeImageIntoBufferWith report the validation error.
+	var buf []float32
+	if img != nil {
+		b := img.Bounds()
+		if need := p.Channels * b.Dx() * b.Dy(); need > 0 {
+			buf = mempool.GetFloat32(need)
+		}
+	}
 	data, w, h, err := utils.NormalizeImageIntoBufferWith(img, buf, p)
 	if err != nil {
 		mempool.PutFloat32(buf)

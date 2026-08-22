@@ -1,6 +1,7 @@
 package recognizer
 
 import (
+	"image"
 	"image/color"
 	"testing"
 
@@ -253,4 +254,43 @@ func TestNormalizeForRecognitionWithPool_BufferAndTensor(t *testing.T) {
 		}
 	}
 	assert.True(t, sawNegative, "recognition input must reach negative values")
+}
+
+func TestNormalizeForRecognitionWithPoolAnd_InvalidParams(t *testing.T) {
+	cfg := testutil.DefaultTestImageConfig()
+	cfg.Size = testutil.SmallSize
+	img, err := testutil.GenerateTextImage(cfg)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		img  image.Image
+		p    utils.NormalizeParams
+	}{
+		{
+			name: "negative channel count",
+			img:  img,
+			p:    utils.NormalizeParams{Channels: -1, Scale: 1, Std: [3]float32{1, 1, 1}},
+		},
+		{
+			name: "zero channel count",
+			img:  img,
+			p:    utils.NormalizeParams{Channels: 0, Scale: 1, Std: [3]float32{1, 1, 1}},
+		},
+		{
+			name: "nil image",
+			img:  nil,
+			p:    DefaultNormalizeParams(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Sizing the pooled buffer must not panic; the validation error wins.
+			ten, buf, err := NormalizeForRecognitionWithPoolAnd(tt.img, tt.p)
+			require.Error(t, err)
+			assert.Nil(t, buf)
+			assert.Nil(t, ten.Data)
+		})
+	}
 }
