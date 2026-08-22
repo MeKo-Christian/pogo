@@ -14,7 +14,6 @@ import (
 	"github.com/makiuchi-d/gozxing/datamatrix"
 	"github.com/makiuchi-d/gozxing/multi"
 	"github.com/makiuchi-d/gozxing/oned"
-	"github.com/makiuchi-d/gozxing/pdf417"
 	"github.com/makiuchi-d/gozxing/qrcode"
 )
 
@@ -122,7 +121,6 @@ func newMultiFormatReader() *multi.MultiFormatReader {
 	_ = qrcode.NewQRCodeReader()
 	_ = datamatrix.NewDataMatrixReader()
 	_ = aztec.NewAztecReader()
-	_ = pdf417.NewPDF417Reader()
 
 	return reader
 }
