@@ -58,6 +58,8 @@ Thumbs.db
 # Coverage
 coverage.out
 coverage.html
+coverage_*.out
+*_coverage.out
 
 # ONNX Runtime binaries (will be downloaded separately)
 onnxruntime/
@@ -85,6 +87,9 @@ docs/_build/
 # Results
 results.txt
 results.json
+
+# Generated overlay images
+/overlays/
 
 # Trunk
 .trunk
