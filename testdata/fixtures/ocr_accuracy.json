@@ -2,127 +2,71 @@
   {
     "group": "upright",
     "image": "testdata/images/simple/simple_1_Hello.png",
-    "expected": "Hello",
-    "min_similarity": 1.0,
-    "min_car": 1.0,
-    "min_war": 1.0,
-    "min_avg_conf": 0.0
+    "expected": "Hello"
   },
   {
     "group": "upright",
     "image": "testdata/images/simple/simple_2_World.png",
-    "expected": "World",
-    "min_similarity": 1.0,
-    "min_car": 1.0,
-    "min_war": 1.0,
-    "min_avg_conf": 0.0
+    "expected": "World"
   },
   {
     "group": "upright",
     "image": "testdata/images/simple/simple_3_OCR.png",
-    "expected": "OCR",
-    "min_similarity": 1.0,
-    "min_car": 1.0,
-    "min_war": 1.0,
-    "min_avg_conf": 0.0
+    "expected": "OCR"
   },
   {
     "group": "upright",
     "image": "testdata/images/simple/simple_4_Test.png",
-    "expected": "Test",
-    "min_similarity": 1.0,
-    "min_car": 1.0,
-    "min_war": 1.0,
-    "min_avg_conf": 0.0
+    "expected": "Test"
   },
   {
     "group": "upright",
     "image": "testdata/images/simple/simple_5_123.png",
-    "expected": "123",
-    "min_similarity": 1.0,
-    "min_car": 1.0,
-    "min_war": 1.0,
-    "min_avg_conf": 0.0
+    "expected": "123"
   },
   {
     "group": "upright",
     "image": "testdata/images/simple/simple_6_Sample.png",
-    "expected": "Sample",
-    "min_similarity": 1.0,
-    "min_car": 1.0,
-    "min_war": 1.0,
-    "min_avg_conf": 0.0
+    "expected": "Sample"
   },
   {
     "group": "upright",
     "image": "testdata/images/rotated/rotated_0.png",
-    "expected": "Rotated Text",
-    "min_similarity": 1.0,
-    "min_car": 1.0,
-    "min_war": 1.0,
-    "min_avg_conf": 0.0
+    "expected": "Rotated Text"
   },
   {
     "group": "upright",
     "image": "testdata/images/scanned/scanned_document.png",
-    "expected": "Scanned Document Sample",
-    "min_similarity": 1.0,
-    "min_car": 1.0,
-    "min_war": 1.0,
-    "min_avg_conf": 0.0
+    "expected": "Scanned Document Sample"
   },
   {
     "group": "upright",
     "image": "testdata/images/german_text.png",
-    "expected": "Hallo Welt!",
-    "min_similarity": 1.0,
-    "min_car": 1.0,
-    "min_war": 1.0,
-    "min_avg_conf": 0.0
+    "expected": "Hallo Welt!"
   },
   {
     "group": "rotated",
     "image": "testdata/images/rotated/rotated_90.png",
-    "expected": "Rotated Text",
-    "min_similarity": 0.65,
-    "min_car": 0.65,
-    "min_war": 0.5,
-    "min_avg_conf": 0.0
+    "expected": "Rotated Text"
   },
   {
     "group": "rotated",
     "image": "testdata/images/rotated/rotated_180.png",
-    "expected": "Rotated Text",
-    "min_similarity": 0.65,
-    "min_car": 0.65,
-    "min_war": 0.5,
-    "min_avg_conf": 0.0
+    "expected": "Rotated Text"
   },
   {
     "group": "rotated",
     "image": "testdata/images/rotated/rotated_270.png",
-    "expected": "Rotated Text",
-    "min_similarity": 0.65,
-    "min_car": 0.65,
-    "min_war": 0.5,
-    "min_avg_conf": 0.0
+    "expected": "Rotated Text"
   },
   {
     "group": "rotated",
     "image": "testdata/images/rotated/rotated_45.png",
-    "expected": "Rotated Text",
-    "min_similarity": 0.5,
-    "min_car": 0.5,
-    "min_war": 0.5,
-    "min_avg_conf": 0.0
+    "expected": "Rotated Text"
   },
   {
     "group": "rotated",
     "image": "testdata/images/rotated/rotated_-45.png",
-    "expected": "Rotated Text",
-    "min_similarity": 0.5,
-    "min_car": 0.5,
-    "min_war": 0.5,
-    "min_avg_conf": 0.0
+    "expected": "Rotated Text"
   }
 ]
