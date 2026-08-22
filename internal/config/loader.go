@@ -251,16 +251,8 @@ func (l *Loader) setupEnvironmentVariables() {
 	l.v.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 }
 
-// setDefaults sets default values for all configuration options.
-func (l *Loader) setDefaults() {
-	defaults := DefaultConfig()
-
-	// Global settings
-	l.v.SetDefault("models_dir", defaults.ModelsDir)
-	l.v.SetDefault("log_level", defaults.LogLevel)
-	l.v.SetDefault("verbose", defaults.Verbose)
-
-	// Pipeline defaults
+// setDetectorDefaults sets the default values of the detector section.
+func (l *Loader) setDetectorDefaults(defaults Config) {
 	l.v.SetDefault("pipeline.detector.db_thresh", defaults.Pipeline.Detector.DbThresh)
 	l.v.SetDefault("pipeline.detector.db_box_thresh", defaults.Pipeline.Detector.DbBoxThresh)
 	l.v.SetDefault("pipeline.detector.polygon_mode", defaults.Pipeline.Detector.PolygonMode)
@@ -274,6 +266,18 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("pipeline.detector.min_region_size", defaults.Pipeline.Detector.MinRegionSize)
 	l.v.SetDefault("pipeline.detector.max_region_size", defaults.Pipeline.Detector.MaxRegionSize)
 	l.v.SetDefault("pipeline.detector.size_nms_scale_factor", defaults.Pipeline.Detector.SizeNMSScaleFactor)
+}
+
+// setDefaults sets default values for all configuration options.
+func (l *Loader) setDefaults() {
+	defaults := DefaultConfig()
+
+	// Global settings
+	l.v.SetDefault("models_dir", defaults.ModelsDir)
+	l.v.SetDefault("log_level", defaults.LogLevel)
+	l.v.SetDefault("verbose", defaults.Verbose)
+
+	l.setDetectorDefaults(defaults)
 
 	l.v.SetDefault("pipeline.recognizer.language", defaults.Pipeline.Recognizer.Language)
 	l.v.SetDefault("pipeline.recognizer.image_height", defaults.Pipeline.Recognizer.ImageHeight)
@@ -281,6 +285,8 @@ func (l *Loader) setDefaults() {
 	l.v.SetDefault("pipeline.recognizer.pad_width_multiple", defaults.Pipeline.Recognizer.PadWidthMultiple)
 	l.v.SetDefault("pipeline.recognizer.min_confidence", defaults.Pipeline.Recognizer.MinConfidence)
 	l.v.SetDefault("pipeline.recognizer.num_threads", defaults.Pipeline.Recognizer.NumThreads)
+	l.v.SetDefault("pipeline.recognizer.ctc_layout", defaults.Pipeline.Recognizer.CTCLayout)
+	l.v.SetDefault("pipeline.recognizer.blank_index", defaults.Pipeline.Recognizer.BlankIndex)
 
 	l.v.SetDefault("pipeline.parallel.max_workers", defaults.Pipeline.Parallel.MaxWorkers)
 	l.v.SetDefault("pipeline.parallel.batch_size", defaults.Pipeline.Parallel.BatchSize)

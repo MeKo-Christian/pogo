@@ -224,7 +224,7 @@ func (r *Recognizer) decodeOutput(output *modelOutput, preprocessed *preprocesse
 
 	// Single-region and batch decoding share one index -> rune mapping so the two
 	// paths cannot drift apart.
-	text := convertIndicesToRunes(collapsed, r.charset, r.filterCharset)
+	text := convertIndicesToRunes(collapsed, blankIndex, r.charset, r.filterCharset)
 
 	return &Result{
 		Text:            text,
@@ -369,17 +369,38 @@ func extractSequenceData(seq interface{}) ([]int, []float64, float64) {
 	}
 }
 
+// charsetTokenIndex maps a CTC class index onto its index in the charset.
+// The charset holds no entry for the blank class, so every class after the
+// blank sits one position earlier in the charset, while the classes before it
+// keep their index. Returns -1 for the blank itself, which carries no token.
+func charsetTokenIndex(classIndex, blankIndex int) int {
+	switch {
+	case classIndex == blankIndex:
+		return -1
+	case classIndex > blankIndex:
+		return classIndex - 1
+	default:
+		return classIndex
+	}
+}
+
 // convertIndicesToRunes converts CTC class indices to text using the charset.
-// Class 0 is the CTC blank, so class i maps to charset token i-1 — the last
-// class therefore maps to whatever the charset's final token is. With
-// CharsetOptions.AppendSpace that is usually SpaceToken, but only when the
-// dictionary did not already contain it somewhere else; AppendSpace only
-// guarantees that the charset contains SpaceToken, not that it comes last.
+// The blank class is dropped and the remaining classes are shifted around it
+// (see charsetTokenIndex), so a nonzero BlankIndex maps just as correctly as
+// PaddleOCR's blank=0. The last class therefore maps to whatever the charset's
+// final token is. With CharsetOptions.AppendSpace that is usually SpaceToken,
+// but only when the dictionary did not already contain it somewhere else;
+// AppendSpace only guarantees that the charset contains SpaceToken, not that it
+// comes last.
 // Optionally applies filtering if filterCharset is non-nil.
-func convertIndicesToRunes(indices []int, charset *Charset, filterCharset *Charset) string {
+func convertIndicesToRunes(indices []int, blankIndex int, charset *Charset, filterCharset *Charset) string {
 	runes := make([]rune, 0, len(indices))
 	for _, idx := range indices {
-		ch := charset.LookupToken(idx - 1) // shift by -1 to skip blank
+		tokenIdx := charsetTokenIndex(idx, blankIndex)
+		if tokenIdx < 0 {
+			continue
+		}
+		ch := charset.LookupToken(tokenIdx)
 		if ch == "" {
 			continue
 		}
@@ -402,6 +423,7 @@ func (r *Recognizer) buildBatchResults(decoded interface{}, prepped []preprocess
 	r.mu.RLock()
 	charset := r.charset
 	filterCharset := r.filterCharset
+	blankIndex := r.config.BlankIndex
 	r.mu.RUnlock()
 
 	for i := range out {
@@ -431,7 +453,7 @@ func (r *Recognizer) buildBatchResults(decoded interface{}, prepped []preprocess
 			continue
 		}
 
-		text := convertIndicesToRunes(collapsed, charset, filterCharset)
+		text := convertIndicesToRunes(collapsed, blankIndex, charset, filterCharset)
 		out[i].Text = text
 		out[i].Confidence = confidence
 		out[i].CharConfidences = charProbs

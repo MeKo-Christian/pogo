@@ -138,6 +138,8 @@ func defaultRecognizerConfig() RecognizerConfig {
 		PadWidthMultiple: cfg.PadWidthMultiple,
 		MinConfidence:    0.0,
 		NumThreads:       cfg.NumThreads,
+		CTCLayout:        string(cfg.CTCLayout),
+		BlankIndex:       cfg.BlankIndex,
 	}
 }
 
@@ -435,6 +437,10 @@ func (c *Config) toRecognizerConfig() recognizer.Config {
 	cfg.MaxWidth = c.Pipeline.Recognizer.MaxWidth
 	cfg.PadWidthMultiple = c.Pipeline.Recognizer.PadWidthMultiple
 	cfg.NumThreads = c.Pipeline.Recognizer.NumThreads
+	cfg.BlankIndex = c.Pipeline.Recognizer.BlankIndex
+	if c.Pipeline.Recognizer.CTCLayout != "" {
+		cfg.CTCLayout = recognizer.CTCLayout(c.Pipeline.Recognizer.CTCLayout)
+	}
 	if c.Pipeline.Recognizer.ModelPath != "" {
 		cfg.ModelPath = c.Pipeline.Recognizer.ModelPath
 	}

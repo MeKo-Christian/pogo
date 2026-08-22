@@ -273,6 +273,24 @@ func (b *Builder) WithRecognizeWidthPadding(maxWidth, multiple int) *Builder {
 	return b
 }
 
+// WithRecognizerCTCLayout declares the recognition model's output axis order.
+// An empty layout leaves the configured default in place.
+func (b *Builder) WithRecognizerCTCLayout(layout recognizer.CTCLayout) *Builder {
+	if layout != "" {
+		b.cfg.Recognizer.CTCLayout = layout
+	}
+	return b
+}
+
+// WithRecognizerBlankIndex sets the CTC blank class of the recognition model.
+// Negative values are ignored so callers can pass an unset field safely.
+func (b *Builder) WithRecognizerBlankIndex(idx int) *Builder {
+	if idx >= 0 {
+		b.cfg.Recognizer.BlankIndex = idx
+	}
+	return b
+}
+
 // WithOrientation enables/disables orientation (placeholder only in 5.1).
 func (b *Builder) WithOrientation(enabled bool) *Builder {
 	b.cfg.EnableOrientation = enabled

@@ -65,12 +65,14 @@ func (c *PipelineCache) GetOrCreate(config pipeline.Config) (pipelineInterface, 
 func (c *PipelineCache) hashConfig(config pipeline.Config) string {
 	// Create a string representation of key configuration fields
 	key := fmt.Sprintf(
-		"%s|%s|%s|%s|%s",
+		"%s|%s|%s|%s|%s|%s|%d",
 		config.ModelsDir,
 		config.Detector.ModelPath,
 		config.Recognizer.ModelPath,
 		fmt.Sprintf("%v", config.Recognizer.DictPaths),
 		config.Recognizer.Language,
+		config.Recognizer.CTCLayout,
+		config.Recognizer.BlankIndex,
 	)
 
 	h := fnv.New64a()
@@ -110,6 +112,8 @@ func (c *PipelineCache) createPipeline(config pipeline.Config) (pipelineInterfac
 			builder = builder.WithDetectorMultiScaleIoU(config.Detector.MultiScale.MergeIoU)
 		}
 	}
+	builder = builder.WithRecognizerCTCLayout(config.Recognizer.CTCLayout)
+	builder = builder.WithRecognizerBlankIndex(config.Recognizer.BlankIndex)
 	builder = builder.WithImageHeight(config.Recognizer.ImageHeight)
 	builder = builder.WithRecognizeWidthPadding(config.Recognizer.MaxWidth, config.Recognizer.PadWidthMultiple)
 
@@ -241,6 +245,8 @@ func NewServer(config Config) (*Server, error) {
 			nb = nb.WithDetectorMultiScaleIoU(cfg.Detector.MultiScale.MergeIoU)
 		}
 	}
+	nb = nb.WithRecognizerCTCLayout(cfg.Recognizer.CTCLayout)
+	nb = nb.WithRecognizerBlankIndex(cfg.Recognizer.BlankIndex)
 	nb = nb.WithImageHeight(cfg.Recognizer.ImageHeight)
 	nb = nb.WithRecognizeWidthPadding(cfg.Recognizer.MaxWidth, cfg.Recognizer.PadWidthMultiple)
 	if cfg.Detector.ModelPath != "" {

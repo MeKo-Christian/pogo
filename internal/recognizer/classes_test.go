@@ -252,13 +252,13 @@ func TestConvertIndicesToRunes_DecodesSpaceClass(t *testing.T) {
 	require.Len(t, decoded, 1)
 	require.Equal(t, []int{1, 3, 2}, decoded[0].Collapsed)
 
-	got := convertIndicesToRunes(decoded[0].Collapsed, withSpace, nil)
+	got := convertIndicesToRunes(decoded[0].Collapsed, 0, withSpace, nil)
 	assert.Equal(t, "H i", got)
 	assert.Contains(t, got, " ")
 
 	// Control: without the appended space token the same path loses the space.
 	withoutSpace := newCharset(tokens, CharsetOptions{})
-	assert.Equal(t, "Hi", convertIndicesToRunes(decoded[0].Collapsed, withoutSpace, nil))
+	assert.Equal(t, "Hi", convertIndicesToRunes(decoded[0].Collapsed, 0, withoutSpace, nil))
 }
 
 // TestRecognizeRegion_DecodesSpace_Integration is model-backed: rotated_0.png
