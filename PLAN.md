@@ -479,11 +479,11 @@ similarity score.
 
 ### Task 1.8 — Collapse the three normalizers into one
 
-- [ ] Write one implementation taking scale, mean and std
-- [ ] Reduce `NormalizeImage`, `NormalizeImageIntoBuffer` and
+- [x] Write one implementation taking scale, mean and std
+- [x] Reduce `NormalizeImage`, `NormalizeImageIntoBuffer` and
       `NormalizeImagePooled` (`image_processing.go:154/197/233`) to thin
       wrappers that differ only in how they allocate
-- [ ] Add a table test covering a known pixel through both a `[0,1]` and a
+- [x] Add a table test covering a known pixel through both a `[0,1]` and a
       `[-1,1]` parameterization
 
 **Accept:** the three entry points produce identical values for identical
@@ -491,17 +491,17 @@ parameters, and the arithmetic exists in exactly one place.
 
 ### Task 1.9 — Give each consumer its own constants
 
-- [ ] Detector passes ImageNet mean/std
-- [ ] Recognizer passes `0.5/0.5`, yielding `(x/255 - 0.5) / 0.5`
-- [ ] Update the `internal/rectify` and `internal/orientation` call sites
-- [ ] Assert the resulting tensor range per consumer
+- [x] Detector passes ImageNet mean/std
+- [x] Recognizer passes `0.5/0.5`, yielding `(x/255 - 0.5) / 0.5`
+- [x] Update the `internal/rectify` and `internal/orientation` call sites
+- [x] Assert the resulting tensor range per consumer
 
 **Accept:** recognizer input reaches negative values; detector input is
 ImageNet-centred. Neither is `[0,1]` any more.
 
 ### Task 1.10 — Stop hardcoding the channel count
 
-- [ ] Replace the literal `3` at `preprocess.go:188`, `preprocess.go:203` and
+- [x] Replace the literal `3` at `preprocess.go:188`, `preprocess.go:203` and
       `detector.go:143` with a value carried on the config path
 
 **Accept:** `grep -rn "NewImageTensor(.*, 3," internal/` returns nothing.

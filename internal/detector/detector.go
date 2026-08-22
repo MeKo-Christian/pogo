@@ -134,13 +134,14 @@ func (d *Detector) preprocessImage(img image.Image) (onnx.Tensor, error) {
 	}
 
 	// Normalize image to float32 tensor in NCHW format using pooled buffer
-	tensorData, width, height, err := utils.NormalizeImagePooled(resized)
+	params := d.config.normalizeParams()
+	tensorData, width, height, err := utils.NormalizeImagePooledWith(resized, params)
 	if err != nil {
 		return onnx.Tensor{}, fmt.Errorf("failed to normalize image: %w", err)
 	}
 
-	// Create tensor with shape [1, 3, H, W]
-	tensor, err := onnx.NewImageTensor(tensorData, 3, height, width)
+	// Create tensor with shape [1, C, H, W]
+	tensor, err := onnx.NewImageTensor(tensorData, params.Channels, height, width)
 	if err != nil {
 		return onnx.Tensor{}, fmt.Errorf("failed to create tensor: %w", err)
 	}

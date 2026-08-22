@@ -103,10 +103,22 @@ func TestNormalizeForRecognition(t *testing.T) {
 	require.Equal(t, int64(3), ten.Shape[1])
 	require.Equal(t, int64(outH), ten.Shape[2])
 	require.Equal(t, int64(outW), ten.Shape[3])
-	for _, v := range ten.Data {
-		assert.GreaterOrEqual(t, v, float32(0))
+
+	// PaddleOCR recognition input is (x/255 - 0.5) / 0.5, i.e. [-1, 1].
+	// Compare against the plain [0,1] normalization of the same image.
+	ref, _, _, err := utils.NormalizeImage(resized)
+	require.NoError(t, err)
+	require.Len(t, ten.Data, len(ref))
+	sawNegative := false
+	for i, v := range ten.Data {
+		assert.GreaterOrEqual(t, v, float32(-1))
 		assert.LessOrEqual(t, v, float32(1))
+		assert.InDelta(t, (float64(ref[i])-0.5)/0.5, v, 1e-6)
+		if v < 0 {
+			sawNegative = true
+		}
 	}
+	assert.True(t, sawNegative, "recognition input must reach negative values")
 }
 
 func TestBatchCropRegions(t *testing.T) {
@@ -227,9 +239,18 @@ func TestNormalizeForRecognitionWithPool_BufferAndTensor(t *testing.T) {
 	require.Equal(t, int64(3), ten.Shape[1])
 	require.Equal(t, int64(outH), ten.Shape[2])
 	require.Equal(t, int64(outW), ten.Shape[3])
-	// Data range in [0,1]
-	for _, v := range ten.Data {
-		assert.GreaterOrEqual(t, v, float32(0))
+	// Data range in [-1,1] and identical to the non-pooled entry point.
+	ref, err := NormalizeForRecognition(resized)
+	require.NoError(t, err)
+	require.Len(t, ten.Data, len(ref.Data))
+	sawNegative := false
+	for i, v := range ten.Data {
+		assert.GreaterOrEqual(t, v, float32(-1))
 		assert.LessOrEqual(t, v, float32(1))
+		assert.InDelta(t, ref.Data[i], v, 0)
+		if v < 0 {
+			sawNegative = true
+		}
 	}
+	assert.True(t, sawNegative, "recognition input must reach negative values")
 }
