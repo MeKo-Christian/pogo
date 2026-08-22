@@ -35,6 +35,7 @@ func TestLoadManifestRejectsBadRows(t *testing.T) {
 		name, body, wantErr string
 	}{
 		{"empty expected", `[{"group":"upright","image":"a.png","expected":""}]`, "hand-keyed ground truth"},
+		{"blank expected", `[{"group":"upright","image":"a.png","expected":"   "}]`, "hand-keyed ground truth"},
 		{"unknown group", `[{"group":"sideways","image":"a.png","expected":"Hi"}]`, "unknown group"},
 		{"missing image", `[{"group":"upright","image":"nope.png","expected":"Hi"}]`, "image not found"},
 		{"no cases", `[]`, "no cases"},

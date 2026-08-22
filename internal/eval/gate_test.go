@@ -10,9 +10,8 @@ import (
 
 func results(group string, pairs ...[2]string) []CaseResult {
 	out := make([]CaseResult, 0, len(pairs))
-	for i, p := range pairs {
+	for _, p := range pairs {
 		c := Case{Group: group, Image: "img", Expected: p[0]}
-		_ = i
 		out = append(out, Score(c, p[1], 1, 0.9, time.Millisecond))
 	}
 	return out
@@ -56,7 +55,17 @@ func TestGateCheck(t *testing.T) {
 func TestCheckAllRejectsUnknownGroup(t *testing.T) {
 	vs := CheckAll([]GroupSummary{{Group: "uprihgt", N: 1, Exact: 1}})
 	require.Len(t, vs, 1)
-	assert.Contains(t, vs[0].String(), "unknown group")
+	// No numbers in the message: Want and Got carry no meaning for this
+	// violation, and printing them as 0.0000 would only read as a missed bar.
+	assert.Equal(t, `group "uprihgt": unknown group (no gate defined)`, vs[0].String())
+}
+
+// The rotated gate is the measured value exactly. Every rotated expectation is
+// twelve runes, so the group mean moves in steps of 1/60 and a rounded literal
+// would sit just below today's baseline and fail on every run.
+func TestRotatedGateAdmitsTheMeasuredBaseline(t *testing.T) {
+	vs := Gates["rotated"].Check(GroupSummary{Group: "rotated", N: 5, MeanCER: 50.0 / 60.0, MeanWER: 1})
+	assert.Empty(t, vs)
 }
 
 // The upright gate is exact match. Degrading a single case must fail it, and no

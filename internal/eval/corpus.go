@@ -49,7 +49,7 @@ func (c Case) validate(root string) error {
 	if c.Image == "" {
 		return errors.New("empty image path")
 	}
-	if c.Expected == "" {
+	if Normalize(c.Expected) == "" {
 		return fmt.Errorf("%s: empty expected text; every case needs hand-keyed ground truth", c.Image)
 	}
 	if _, ok := Gates[c.Group]; !ok {

@@ -3,6 +3,7 @@ package eval
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // FormatResults renders the per-case rows followed by the per-group and overall
@@ -18,7 +19,7 @@ func FormatResults(results []CaseResult, groups []GroupSummary, overall GroupSum
 			mark = "x"
 		}
 		fmt.Fprintf(&b, "%s %-9s %-44s CER=%.4f WER=%.4f conf=%.3f regions=%d %s\n",
-			mark, r.Group, r.Image, r.CER, r.WER, r.AvgConf, r.Regions, r.Elapsed.Round(1e6))
+			mark, r.Group, r.Image, r.CER, r.WER, r.AvgConf, r.Regions, r.Elapsed.Round(time.Millisecond))
 		if !r.Exact {
 			fmt.Fprintf(&b, "      expected %q\n      got      %q\n", r.Expected, Normalize(r.Got))
 		}
