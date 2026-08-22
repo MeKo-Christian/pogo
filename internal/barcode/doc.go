@@ -9,4 +9,3 @@ package barcode
 //
 // Example:
 //   go build -tags=barcode_gozxing ./...
-

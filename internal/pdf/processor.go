@@ -7,12 +7,11 @@ import (
 	"math"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
-	"time"
-
-	"sort"
 	"sync"
+	"time"
 
 	ibar "github.com/MeKo-Tech/pogo/internal/barcode"
 	"github.com/MeKo-Tech/pogo/internal/detector"
@@ -328,7 +327,8 @@ func (p *Processor) processPageEnhanced(pageNum int, images []image.Image, analy
 		pagePointsH = vectorExtraction.Metadata.PageHeight
 	}
 	imageResults, pageWidth, pageHeight, totalDetectionTime = p.processImagesWithOCRIfNeeded(
-		strategy, images, pageWidth, pageHeight, totalDetectionTime, pagePointsW, pagePointsH)
+		strategy, images, pageWidth, pageHeight, totalDetectionTime, pagePointsW, pagePointsH,
+	)
 
 	// Set page dimensions from vector text if no images
 	if pageWidth == 0 && pageHeight == 0 && vectorExtraction != nil {

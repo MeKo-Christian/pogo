@@ -16,6 +16,7 @@
 ## Evidence
 
 ### Model Output Analysis
+
 ```
 Model predicts index 16215 for the 5th character
 Dictionary lookup: 16215 - 1 = 16214 (subtract 1 for CTC blank token)
@@ -24,6 +25,7 @@ Character at index 16222: 'o' (8 positions later)
 ```
 
 ### Character Recognition Results
+
 ```bash
 Input Image: testdata/images/simple/simple_1_Hello.png
 Expected:    "Hello"
@@ -38,6 +40,7 @@ DEBUG char 4: model_idx=16215, dict_idx=16214, char="g"  # Should be 'o'
 ```
 
 ### Dictionary Verification
+
 ```bash
 # Verify ideographic space at position 0
 $ head -n 1 models/dictionaries/ppocrv5_dict.txt | od -c
@@ -74,6 +77,7 @@ $ diff -q /tmp/ppocrv5_dict_official.txt models/dictionaries/ppocrv5_dict.txt
      - Character correctness ❌
 
 3. **Example: Broken Test**
+
 ```go
 // internal/recognizer/inference_test.go:738
 func TestRecognizeBatch_Integration(t *testing.T) {
@@ -90,6 +94,7 @@ func TestRecognizeBatch_Integration(t *testing.T) {
 ```
 
 4. **BDD Tests Are Broken**
+
 ```gherkin
 # test/integration/cli/features/image_processing.feature
 Scenario: Process single image with default settings
@@ -106,6 +111,7 @@ See [PLAN.md Phase 0.5](../PLAN.md#05-hellg-bug-investigation--critical) for det
 ### Quick Start Investigation
 
 1. **Compare with PaddleOCR Python** (Highest Priority)
+
    ```bash
    # Install PaddleOCR
    pip install paddleocr paddlepaddle
@@ -115,6 +121,7 @@ See [PLAN.md Phase 0.5](../PLAN.md#05-hellg-bug-investigation--critical) for det
    ```
 
 2. **Verify Preprocessing**
+
    ```bash
    # Enable preprocessing debug output
    export POGO_DEBUG_PREPROCESSING=1
@@ -125,6 +132,7 @@ See [PLAN.md Phase 0.5](../PLAN.md#05-hellg-bug-investigation--critical) for det
    ```
 
 3. **Test Minimal Dictionary**
+
    ```bash
    # Create minimal Latin-only dictionary
    echo -e "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\np\nq\nr\ns\nt\nu\nv\nw\nx\ny\nz" > /tmp/minimal.txt
@@ -136,52 +144,64 @@ See [PLAN.md Phase 0.5](../PLAN.md#05-hellg-bug-investigation--critical) for det
 ## Hypotheses (Ordered by Likelihood)
 
 ### 1. Preprocessing Difference (70% likely)
+
 **Hypothesis**: Our image preprocessing differs from PaddleOCR's, causing the model to receive different input
 
 **Evidence for**:
+
 - Same model, same dictionary, different results suggests input differences
 - Image preprocessing is complex: resizing, normalization, padding, color space
 
 **Evidence against**:
+
 - We're using standard ONNX Runtime preprocessing
 - Character offset is consistent (always 8 positions)
 
 **Test**: Compare preprocessed tensors byte-by-byte with PaddleOCR
 
 ### 2. CTC Decoding Off-by-One Error (20% likely)
+
 **Hypothesis**: We have an off-by-one error in how we map CTC indices to dictionary positions
 
 **Evidence for**:
+
 - Consistent 8-position offset suggests systematic indexing error
 - CTC blank token handling is tricky (index 0 vs separate)
 
 **Evidence against**:
+
 - Simple `idx - 1` logic seems correct
 - Would affect all characters, not just 'o'
 
 **Test**: Manually trace through CTC decode with known indices
 
 ### 3. Model-Dictionary Incompatibility (5% likely)
+
 **Hypothesis**: The PP-OCRv5 model we downloaded expects a different dictionary format/order
 
 **Evidence for**:
+
 - Model comes from external source
 - Dictionary order matters for character mapping
 
 **Evidence against**:
+
 - Dictionary is official from PaddleOCR repository
 - File is byte-identical to official version
 
 **Test**: Test with different PP-OCRv5 model versions
 
 ### 4. Synthetic Image Artifacts (5% likely)
+
 **Hypothesis**: Our synthetic test image generator creates images that confuse the model
 
 **Evidence for**:
+
 - All tested images are synthetic
 - Font rendering might differ from training data
 
 **Evidence against**:
+
 - Multiple different images show same issue
 - Even properly generated images fail
 

@@ -46,7 +46,7 @@ archives:
       - CHANGELOG.md
 
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
 
 snapshot:
   name_template: "{{ incpatch .Version }}-next"
@@ -56,31 +56,31 @@ changelog:
   use: github
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
-      - '^chore:'
-      - '^style:'
-      - 'merge conflict'
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^style:"
+      - "merge conflict"
       - Merge pull request
       - Merge remote-tracking branch
       - Merge branch
   groups:
-    - title: 'New Features'
+    - title: "New Features"
       regexp: '^.*?feat(\(.+\))??!?:.+$'
       order: 0
-    - title: 'Bug Fixes'
+    - title: "Bug Fixes"
       regexp: '^.*?fix(\(.+\))??!?:.+$'
       order: 1
-    - title: 'Performance Improvements'
+    - title: "Performance Improvements"
       regexp: '^.*?perf(\(.+\))??!?:.+$'
       order: 2
-    - title: 'Refactoring'
+    - title: "Refactoring"
       regexp: '^.*?refactor(\(.+\))??!?:.+$'
       order: 3
-    - title: 'Dependency Updates'
+    - title: "Dependency Updates"
       regexp: '^.*?(build|deps)(\(.+\))??!?:.+$'
       order: 4
-    - title: 'Other Changes'
+    - title: "Other Changes"
       order: 999
 
 release:

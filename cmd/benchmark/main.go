@@ -102,7 +102,8 @@ func saveResultsToFile(filename string, results []benchmark.GPUVSCPUBenchmarkRes
 			gpuMs = float64(result.GPUResult.Duration.Nanoseconds()) / 1e6
 		}
 
-		_, _ = fmt.Fprintf(file, "%s,%s,%.2f,%.2f,%.2f,%d,%t\n",
+		_, _ = fmt.Fprintf(
+			file, "%s,%s,%.2f,%.2f,%.2f,%d,%t\n",
 			filepath.Base(result.ImagePath),
 			result.ImageSize,
 			cpuMs,

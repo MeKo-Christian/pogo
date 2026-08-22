@@ -199,7 +199,8 @@ func (l *LogProgressCallback) OnProgress(current, total int) {
 		elapsed := time.Since(l.startTime)
 		rate := float64(current) / elapsed.Seconds()
 
-		l.logger.Log(context.TODO(), l.level, l.prefix+"Progress update",
+		l.logger.Log(
+			context.TODO(), l.level, l.prefix+"Progress update",
 			"current", current,
 			"total", total,
 			"percent", fmt.Sprintf("%.1f", percent),

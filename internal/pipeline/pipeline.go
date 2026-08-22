@@ -15,38 +15,38 @@ import (
 
 // Config holds configuration for the OCR pipeline and its components.
 type Config struct {
-    ModelsDir           string
-    EnableOrientation   bool // deprecated: use Orientation.Enabled
-    Orientation         orientation.Config
-    TextLineOrientation orientation.Config
-    Rectification       rectify.Config
-    Detector            detector.Config
-    Recognizer          recognizer.Config
-    WarmupIterations    int // optional warmup runs per model to reduce first-run latency
+	ModelsDir           string
+	EnableOrientation   bool // deprecated: use Orientation.Enabled
+	Orientation         orientation.Config
+	TextLineOrientation orientation.Config
+	Rectification       rectify.Config
+	Detector            detector.Config
+	Recognizer          recognizer.Config
+	WarmupIterations    int // optional warmup runs per model to reduce first-run latency
 
-    // Parallel processing configuration
-    Parallel ParallelConfig // Configuration for parallel processing
-    Resource ResourceConfig // Configuration for resource management
+	// Parallel processing configuration
+	Parallel ParallelConfig // Configuration for parallel processing
+	Resource ResourceConfig // Configuration for resource management
 
-    // Barcode detection configuration
-    Barcode BarcodeConfig
+	// Barcode detection configuration
+	Barcode BarcodeConfig
 }
 
 // DefaultConfig returns a default pipeline config with component defaults.
 func DefaultConfig() Config {
-    return Config{
-        ModelsDir:           models.GetModelsDir(""),
-        EnableOrientation:   false,
-        Orientation:         orientation.DefaultConfig(),
-        TextLineOrientation: orientation.DefaultTextLineConfig(),
-        Rectification:       rectify.DefaultConfig(),
-        Detector:            detector.DefaultConfig(),
-        Recognizer:          recognizer.DefaultConfig(),
-        WarmupIterations:    0,
-        Parallel:            DefaultParallelConfig(),
-        Resource:            DefaultResourceConfig(),
-        Barcode:             DefaultBarcodeConfig(),
-    }
+	return Config{
+		ModelsDir:           models.GetModelsDir(""),
+		EnableOrientation:   false,
+		Orientation:         orientation.DefaultConfig(),
+		TextLineOrientation: orientation.DefaultTextLineConfig(),
+		Rectification:       rectify.DefaultConfig(),
+		Detector:            detector.DefaultConfig(),
+		Recognizer:          recognizer.DefaultConfig(),
+		WarmupIterations:    0,
+		Parallel:            DefaultParallelConfig(),
+		Resource:            DefaultResourceConfig(),
+		Barcode:             DefaultBarcodeConfig(),
+	}
 }
 
 // Builder constructs a Pipeline with fluent configuration.
@@ -510,14 +510,14 @@ func (b *Builder) validateConfiguration() error {
 
 // Pipeline wires together the detector and recognizer.
 type Pipeline struct {
-    cfg             Config
-    Detector        *detector.Detector
-    Recognizer      *recognizer.Recognizer
-    Orienter        *orientation.Classifier
-    Rectifier       *rectify.Rectifier
-    // Optional barcode decoder (build-tag dependent)
-    barcodeDecoder  barcodeBackend
-    ResourceManager *ResourceManager
+	cfg        Config
+	Detector   *detector.Detector
+	Recognizer *recognizer.Recognizer
+	Orienter   *orientation.Classifier
+	Rectifier  *rectify.Rectifier
+	// Optional barcode decoder (build-tag dependent)
+	barcodeDecoder  barcodeBackend
+	ResourceManager *ResourceManager
 }
 
 // Build initializes the OCR pipeline components.
@@ -568,10 +568,10 @@ func (b *Builder) initializeCoreComponents() (*Pipeline, error) {
 }
 
 func (b *Builder) setupOptionalComponents(p *Pipeline) {
-    b.setupOrientation(p)
-    b.setupTextLineOrientation(p)
-    b.setupRectification(p)
-    b.setupBarcode(p)
+	b.setupOrientation(p)
+	b.setupTextLineOrientation(p)
+	b.setupRectification(p)
+	b.setupBarcode(p)
 }
 
 func (b *Builder) setupOrientation(p *Pipeline) {

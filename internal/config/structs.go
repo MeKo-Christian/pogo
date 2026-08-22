@@ -165,12 +165,12 @@ type FeatureConfig struct {
 	RectificationModelPath string  `mapstructure:"rectification_model_path" yaml:"rectification_model_path" json:"rectification_model_path"`
 	RectificationThreshold float64 `mapstructure:"rectification_threshold" yaml:"rectification_threshold" json:"rectification_threshold"`
 	RectificationHeight    int     `mapstructure:"rectification_height" yaml:"rectification_height" json:"rectification_height"`
-    RectificationDebugDir  string  `mapstructure:"rectification_debug_dir" yaml:"rectification_debug_dir" json:"rectification_debug_dir"`
+	RectificationDebugDir  string  `mapstructure:"rectification_debug_dir" yaml:"rectification_debug_dir" json:"rectification_debug_dir"`
 
-    // Barcode detection (optional)
-    BarcodeEnabled bool   `mapstructure:"barcode_enabled" yaml:"barcode_enabled" json:"barcode_enabled"`
-    BarcodeTypes   string `mapstructure:"barcode_types" yaml:"barcode_types" json:"barcode_types"`
-    BarcodeMinSize int    `mapstructure:"barcode_min_size" yaml:"barcode_min_size" json:"barcode_min_size"`
+	// Barcode detection (optional)
+	BarcodeEnabled bool   `mapstructure:"barcode_enabled" yaml:"barcode_enabled" json:"barcode_enabled"`
+	BarcodeTypes   string `mapstructure:"barcode_types" yaml:"barcode_types" json:"barcode_types"`
+	BarcodeMinSize int    `mapstructure:"barcode_min_size" yaml:"barcode_min_size" json:"barcode_min_size"`
 }
 
 // GPUConfig contains GPU acceleration settings.

@@ -1,4 +1,5 @@
 # PROFESSIONAL SERVICES INVOICE
+
 ## Software Development - POGO OCR Engine
 
 ---
@@ -13,6 +14,7 @@
 ## EXECUTIVE SUMMARY
 
 **Total Project Scope:**
+
 - **62,759** lines of Go source code
 - **33,778** lines of test code (54% of production code)
 - **5,030** lines of documentation & configuration
@@ -27,9 +29,11 @@
 ## DETAILED WORK BREAKDOWN BY FEATURE
 
 ### 1. FOUNDATION & CORE INFRASTRUCTURE
+
 **Lines of Code:** 3,540 | **Estimated Hours:** 106h | **Value:** €12,720.00
 
 **Components:**
+
 - Project setup, build system configuration (justfile, scripts)
 - ONNX Runtime integration and CGO bindings setup
 - Development environment automation (direnv, environment scripts)
@@ -41,6 +45,7 @@
   - Mathematical helpers and tensor operations
 
 **Complexity Notes:**
+
 - Cross-platform ONNX Runtime setup with proper CGO configuration
 - Comprehensive build automation with multiple target profiles
 - Advanced image processing math (polygon algorithms, geometric transformations)
@@ -48,27 +53,29 @@
 ---
 
 ### 2. TEXT DETECTION ENGINE
+
 **Lines of Code:** 9,422 | **Estimated Hours:** 283h | **Value:** €33,960.00
 
 **Components:**
+
 - **Core Detector** (detector.go, detector_model.go: 445 LOC)
   - ONNX model loading and session management
   - Pre-processing pipeline (normalization, padding, resizing)
   - Batch detection with configurable batch sizes
 
-- **Post-Processing Pipeline** (postprocess*.go: 573 LOC)
+- **Post-Processing Pipeline** (postprocess\*.go: 573 LOC)
   - Binary segmentation mask processing
   - Adaptive thresholding with configurable parameters (377 LOC)
   - Connected components analysis (254 LOC)
   - Contour extraction and polygon approximation (459 LOC)
   - Morphological operations (dilation, erosion, smoothing: 244 LOC)
 
-- **Multi-Scale Detection** (multiscale*.go: 380 LOC)
+- **Multi-Scale Detection** (multiscale\*.go: 380 LOC)
   - Adaptive image pyramid generation
   - Per-scale detection with incremental merging
   - IoU-based cross-scale result fusion
 
-- **NMS & Filtering** (nms*.go: 306 LOC)
+- **NMS & Filtering** (nms\*.go: 306 LOC)
   - Non-Maximum Suppression algorithms
   - Confidence-based filtering
   - Advanced polygon overlap detection
@@ -78,11 +85,13 @@
   - Resource pooling and memory management
 
 **Test Coverage:** 5,247 LOC including property-based tests
+
 - Extensive property-based testing for post-processing
 - Robustness tests for edge cases
 - Integration tests with real models
 
 **Complexity Notes:**
+
 - Sophisticated post-processing pipeline (multiple algorithms)
 - Multi-scale pyramid detection with memory optimization
 - Property-based testing for mathematical correctness
@@ -91,9 +100,11 @@
 ---
 
 ### 3. TEXT RECOGNITION ENGINE
+
 **Lines of Code:** 4,227 | **Estimated Hours:** 127h | **Value:** €15,240.00
 
 **Components:**
+
 - **Core Recognizer** (recognizer.go, inference.go: 1,031 LOC)
   - ONNX model session management
   - CTC (Connectionist Temporal Classification) decoder (376 LOC)
@@ -111,11 +122,13 @@
   - Image augmentation for recognition
 
 **Test Coverage:** 2,092 LOC including CTC property tests
+
 - Mock-based unit testing
 - Property-based tests for CTC decoding
 - Boundary condition tests
 
 **Complexity Notes:**
+
 - CTC decoding algorithm implementation
 - Multi-language text handling
 - Complex preprocessing pipeline
@@ -123,9 +136,11 @@
 ---
 
 ### 4. DOCUMENT ORIENTATION & RECTIFICATION
+
 **Lines of Code:** 4,536 | **Estimated Hours:** 136h | **Value:** €16,320.00
 
 **Components:**
+
 - **Orientation Detection** (orientation/: 2,717 LOC)
   - Document-level orientation classifier (0°/90°/180°/270°)
   - Per-text-line skew correction
@@ -141,11 +156,13 @@
   - Debug visualization pipeline (115 LOC)
 
 **Test Coverage:** 1,599 LOC
+
 - Extensive geometry algorithm tests
 - Homography calculation validation
 - Quality metric verification
 
 **Complexity Notes:**
+
 - Advanced computer vision algorithms (homography, perspective warping)
 - Quality gating to prevent harmful transformations
 - Multi-stage validation pipeline
@@ -153,9 +170,11 @@
 ---
 
 ### 5. PDF PROCESSING SYSTEM
+
 **Lines of Code:** 7,654 | **Estimated Hours:** 230h | **Value:** €27,600.00
 
 **Components:**
+
 - **PDF Engine** (pdf.go, processor.go: 966 LOC)
   - Page image extraction via pdfcpu integration
   - Multi-page processing orchestration
@@ -179,11 +198,13 @@
   - Result aggregation and formatting
 
 **Test Coverage:** 4,842 LOC
+
 - Extensive hybrid processing tests
 - Crypto/security tests
 - Multi-page processing validation
 
 **Complexity Notes:**
+
 - Sophisticated hybrid extraction strategy
 - Quality assessment algorithms
 - Secure document handling
@@ -192,10 +213,12 @@
 ---
 
 ### 6. OCR PIPELINE ORCHESTRATION
+
 **Lines of Code:** 8,234 | **Estimated Hours:** 247h | **Value:** €29,640.00
 
 **Components:**
-- **Core Pipeline** (pipeline.go, process*.go: 1,258 LOC)
+
+- **Core Pipeline** (pipeline.go, process\*.go: 1,258 LOC)
   - Multi-stage OCR workflow orchestration
   - Detection → Orientation → Rectification → Recognition flow
   - Error handling and recovery
@@ -224,12 +247,14 @@
   - Result aggregation and statistics
 
 **Test Coverage:** 4,546 LOC
+
 - Comprehensive integration tests
 - Parallel processing stress tests
 - Progress tracking validation
 - Mock-based unit tests
 
 **Complexity Notes:**
+
 - Complex multi-stage pipeline with conditional execution
 - Advanced parallel processing with resource management
 - Comprehensive error handling and recovery
@@ -238,9 +263,11 @@
 ---
 
 ### 7. BATCH PROCESSING SYSTEM
+
 **Lines of Code:** 2,310 | **Estimated Hours:** 69h | **Value:** €8,280.00
 
 **Components:**
+
 - **File Discovery** (discovery.go: 88 LOC)
   - Recursive directory scanning
   - Pattern-based file filtering
@@ -264,6 +291,7 @@
 **Test Coverage:** 1,796 LOC
 
 **Complexity Notes:**
+
 - Efficient large-scale file processing
 - Resource management for batch operations
 - Comprehensive progress reporting
@@ -271,9 +299,11 @@
 ---
 
 ### 8. HTTP SERVER & API
+
 **Lines of Code:** 4,920 | **Estimated Hours:** 148h | **Value:** €17,760.00
 
 **Components:**
+
 - **Server Core** (handlers.go, types.go: 406 LOC)
   - HTTP server setup and routing
   - Request/response handling
@@ -312,12 +342,14 @@
   - Health endpoints
 
 **Test Coverage:** 2,336 LOC
+
 - Comprehensive API endpoint tests
 - WebSocket integration tests
 - Rate limiting validation
 - Middleware chain testing
 
 **Complexity Notes:**
+
 - Production-grade HTTP server
 - Real-time WebSocket communication
 - Advanced rate limiting algorithms
@@ -326,9 +358,11 @@
 ---
 
 ### 9. GPU ACCELERATION & ONNX INTEGRATION
+
 **Lines of Code:** 2,027 | **Estimated Hours:** 61h | **Value:** €7,320.00
 
 **Components:**
+
 - **ONNX Session Management** (onnx_test.go, test.go: 356 LOC)
   - Session creation and lifecycle
   - Model loading and validation
@@ -354,6 +388,7 @@
 **Test Coverage:** 1,099 LOC including integration tests
 
 **Complexity Notes:**
+
 - Low-level ONNX Runtime C API integration
 - GPU memory management and optimization
 - Cross-platform compatibility (CPU/CUDA)
@@ -361,9 +396,11 @@
 ---
 
 ### 10. BARCODE DETECTION (OPTIONAL)
+
 **Lines of Code:** 337 | **Estimated Hours:** 10h | **Value:** €1,200.00
 
 **Components:**
+
 - **Barcode Interface** (types.go, doc.go: 85 LOC)
   - Pluggable backend architecture
   - Multiple symbology support
@@ -378,6 +415,7 @@
   - Zero-dependency fallback
 
 **Complexity Notes:**
+
 - Clean abstraction for multiple backends
 - Optional build tag configuration
 - PDF coordinate mapping
@@ -385,9 +423,11 @@
 ---
 
 ### 11. CONFIGURATION SYSTEM
+
 **Lines of Code:** 3,515 | **Estimated Hours:** 105h | **Value:** €12,600.00
 
 **Components:**
+
 - **Core Config** (config.go, structs.go: 747 LOC)
   - Hierarchical configuration structure
   - Environment variable parsing
@@ -406,11 +446,13 @@
   - Environment variable overrides
 
 **Test Coverage:** 2,099 LOC
+
 - Extensive configuration tests
 - Path resolution validation
 - Override precedence tests
 
 **Complexity Notes:**
+
 - Complex multi-source configuration system
 - Intelligent path resolution logic
 - Backward compatibility handling
@@ -418,9 +460,11 @@
 ---
 
 ### 12. CLI APPLICATION
+
 **Lines of Code:** 2,750 | **Estimated Hours:** 83h | **Value:** €9,960.00
 
 **Components:**
+
 - **Root Command** (root.go: 185 LOC)
   - Cobra CLI framework setup
   - Global flags and configuration
@@ -458,6 +502,7 @@
 **Test Coverage:** 278 LOC
 
 **Complexity Notes:**
+
 - Comprehensive CLI with multiple sub-commands
 - Rich flag system with validation
 - User-friendly error messages and help
@@ -465,9 +510,11 @@
 ---
 
 ### 13. PERFORMANCE & MEMORY OPTIMIZATION
+
 **Lines of Code:** 2,148 | **Estimated Hours:** 64h | **Value:** €7,680.00
 
 **Components:**
+
 - **Memory Pool** (mempool/float32pool.go: 130 LOC)
   - Object pooling for float32 slices
   - Automatic GC pressure reduction
@@ -487,6 +534,7 @@
 **Test Coverage:** 1,333 LOC
 
 **Complexity Notes:**
+
 - Advanced memory pooling strategies
 - Comprehensive benchmarking suite
 - Performance optimization and profiling
@@ -494,9 +542,11 @@
 ---
 
 ### 14. COMPREHENSIVE TEST INFRASTRUCTURE
+
 **Lines of Code:** 5,990 | **Estimated Hours:** 180h | **Value:** €21,600.00
 
 **Components:**
+
 - **Test Utilities** (testutil/: 769 LOC)
   - Image fixture generation
   - Mock data creation
@@ -516,6 +566,7 @@
 **Additional Test Coverage:** 27,788 LOC of unit tests distributed across packages
 
 **Complexity Notes:**
+
 - BDD-style integration testing framework
 - Comprehensive test coverage (54% test-to-production ratio)
 - Property-based testing for critical algorithms
@@ -524,9 +575,11 @@
 ---
 
 ### 15. DOCUMENTATION & DEVELOPER EXPERIENCE
+
 **Lines of Code:** 5,030 | **Estimated Hours:** 151h | **Value:** €18,120.00
 
 **Components:**
+
 - **README.md** (513 LOC)
   - Comprehensive user guide
   - API documentation
@@ -558,6 +611,7 @@
   - Production deployment guide
 
 **Complexity Notes:**
+
 - Production-grade documentation
 - Complete API specification (OpenAPI 3.0)
 - Comprehensive build and deployment automation
@@ -567,14 +621,14 @@
 
 ## COST ANALYSIS BY WORK CATEGORY
 
-| Category | Hours | Rate | Subtotal |
-|----------|-------|------|----------|
-| **Architecture & Design** | 120h | €120 | €14,400.00 |
-| **Core Development** | 1,248h | €120 | €149,760.00 |
-| **Testing & QA** | 250h | €120 | €30,000.00 |
-| **Documentation** | 150h | €120 | €18,000.00 |
-| **DevOps & Tooling** | 100h | €120 | €12,000.00 |
-| **Total** | **1,868h** | | **€224,160.00** |
+| Category                  | Hours      | Rate | Subtotal        |
+| ------------------------- | ---------- | ---- | --------------- |
+| **Architecture & Design** | 120h       | €120 | €14,400.00      |
+| **Core Development**      | 1,248h     | €120 | €149,760.00     |
+| **Testing & QA**          | 250h       | €120 | €30,000.00      |
+| **Documentation**         | 150h       | €120 | €18,000.00      |
+| **DevOps & Tooling**      | 100h       | €120 | €12,000.00      |
+| **Total**                 | **1,868h** |      | **€224,160.00** |
 
 ---
 
@@ -613,30 +667,35 @@
 ## DELIVERABLES
 
 ✅ **Production-Ready OCR Engine**
+
 - Full text detection and recognition pipeline
 - PDF processing with hybrid text extraction
 - Document orientation and rectification
 - Multi-scale detection for improved accuracy
 
 ✅ **Comprehensive APIs**
+
 - REST API with OpenAPI specification
 - WebSocket support for real-time progress
 - CLI with 7 main commands and 50+ flags
 - Docker deployment configuration
 
 ✅ **Enterprise Features**
+
 - GPU acceleration support
 - Batch processing with parallel execution
 - Rate limiting and security middleware
 - Comprehensive monitoring and metrics
 
 ✅ **Developer Experience**
+
 - 33,778 lines of test code
 - Property-based testing for critical algorithms
 - Complete documentation and examples
 - Automated build and deployment system
 
 ✅ **Quality Assurance**
+
 - 216 Go packages with full test coverage
 - Integration test suite with BDD scenarios
 - Continuous linting with 85+ rules
@@ -649,6 +708,7 @@
 **Senior Go/ML Engineer Rate: €120/hour**
 
 **Market Comparison (Germany, 2025):**
+
 - Junior Go Developer: €60-80/hour
 - Mid-level Go Developer: €80-100/hour
 - Senior Go Developer: €100-130/hour
@@ -656,6 +716,7 @@
 - ML/CV Principal Engineer: €150-200/hour
 
 **Specialized Skills Applied:**
+
 - Go expert-level programming
 - Computer vision algorithms
 - Machine learning model integration
@@ -670,11 +731,13 @@
 **Total Project Value:** €224,160.00 EUR
 
 **Suggested Payment Schedule:**
+
 - Phase 1 (Core Engine): €75,000.00
 - Phase 2 (Advanced Features): €75,000.00
 - Phase 3 (Production Polish): €74,160.00
 
 **Or:**
+
 - One-time licensing fee for commercial use
 - Ongoing maintenance retainer: €3,000-5,000/month
 - Feature development: Hourly basis at €120/hour
@@ -686,6 +749,7 @@
 **Rebuild Cost:** €224,160.00 + 6-9 months timeline
 
 **Value Delivered:**
+
 - Battle-tested OCR engine (62k LOC production code)
 - Enterprise-grade PDF processing
 - GPU-accelerated inference
@@ -725,4 +789,4 @@
 
 ---
 
-*This invoice represents a professional assessment of development effort for a production-grade OCR system. All estimates are based on industry-standard metrics and German market rates for senior technical specialists.*
+_This invoice represents a professional assessment of development effort for a production-grade OCR system. All estimates are based on industry-standard metrics and German market rates for senior technical specialists._

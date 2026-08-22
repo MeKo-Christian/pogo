@@ -149,41 +149,41 @@ func (s *Server) parsePdfRequest(
 
 // parseRequestConfig extracts and validates request configuration from form values.
 func (s *Server) parseRequestConfig(r *http.Request) (*RequestConfig, error) {
-    reqConfig := &RequestConfig{
-        Language: r.FormValue("language"),
-        DictPath: r.FormValue("dict"),
-        DetModel: r.FormValue("det-model"),
-        RecModel: r.FormValue("rec-model"),
+	reqConfig := &RequestConfig{
+		Language: r.FormValue("language"),
+		DictPath: r.FormValue("dict"),
+		DetModel: r.FormValue("det-model"),
+		RecModel: r.FormValue("rec-model"),
 
 		// PDF enhancement options
 		UserPassword:     r.FormValue("user-password"),
 		OwnerPassword:    r.FormValue("owner-password"),
 		EnableVectorText: r.FormValue("enable-vector-text") != "false", // Default to true
-        EnableHybrid:     r.FormValue("enable-hybrid") == "true",
-    }
+		EnableHybrid:     r.FormValue("enable-hybrid") == "true",
+	}
 
-    // Barcode (per-request overrides)
-    if v := r.FormValue("barcodes"); v != "" {
-        reqConfig.EnableBarcodes = v == "1" || strings.ToLower(v) == "true"
-    }
-    if v := r.FormValue("barcode-types"); v != "" {
-        reqConfig.BarcodeTypes = v
-    }
-    if v := r.FormValue("barcode-min-size"); v != "" {
-        if n, err := strconv.Atoi(v); err == nil {
-            reqConfig.BarcodeMinSize = n
-        }
-    }
-    if v := r.FormValue("barcode-dpi"); v != "" {
-        if n, err := strconv.Atoi(v); err == nil {
-            reqConfig.BarcodeDPI = n
-        }
-    }
-    if v := r.FormValue("pdf-workers"); v != "" {
-        if n, err := strconv.Atoi(v); err == nil {
-            reqConfig.PDFWorkers = n
-        }
-    }
+	// Barcode (per-request overrides)
+	if v := r.FormValue("barcodes"); v != "" {
+		reqConfig.EnableBarcodes = v == "1" || strings.ToLower(v) == "true"
+	}
+	if v := r.FormValue("barcode-types"); v != "" {
+		reqConfig.BarcodeTypes = v
+	}
+	if v := r.FormValue("barcode-min-size"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			reqConfig.BarcodeMinSize = n
+		}
+	}
+	if v := r.FormValue("barcode-dpi"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			reqConfig.BarcodeDPI = n
+		}
+	}
+	if v := r.FormValue("pdf-workers"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			reqConfig.PDFWorkers = n
+		}
+	}
 
 	// Parse quality threshold
 	if qthreshStr := r.FormValue("quality-threshold"); qthreshStr != "" {
@@ -301,7 +301,7 @@ func (s *Server) saveUploadedFile(file multipart.File, header *multipart.FileHea
 
 // processEnhancedPDF processes a PDF using the enhanced processor with password and vector text support.
 func (s *Server) processEnhancedPDF(filename, pageRange string,
-    reqConfig *RequestConfig,
+	reqConfig *RequestConfig,
 ) (*pipeline.OCRPDFResult, error) {
 	// Create detector for enhanced PDF processor
 	detectorConfig := detector.Config{
@@ -323,19 +323,35 @@ func (s *Server) processEnhancedPDF(filename, pageRange string,
 	defer func() { _ = det.Close() }()
 
 	// Create enhanced PDF processor configuration
-    processorConfig := &pdf.ProcessorConfig{
-        EnableVectorText:    reqConfig.EnableVectorText,
-        EnableHybrid:        reqConfig.EnableHybrid,
-        VectorTextQuality:   reqConfig.QualityThreshold,
-        VectorTextCoverage:  0.8, // Default coverage threshold
-        AllowPasswords:      true,
-        AllowPasswordPrompt: false, // Don't allow prompts in server mode
-        EnableBarcodes:      reqConfig.EnableBarcodes,
-        BarcodeTypes:        reqConfig.BarcodeTypes,
-        BarcodeMinSize:      reqConfig.BarcodeMinSize,
-        BarcodeTargetDPI:    func() int { if reqConfig.BarcodeDPI > 0 { return reqConfig.BarcodeDPI }; if s.barcodeDPI > 0 { return s.barcodeDPI }; return 150 }(),
-        MaxWorkers:          func() int { if reqConfig.PDFWorkers > 0 { return reqConfig.PDFWorkers }; if s.pdfWorkers > 0 { return s.pdfWorkers }; return 0 }(),
-    }
+	processorConfig := &pdf.ProcessorConfig{
+		EnableVectorText:    reqConfig.EnableVectorText,
+		EnableHybrid:        reqConfig.EnableHybrid,
+		VectorTextQuality:   reqConfig.QualityThreshold,
+		VectorTextCoverage:  0.8, // Default coverage threshold
+		AllowPasswords:      true,
+		AllowPasswordPrompt: false, // Don't allow prompts in server mode
+		EnableBarcodes:      reqConfig.EnableBarcodes,
+		BarcodeTypes:        reqConfig.BarcodeTypes,
+		BarcodeMinSize:      reqConfig.BarcodeMinSize,
+		BarcodeTargetDPI: func() int {
+			if reqConfig.BarcodeDPI > 0 {
+				return reqConfig.BarcodeDPI
+			}
+			if s.barcodeDPI > 0 {
+				return s.barcodeDPI
+			}
+			return 150
+		}(),
+		MaxWorkers: func() int {
+			if reqConfig.PDFWorkers > 0 {
+				return reqConfig.PDFWorkers
+			}
+			if s.pdfWorkers > 0 {
+				return s.pdfWorkers
+			}
+			return 0
+		}(),
+	}
 
 	// Create enhanced PDF processor
 	processor := pdf.NewProcessorWithConfig(det, processorConfig)

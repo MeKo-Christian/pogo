@@ -68,7 +68,8 @@ func testModelPathSetter(t *testing.T, setter func(*Builder, string) *Builder, g
 }
 
 func TestBuilder_WithDetectorModelPath(t *testing.T) {
-	testModelPathSetter(t,
+	testModelPathSetter(
+		t,
 		func(b *Builder, path string) *Builder { return b.WithDetectorModelPath(path) },
 		func(cfg Config) string { return cfg.Detector.ModelPath },
 		"detector",
@@ -76,7 +77,8 @@ func TestBuilder_WithDetectorModelPath(t *testing.T) {
 }
 
 func TestBuilder_WithRecognizerModelPath(t *testing.T) {
-	testModelPathSetter(t,
+	testModelPathSetter(
+		t,
 		func(b *Builder, path string) *Builder { return b.WithRecognizerModelPath(path) },
 		func(cfg Config) string { return cfg.Recognizer.ModelPath },
 		"recognizer",
@@ -97,7 +99,7 @@ func TestBuilder_Validate_WithTempModels(t *testing.T) {
 	// Create organized structure with dummy files
 	detPath := models.ResolveModelPath(dir, models.TypeDetection, models.VariantMobile, models.DetectionMobile)
 	recPath := models.ResolveModelPath(dir, models.TypeRecognition, models.VariantMobile, models.RecognitionMobile)
-    dictPath := models.ResolveModelPath(dir, models.TypeDictionaries, "", models.DictionaryPPOCRv5)
+	dictPath := models.ResolveModelPath(dir, models.TypeDictionaries, "", models.DictionaryPPOCRv5)
 
 	for _, p := range []string{detPath, recPath, dictPath} {
 		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
@@ -118,7 +120,7 @@ func TestBuilder_Build_SkipIfNoONNXOrNoRealModels(t *testing.T) {
 	// Attempt to build only if real default models are present
 	det := models.GetDetectionModelPath("", false)
 	rec := models.GetRecognitionModelPath("", false)
-    dict := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
+	dict := models.GetDictionaryPath("", models.DictionaryPPOCRv5)
 	if _, err := os.Stat(det); err != nil {
 		t.Skip("detection model not available; skipping Build test")
 	}

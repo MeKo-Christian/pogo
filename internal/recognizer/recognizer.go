@@ -18,14 +18,14 @@ import (
 
 // Config holds configuration for the text recognizer.
 type Config struct {
-	ModelPath      string   // Path to ONNX recognition model
-	DictPath       string   // Path to character dictionary (single) - must match model output classes
-	DictPaths      []string // Optional multiple dictionary paths to merge - must match model output classes
-	FilterDictPath string   // Optional path to filter dictionary (restricts output to subset of characters)
+	ModelPath       string   // Path to ONNX recognition model
+	DictPath        string   // Path to character dictionary (single) - must match model output classes
+	DictPaths       []string // Optional multiple dictionary paths to merge - must match model output classes
+	FilterDictPath  string   // Optional path to filter dictionary (restricts output to subset of characters)
 	FilterDictPaths []string // Optional multiple filter dictionary paths to merge
-	ImageHeight    int      // Expected input height (e.g., 32 or 48)
-	UseServerModel bool     // Use server model instead of mobile
-	NumThreads     int      // Number of CPU threads (0 for default)
+	ImageHeight     int      // Expected input height (e.g., 32 or 48)
+	UseServerModel  bool     // Use server model instead of mobile
+	NumThreads      int      // Number of CPU threads (0 for default)
 	// Preprocessing parameters
 	MaxWidth         int            // Optional max width clamp (0 = no clamp)
 	PadWidthMultiple int            // If >0, right-pad width to this multiple
@@ -55,23 +55,23 @@ func DefaultConfig() Config {
 
 // UpdateModelPath updates the ModelPath and DictPath based on modelsDir and UseServerModel flag.
 func (c *Config) UpdateModelPath(modelsDir string) {
-    c.ModelPath = models.GetRecognitionModelPath(modelsDir, c.UseServerModel)
-    // Update DictPath if using single dictionary (not multiple)
-    if len(c.DictPaths) == 0 {
-        // Default to PP-OCRv5 dictionary which matches PP-OCRv5 models
-        c.DictPath = models.GetDictionaryPath(modelsDir, models.DictionaryPPOCRv5)
-    }
+	c.ModelPath = models.GetRecognitionModelPath(modelsDir, c.UseServerModel)
+	// Update DictPath if using single dictionary (not multiple)
+	if len(c.DictPaths) == 0 {
+		// Default to PP-OCRv5 dictionary which matches PP-OCRv5 models
+		c.DictPath = models.GetDictionaryPath(modelsDir, models.DictionaryPPOCRv5)
+	}
 }
 
 // Recognizer performs text recognition using ONNX Runtime.
 type Recognizer struct {
-	config     Config
-	session    *onnxrt.DynamicAdvancedSession
-	inputInfo  onnxrt.InputOutputInfo
-	outputInfo onnxrt.InputOutputInfo
-	charset    *Charset        // Model dictionary - must match ONNX model output classes
-	filterCharset *Charset     // Optional filter dictionary - restricts output characters
-	mu         sync.RWMutex
+	config        Config
+	session       *onnxrt.DynamicAdvancedSession
+	inputInfo     onnxrt.InputOutputInfo
+	outputInfo    onnxrt.InputOutputInfo
+	charset       *Charset // Model dictionary - must match ONNX model output classes
+	filterCharset *Charset // Optional filter dictionary - restricts output characters
+	mu            sync.RWMutex
 	// Optional per-text-line orientation classifier (0/90/180/270)
 	textLineOrienter *orientation.Classifier
 }

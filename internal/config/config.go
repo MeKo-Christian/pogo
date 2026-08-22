@@ -305,41 +305,41 @@ func (c *Config) Validate() error {
 
 // ToPipelineConfig converts the config to the internal pipeline configuration format.
 func (c *Config) ToPipelineConfig() pipeline.Config {
-    return pipeline.Config{
-        ModelsDir:           c.ModelsDir,
-        EnableOrientation:   c.Features.OrientationEnabled,
-        Orientation:         c.toOrientationConfig(),
-        TextLineOrientation: c.toTextLineOrientationConfig(),
-        Rectification:       c.toRectificationConfig(),
-        Detector:            c.toDetectorConfig(),
-        Recognizer:          c.toRecognizerConfig(),
-        WarmupIterations:    c.Pipeline.WarmupIterations,
-        Parallel:            c.toParallelConfig(),
-        Resource:            c.toResourceConfig(),
-        Barcode:             c.toBarcodeConfig(),
-    }
+	return pipeline.Config{
+		ModelsDir:           c.ModelsDir,
+		EnableOrientation:   c.Features.OrientationEnabled,
+		Orientation:         c.toOrientationConfig(),
+		TextLineOrientation: c.toTextLineOrientationConfig(),
+		Rectification:       c.toRectificationConfig(),
+		Detector:            c.toDetectorConfig(),
+		Recognizer:          c.toRecognizerConfig(),
+		WarmupIterations:    c.Pipeline.WarmupIterations,
+		Parallel:            c.toParallelConfig(),
+		Resource:            c.toResourceConfig(),
+		Barcode:             c.toBarcodeConfig(),
+	}
 }
 
 // toBarcodeConfig converts feature flags to pipeline.BarcodeConfig.
 func (c *Config) toBarcodeConfig() pipeline.BarcodeConfig {
-    bc := pipeline.DefaultBarcodeConfig()
-    bc.Enabled = c.Features.BarcodeEnabled
-    // Parse types as comma-separated
-    if strings.TrimSpace(c.Features.BarcodeTypes) != "" {
-        parts := strings.Split(c.Features.BarcodeTypes, ",")
-        cleaned := make([]string, 0, len(parts))
-        for _, p := range parts {
-            p = strings.TrimSpace(p)
-            if p != "" {
-                cleaned = append(cleaned, p)
-            }
-        }
-        bc.Types = cleaned
-    }
-    if c.Features.BarcodeMinSize > 0 {
-        bc.MinSize = c.Features.BarcodeMinSize
-    }
-    return bc
+	bc := pipeline.DefaultBarcodeConfig()
+	bc.Enabled = c.Features.BarcodeEnabled
+	// Parse types as comma-separated
+	if strings.TrimSpace(c.Features.BarcodeTypes) != "" {
+		parts := strings.Split(c.Features.BarcodeTypes, ",")
+		cleaned := make([]string, 0, len(parts))
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				cleaned = append(cleaned, p)
+			}
+		}
+		bc.Types = cleaned
+	}
+	if c.Features.BarcodeMinSize > 0 {
+		bc.MinSize = c.Features.BarcodeMinSize
+	}
+	return bc
 }
 
 // toOrientationConfig converts to orientation.Config.
