@@ -1,13 +1,10 @@
 name: Release
-
 on:
   push:
     tags:
       - "v*"
-
 permissions:
   contents: write
-
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -16,27 +13,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-
       - name: Install Just
         uses: extractions/setup-just@v2
         with:
           just-version: 1.14.0
-
       - name: Download dependencies
         run: just deps
-
       - name: Run tests
         run: just test
-
       - name: Build
         run: just build
-
       - name: Create Release
         uses: goreleaser/goreleaser-action@v6
         if: startsWith(github.ref, 'refs/tags/')
