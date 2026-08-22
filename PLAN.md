@@ -1,1104 +1,531 @@
-# Go OCR Implementation Plan
+# pogo — Plan
 
-## Project Overview
+## What pogo is
 
-Porting OAR-OCR from Rust to Go for inference-only OCR pipeline with text detection, recognition, and optional orientation correction. Supporting both CLI tool and server service deployment with PDF processing capabilities.
+pogo is a Go library and CLI that runs ONNX text-detection and text-recognition
+models over images and returns boxes with text and per-line confidence.
 
-**Current Status**: Core pipeline functionality is complete. This plan focuses on remaining tasks to achieve feature parity with OAR-OCR and production readiness.
+**Models are described by a spec file, not by Go code.** Swapping the recognizer
+for a different one is a YAML edit, not a patch.
+
+## What pogo is not
+
+Each names the package deleted for it, so the boundary is traceable.
+
+| Non-goal                                        | Package removed                                          |
+| ----------------------------------------------- | -------------------------------------------------------- |
+| An HTTP server                                  | `internal/server`                                        |
+| Barcode decoding                                | `internal/barcode`, `pipeline/barcodes*.go`              |
+| PDF input and output                            | `internal/pdf` (returns later, with a fixture)           |
+| Kubernetes, cloud-native anything               | `deployment/`, `.goreleaser.yaml`                        |
+| Handwriting; layout, tables, formulas; training | — never implemented, and PP-OCR is a printed-text engine |
+
+If one of these comes back, it comes back with a test that proves it works.
+
+## Why this plan replaces the old one
+
+The previous PLAN.md was 1,104 lines and 20 phases, running from "Phase 0:
+Critical Bug Fixes" through Kubernetes, "Enterprise Features" and "Innovation
+Metrics", closing on _247 remaining tasks_. None of Phase 0 was done. The
+recognizer still cannot read the word "Hello" — it returns `Hellg`.
+
+Current state, measured:
+
+- **24,329 lines** of source across 18 `internal/` packages, plus **33,873** of
+  Go tests and **5,241** of godog tests — a 1.6:1 ratio that never caught a
+  wrong normalization constant.
+- **`pkg/ocr/` is an empty directory.** pogo cannot be imported as a Go library
+  at all, which is the one thing it exists to be.
+- **No `Detector` or `Recognizer` interface exists.** `pipeline.Pipeline` holds
+  concrete structs (`internal/pipeline/pipeline.go:512-521`). The only such
+  interfaces in the tree are dead test scaffolding
+  (`internal/pipeline/parallel_test.go:322,330`), declared and never used.
+- **~4,000–5,000 lines are dead** or unreachable from the CLI.
+- **99 config fields, ~272 CLI flag declarations.** One knob touches 3–5 files.
+- **229 MB of ONNX weights committed to git**, no LFS — `.git` is 274 MB. The
+  ignore rule `/models/*.onnx` never matched `models/detection/…`, which is
+  exactly how they got in.
+- **`just check` fails on all four of its steps**: 44 files not treefmt-clean
+  (fixed in Phase 0), 131 lint findings, 3 failing test packages, and
+  `go mod tidy -diff` failing because of an unbuildable barcode backend.
+
+## The defects that define credibility
+
+Two bugs, and the reason neither was ever caught. This is all of Phase 1.
+
+### a. The charset is one token short
+
+`models/dictionaries/ppocrv5_dict.txt` has 18,383 lines.
+`internal/recognizer/inference.go:188` computes `classes = charset.Size() + 1`
+= 18,384. Both bundled recognizer graphs were loaded and inspected directly:
+their output `fetch_name_0` has shape `[dyn, dyn, 18385]`. PaddleOCR appends the
+space token itself under `use_space_char=True`; pogo never does, so every space
+is silently dropped — `Rotatedlext`.
+
+The mechanism is exact. `inference.go:229` decodes with
+`charset.LookupToken(idx - 1)`; index 18384 — PaddleOCR's space — resolves to
+`LookupToken(18383)`, which is out of range, and `dictionary.go:150-158` returns
+`""` for that. No error, no warning. `dictionary.go:75` also skips empty lines,
+so the fix cannot be a text-file edit: it has to be code.
+
+The important part is not the missing line. It is that **nothing checks.**
+Nowhere is `charset.Size()+1` validated against the model's real class count —
+a grep for any class-count validation across `internal/**/*.go` returns nothing.
+The mismatch instead flows into `determineClassesFirst` (`inference.go:527-548`),
+which infers the tensor layout by matching a dimension against the expected
+class count. Today, with 18,384 against `[N, T, 18385]`, **neither arm matches**
+and it falls through to its `return false` default — which happens to be the
+correct NTC answer. The layout is right by luck, not by verification. That is worse
+than being wrong, because it will hold until the day a model makes it not hold.
+
+So the fix is an assertion at model load, not an edit to a text file:
+**a dictionary that does not match the model must be a startup error, not
+garbage output.** And the layout must be declared, not inferred.
+
+### b. Recognition input is normalized to the wrong range
+
+PaddleOCR feeds the recognizer `(x/255 - 0.5) / 0.5`, i.e. `[-1, 1]`.
+`NormalizeImage` (`internal/utils/image_processing.go:154`) produces `[0, 1]`
+and stops — wrong mean, half the dynamic range. That is the signature of the
+residual character errors.
+
+The same arithmetic is shared by the detector, which needs ImageNet mean/std
+instead, so detection is mis-normalized too. There are three copies (`:154`,
+`:197`, `:233`) whose bodies are byte-for-byte identical, differing only in how
+they allocate. A grep for `0.485|0.456|0.406|imagenet` across the entire tree
+returns **zero hits**, and `internal/config` has **no normalization field at
+all** (`structs.go` carries 99 `json:` tags; none of them is a mean or a std).
+
+The old plan investigated exactly this, tested the ImageNet hypothesis against
+the _recognizer_, got 0% confidence, and concluded "recognition models use
+simple `/255` scaling" — the right experiment, the wrong control, filed as
+"✅ INVESTIGATION COMPLETED — expected behavior documented".
+
+> An investigation that ends in a rationalization is worse than no investigation.
+
+### c. And the test suite was built so it could be tuned
+
+`internal/pipeline/accuracy_test.go` is a real CER/WER harness — Levenshtein
+similarity, character accuracy, word accuracy. But it reads its **pass
+thresholds from the same JSON file as its ground truth**
+(`testdata/fixtures/ocr_accuracy.json`), so any failing case is fixed by editing
+its own row. All 14 cases are synthetic renders, and the bars were walked down
+case by case: 0.8, 0.7, 0.65, 0.55, 0.5. Every `min_avg_conf` is `0.0`, so that
+assertion has never once executed.
+
+`Hello` is gated at `min_similarity: 0.8`. `Hellg` against `Hello` scores
+exactly 0.8, and the assertion is `GreaterOrEqual`. It passes by construction.
+
+> A threshold that lives next to the data it judges is not a threshold.
+
+Two things this document previously got wrong, and they matter:
+
+- The suite is **not currently green**. A full run fails 11 of 14 cases,
+  producing `Hellg`, `Hor1c`, `""`, `Samele`, `Rotatedlext`, `Rot.at.ectext.`,
+  `scannecoccument.`, `Haoetr`. The fixture PNGs were regenerated at some point
+  and the walked-down bars no longer cover the damage. The design is what is
+  broken; the current status is merely failing.
+- `german_text.png` is **not** an untestable case. Its similarity/CAR/WAR bars
+  are all `0.0` and vacuous, but it also carries `contains_any` with
+  `min_contains: 1`, asserted at `accuracy_test.go:163` — and that assertion
+  fails today. It needs a hand-keyed `expected` string, not deletion.
+
+Also measured, and unrelated to accuracy: **`pogo pdf` does not run at all.**
+`cmd/ocr/cmd/pdf.go:687-689` assigns the models _directory_ to
+`detectorConfig.ModelPath`, which reaches ONNX as a model file and fails with
+`Protobuf parsing failed`. Every PDF scenario in the godog suite fails for that
+one line. It will not be fixed; `internal/pdf` is scheduled for deletion, and
+PDF returns later on top of the library API with a fixture that proves it works.
+
+## Architecture: the model is a spec file
+
+### Public API — `pkg/pogo`
+
+Small enough to read in one screen.
+
+```go
+type Engine struct{ ... }
+
+func Open(set ModelSet, opts ...Option) (*Engine, error)
+func (e *Engine) Read(img image.Image) (Result, error)
+func (e *Engine) Close() error
+
+type Result struct{ Lines []Line }
+
+type Line struct {
+    Box        Quad
+    Text       string
+    Confidence float32
+}
+
+// The seams that make models swappable.
+type Detector interface {
+    Detect(image.Image) ([]Quad, error)
+    Close() error
+}
+
+type Recognizer interface {
+    Recognize([]image.Image) ([]Line, error)
+    Close() error
+}
+```
+
+### ModelSpec — a YAML sidecar next to each `.onnx`
+
+Everything currently hardcoded moves here.
+
+```yaml
+kind: recognizer # detector | recognizer
+decode: ctc # ctc | db
+input:
+  layout: NCHW
+  channels: 3
+  resize: { height: 48, max_width: 320, pad_multiple: 8 }
+  color: RGB
+  scale: 0.00392156862 # 1/255
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5] # -> [-1,1]; the detector spec carries ImageNet values
+ctc:
+  blank_index: 0
+  layout: NTC # NTC | NCT — declared, not inferred
+charset:
+  file: ppocrv5_dict.txt
+  append_space: true # the dropped-space bug, expressed as data
+  assert_classes: 18385 # verified against the model at load; mismatch = error
+```
+
+Adding PP-OCRv6, a docTR CRNN, or a digits-only fine-tune becomes: drop in the
+`.onnx`, write ~15 lines of YAML. No Go changes, no recompile.
+
+What this deletes:
+
+- The three `NormalizeImage*` copies collapse into one preprocessor driven by
+  `input:`.
+- `determineClassesFirst`'s layout inference goes, replaced by the declared
+  `ctc.layout`.
+- `blankIndex := 0` (`inference.go:190`, `:501`) and the literal `3` channel
+  count (`preprocess.go:188`, `:203`, `detector.go:143`) become spec fields.
+- `internal/models/paths.go` — hardcoded model filenames (`:13-29`), the
+  walk-up-for-`go.mod` directory heuristic (`:53-75`, which breaks for installed
+  binaries), and `ResolveModelPath`'s silent fallback to a flat path it never
+  stats (`:108-128`), which is what turns a missing model into a protobuf error.
+
+### Model store
+
+A manifest maps model name to URL + sha256. `pogo models pull` fetches into
+`~/.cache/pogo/models`. Weights leave the working tree; git history keeps them —
+**no history rewrite**, by decision, so no one's clone breaks.
+
+This is also what makes third-party models first-class instead of second-class:
+a model you did not commit is loaded the same way as one you did.
+
+## What is worth keeping
+
+Roughly 2,500 lines carry forward.
+
+- **DB post-processing and polygon geometry** (`internal/detector`) — contour
+  tracing, connected components, polygon expansion, quad fitting. Real
+  algorithmic work and the hardest part to rewrite. This includes
+  `multiscale.go` and `adaptive_threshold.go`, both live.
+- **The CTC decoder** (`internal/recognizer/ctc.go`), including beam search.
+  Correct; it was fed bad tensors.
+- **Homography and warping** from `internal/rectify`, salvaged into
+  `internal/detect` for crop rectification.
+- **The accuracy harness** in `accuracy_test.go`. The measurement is right; it
+  needs its thresholds taken away from it, not a rewrite.
+- **`internal/onnx`** — session and tensor handling; thin, and required for any
+  model to run at all.
+- **Build tooling** — `justfile`, `.golangci.toml`, the three GitHub workflows.
+
+## What gets deleted
+
+About 15,000 lines of source.
+
+| Package                                                   |   Src | Reason                                                                                                                                                                                                                                                                 |
+| --------------------------------------------------------- | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/server`                                         | 2,699 | Out of scope. Drags in gorilla/websocket and Prometheus; its `PipelineCache` is an unbounded map of live ONNX sessions                                                                                                                                                 |
+| `internal/pdf`                                            | 2,834 | Two divergent implementations (`pipeline.ProcessPDF` vs `pdf.Processor`) with ~1,400 lines of overlap, no fixture proving either works, and a one-line bug that makes the command fail on every input                                                                  |
+| `internal/rectify`                                        |   978 | UVDoc off by default; the DocTR path is dead — its model file does not exist and its own comment admits "the exact format may vary"                                                                                                                                    |
+| `internal/orientation`                                    |   902 | Off by default, four overlapping escape hatches                                                                                                                                                                                                                        |
+| `internal/batch`                                          |   646 | A `for` loop over `Read()` belongs in `cmd/`                                                                                                                                                                                                                           |
+| `internal/benchmark` + `cmd/benchmark`                    |   657 | Replaced by `pogo eval`, which measures accuracy rather than speed. Duplicates `detector/benchmark.go`                                                                                                                                                                 |
+| `internal/barcode` + `pipeline/barcodes*.go`              |   574 | Cannot compile — the backend is behind `-tags=barcode_gozxing`, `gozxing` is not in `go.mod`, and the package it imports (`gozxing/pdf417`) does not exist in any published version. This is why `go mod tidy` fails                                                   |
+| `internal/mempool`                                        |   130 | 130 lines of source, 1,007 lines of tests, pooling buffers on a path that produces wrong answers                                                                                                                                                                       |
+| Dead code in `pipeline/`                                  |  ~900 | `parallel.go`, `profile.go`, `monitor.go`, `ProcessImages`, `AdaptiveWorkerPool` — zero non-test callers. `ResourceManager` and `MemoryMonitor` in the same file stay: they are wired in `pipeline.go`                                                                 |
+| Dead code in `detector/`                                  |  ~350 | `batch.go`'s `RunBatchInference`, `benchmark.go`, `DefaultAdaptiveNMSThresholds`. The adaptive and size-aware NMS paths themselves stay — they are reachable via YAML config (`config/loader.go:271-272`, `detector/postprocess_onnx.go:66-96`), just never via a flag |
+| `deployment/`, `.goreleaser.yaml`                         |     — | Premature; `--version` prints a hardcoded string regardless                                                                                                                                                                                                            |
+| `pkg/ocr/`, `internal/version/`, `cmd/simple-model-test/` |     0 | Empty directories                                                                                                                                                                                                                                                      |
+
+**Deletion is not loss.** Everything stays on `main` and stays recoverable.
 
 ---
 
-## 🔥 INVESTIGATION COMPLETE - OCR Recognition Quality Analysis 🔥
-
-### OCR Recognition Quality Issue with "Hello World"
-
-**Status**: ✅ INVESTIGATION COMPLETED - Root cause identified, expected behavior documented
-
-**Problem**:
-- Input: "Hello world" (expected output)
-- Actual: "Hellouorldl" (recognized by PP-OCRv5 models)
-- Specifically: 1 region detected (not 2 words), 'w' missing from 'world', extra 'l' at end
-- Confidence: 65% (relatively low)
-- Consistent across mobile (16MB) and server (81MB) models
-
-**Investigation Results** (Systematic Debugging Applied):
-
-### Phase 1: Root Cause Investigation ✅
-- **Reproduced consistently**: "Hello world" → "Hellouorldl" with 65% confidence
-- **Key finding**: Only 1 region detected (not 2 separate words)
-- **Model size irrelevant**: Mobile and server models produce identical output → NOT a model capacity issue
-
-### Phase 2: Pattern Analysis - Preprocessing Validation ✅
-Compared our implementation with PaddleOCR reference:
-
-**Hypothesis 1: Missing ImageNet Mean/Std Normalization**
-- Tested: Applied mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225]
-- Result: ❌ **FAILED** - 0% confidence, no text recognized
-- Conclusion: Recognition models use simple `/255` scaling, not ImageNet normalization
-- Detection models use ImageNet normalization, but recognition models do not
-
-**Hypothesis 2: RGB vs BGR Channel Order Mismatch**
-- PaddleOCR uses BGR (OpenCV convention)
-- Tested: Swapped R and B channels in normalization
-- Result: ❌ **NO CHANGE** - Still "Hellouorldl" with 65% confidence
-- Conclusion: Channel order is not the issue for current models
-
-**Preprocessing Validation**: ✅ **CORRECT**
-- Our normalization: `pixel / 255` → [0, 1] range
-- Matches PaddleOCR ONNX inference examples
-- Tensor layout: NCHW (correct)
-- Data type: float32 (correct)
-
-### Phase 3: Dictionary and CTC Decoding ✅
-- Dictionary contains all English letters (positions 16179-16230)
-- 'H' at position 16186, 'h' at position 16216
-- Character confidences show detection working: [0.99, 0.94, 0.99, 0.99, 0.59, 0.99, 0.58, 0.34, 0.99, 0.99, 0.99]
-- CTC decoding produces text, but with errors
-
-### Root Cause: Expected Model Behavior
-
-**The preprocessing is correct!** The 65% accuracy issue is **expected behavior** for:
-
-1. **Synthetic test images**: Generated images don't match real-world photo characteristics
-2. **English text with Chinese models**: PP-OCRv5 is primarily trained for Chinese text
-3. **Model limitations**: English recognition is suboptimal compared to Chinese
-
-**Evidence**:
-- Preprocessing matches PaddleOCR reference implementation exactly
-- Server model (5x larger) shows no improvement → not a capacity issue
-- Dictionary is correct and complete
-- Both normalization schemes tested (simple and ImageNet) - simple is correct
-- Both channel orders tested (RGB and BGR) - no difference
-- Character detection works (high confidences), but final text has errors
-
-### Recommendations
-
-**Accept Current Behavior** ✅
-- 65% accuracy on synthetic English images is reasonable given model's Chinese focus
-- Real-world images may perform better
-- Tests should be lenient for synthetic images, strict for real fixtures
-
-**Update Test Strategy** 📋
-1. Make synthetic image tests lenient (check for partial matches like "hel" and "orl")
-2. Add tests with real-world English images for strict validation
-3. Consider English-optimized models if English is primary use case
-4. Document model behavior and limitations clearly
-
-**Next Steps** (Optional):
-1. Test with real-world English document images
-2. Create accuracy test suite with real images and ground truth
-3. Consider fine-tuning or English-specific models for production use
-4. Document expected accuracy ranges for different text types
-
-**Files Involved**:
-- `internal/utils/image_processing.go` - normalization (verified correct)
-- `internal/recognizer/inference.go` - preprocessing logic (verified correct)
-- `internal/pipeline/integration_models_test.go:84` - test updated to be lenient
-- `internal/pipeline/accuracy_test.go` - accuracy validation with real fixtures
-
-**Conclusion**: The implementation is correct. The recognition quality issue is a characteristic of using Chinese-focused PP-OCRv5 models on synthetic English test data, not a bug in our preprocessing or pipeline.
-
----
-
-## Development Phases
-
----
-
-## Phase 0: Critical Bug Fixes (Immediate - Week 1)
-
-### 0.1 Dictionary and Recognition Fixes ✅ COMPLETED
-
-**Issue**: OCR text recognition returns empty strings due to wrong dictionary file
-**Root Cause**: Using 142-character `ppocr_keys_v1.txt` instead of 18,383-character `ppocrv5_dict.txt` required by PP-OCRv5 models
-
-- [x] Download correct PP-OCRv5 dictionary (`ppocrv5_dict.txt`) to `models/dictionaries/`
-- [x] Fix dictionary loading bug in `internal/recognizer/dictionary.go`:
-  - [x] Replace `strings.TrimSpace()` with newline-only trimming to preserve whitespace characters
-  - [x] Remove empty line skip to preserve ideographic space (U+3000) and other whitespace tokens
-- [x] Remove debug print statements from:
-  - [x] `internal/recognizer/inference.go` (convertIndicesToRunes function)
-  - [x] `internal/recognizer/ctc.go` (DecodeCTCGreedy function)
-- [x] Update default configuration to use `ppocrv5_dict.txt` instead of `ppocr_keys_v1.txt`
-- [x] Add filter dictionary support (two-dictionary approach):
-  - [x] Model dictionary (required): Matches ONNX model output classes
-  - [x] Filter dictionary (optional): Restricts output to character subset
-  - [x] CLI flags: `--filter-dict` and `--filter-dict-langs` for all commands
-  - [x] Created `models/dictionaries/latin_subset.txt` with 1,880 Latin characters
-- [ ] Add tests to verify dictionary loading preserves whitespace characters
-- [ ] Document dictionary requirements for PP-OCRv5 models
-
-**Success Metric**: ✅ Dictionary loading works correctly, filter dictionary feature implemented
-**Remaining Issue**: Model outputs "Hellg" instead of "Hello" - requires investigation (see Phase 0.5)
-
-### 0.1a Test Infrastructure Critical Fixes 🔥 HIGH PRIORITY
-
-**Issue**: Integration tests don't validate OCR accuracy - they only check format and success
-**Root Cause**: Tests were written to "make them pass" by checking structure, not actual text recognition
-**Impact**: Wrong dictionary (142 chars vs 18,383 chars) was never caught by tests
-
-#### Fix All Integration Tests to Validate Text Content
-
-- [ ] **Audit all existing tests** for anti-patterns:
-  - [x] `internal/recognizer/inference_test.go` - uses wrong dictionary (`DictionaryPPOCRKeysV1`)
-  - [ ] All integration tests - only check format, not text accuracy
-  - [x] BDD tests in `test/integration/cli/features/` - don't verify recognized text (steps added, scenarios updated for known fixtures)
-  - [x] Server API tests - only check response structure (now assert recognized text in responses)
-  - [ ] PDF processing tests - don't validate extracted text
-
-- [ ] **Update recognizer tests**:
-  - [x] Change all tests to use `DictionaryPPOCRv5` by default
-  - [x] Add text validation: verify "Hello" is recognized as "Hello", not just "some text exists"
-  - [ ] Add confidence validation: check expected confidence ranges
-  - [ ] Create test fixtures with expected OCR output
-  - [ ] Test with both synthetic and real images
-
-- [ ] **Fix BDD integration tests** (`test/integration/cli/features/`):
-  - [x] Add steps to verify actual recognized text: `Then the output should contain text "Hello"`
-  - [x] Add steps for fuzzy text matching: `Then the output should approximately match "Hello World"`
-  - [ ] Update all scenarios to include text validation
-  - [x] Add text checks for additional simple fixtures (Hello, World, OCR, Test, 123, Sample)
-  - [x] Add JSON/CSV multi-image scenarios with text assertions
-  - [ ] Create comprehensive test fixtures with ground truth data
-  - [x] Test edge cases: rotated text (approximate match), low confidence (JSON min-rec-conf),
-  - [x] Test edge cases: special characters (German umlauts/ß present in output)
-
-- [ ] **Fix pipeline integration tests**:
-  - [x] `TestProcessImage_Smoke` - verify actual text output
-  - [ ] Add regression tests with known good outputs
-  - [x] Test full pipeline with real model + dictionary
-  - [x] Validate text accuracy, not just "non-empty string"
-
-- [ ] **Create OCR accuracy test suite**:
-  - [x] Test images with known text content (simple fixtures)
-  - [x] Compare output against ground truth (similarity-based)
-  - [x] Calculate character accuracy rate (CAR) and word accuracy rate (WAR)
-  - [x] Set minimum accuracy thresholds (via similarity >= 0.8/0.95)
-  - [x] Test with various orientations (rotated 0/90/180/270/±45)
-  - [ ] Test with various fonts and sizes
-
-- [ ] **Add test data with ground truth**:
-  - [x] Create `testdata/fixtures/ocr_accuracy.json` with expected outputs (simple cases)
-  - [x] Include confidence thresholds for each test case
-  - [ ] Document expected vs. actual behavior
-  - [x] Add rotated images with expected text ("Rotated Text")
-  - [x] Add challenging images (poor quality/noisy scanned sample)
-  - [x] Add German text image with contains-any umlaut/ß checks
-  - [ ] Add challenging images (handwriting)
-
-**Success Metric**: All tests validate actual OCR accuracy, not just format. No test can pass with wrong dictionary or broken recognition.
-
-### 0.1b Documentation: Testing Best Practices
-
-- [ ] Document testing anti-patterns to avoid:
-  - [ ] ❌ Only checking output format (JSON/CSV structure)
-  - [ ] ❌ Only checking for non-empty results
-  - [ ] ❌ Only validating confidence ranges
-  - [ ] ✅ Always validate actual recognized text content
-  - [ ] ✅ Use ground truth comparison
-  - [ ] ✅ Test with realistic data, not just synthetic
-- [ ] Create testing guidelines for contributors
-- [ ] Add pre-commit hooks to enforce text validation in tests
-
-**Success Metric**: Clear documentation prevents future testing anti-patterns
-
-### 0.5 "Hellg" Bug Investigation 🔍 CRITICAL
-
-**Issue**: Model consistently outputs "Hellg" instead of "Hello" for test images
-**Symptoms**:
-- Character 'o' is recognized as 'g' (8 positions off in character index)
-- Occurs with both synthetic test images and properly generated images
-- Dictionary is correct and identical to PaddleOCR's official ppocrv5_dict.txt
-- Ideographic space is correctly preserved at position 0
-
-**Investigation Plan**:
-
-#### Phase 1: Baseline Comparison with PaddleOCR
-- [ ] Set up PaddleOCR Python environment with same model
-- [ ] Run same test images through PaddleOCR Python
-- [ ] Compare outputs: Do we get "Hello" or "Hellg" with PaddleOCR?
-- [ ] If PaddleOCR outputs "Hello":
-  - [ ] Model is fine, our pipeline has a bug
-  - [ ] Proceed to Phase 2: Preprocessing Investigation
-- [ ] If PaddleOCR outputs "Hellg":
-  - [ ] Model itself may be wrong or incompatible with dictionary
-  - [ ] Proceed to Phase 3: Model/Dictionary Compatibility
-
-#### Phase 2: Preprocessing Investigation
-- [ ] **Compare preprocessing with PaddleOCR**:
-  - [ ] Image resizing: aspect ratio preservation, interpolation method
-  - [ ] Normalization: mean/std values, value range (0-1 vs 0-255)
-  - [ ] Padding: method, fill value, alignment
-  - [ ] Color space: RGB vs BGR, channel ordering
-  - [ ] Data type: float32 vs uint8
-
-- [ ] **Add preprocessing debug output**:
-  - [ ] Save preprocessed images to disk for visual inspection
-  - [ ] Log tensor shapes, min/max values, mean/std
-  - [ ] Compare preprocessed tensors byte-by-byte with PaddleOCR
-
-- [ ] **Test preprocessing variations**:
-  - [ ] Try different normalization schemes
-  - [ ] Test with/without padding
-  - [ ] Verify NCHW vs NHWC tensor layout
-  - [ ] Check if we need additional preprocessing steps
-
-#### Phase 3: Model Input/Output Investigation
-- [ ] **Verify model expectations**:
-  - [ ] Check ONNX model metadata for input specifications
-  - [ ] Verify expected input shape, dtype, value range
-  - [ ] Check if model requires specific preprocessing
-  - [ ] Look for preprocessing ops baked into ONNX model
-
-- [ ] **Analyze model outputs**:
-  - [ ] Log raw model output probabilities
-  - [ ] Verify output shape matches dictionary size
-  - [ ] Check if output indices align with our dictionary
-  - [ ] Compare raw outputs with PaddleOCR
-
-- [ ] **Test with different model versions**:
-  - [ ] Try PP-OCRv4 models (if available)
-  - [ ] Test with server vs mobile models
-  - [ ] Verify model file integrity (checksum)
-
-#### Phase 4: CTC Decoding Investigation
-- [ ] **Verify CTC decode logic**:
-  - [ ] Confirm blank token is at index 0
-  - [ ] Verify we're doing `idx - 1` correctly for non-blank tokens
-  - [ ] Check for off-by-one errors in indexing
-  - [ ] Compare CTC decode with PaddleOCR implementation
-
-- [ ] **Test decoding edge cases**:
-  - [ ] Blank sequences
-  - [ ] Repeated characters
-  - [ ] Start/end of sequence handling
-  - [ ] Unicode character boundaries
-
-#### Phase 5: Dictionary Index Mapping Investigation
-- [ ] **Verify dictionary-model alignment**:
-  - [ ] Check if PaddleOCR has special tokens in dictionary
-  - [ ] Verify blank token position (beginning vs end vs separate)
-  - [ ] Look for hidden BOM, zero-width chars, or control characters
-  - [ ] Check if dictionary needs special sorting
-
-- [ ] **Test with controlled dictionary**:
-  - [ ] Create minimal dictionary with just a-z, A-Z
-  - [ ] Test if simple Latin characters work correctly
-  - [ ] Incrementally add characters to find the break point
-
-- [ ] **Analyze the 8-position offset**:
-  - [ ] Check what 8 characters exist before 'o' in dictionary
-  - [ ] See if removing those 8 characters fixes the issue
-  - [ ] Investigate if there's a pattern (special chars, whitespace, etc.)
-
-#### Phase 6: Real-World Image Testing
-- [ ] **Test with non-synthetic images**:
-  - [ ] Use real photos of text (street signs, documents, etc.)
-  - [ ] Test with various fonts and styles
-  - [ ] Test with different image qualities and resolutions
-
-- [ ] **Compare synthetic vs real image results**:
-  - [ ] Check if "Hellg" bug only affects synthetic images
-  - [ ] If real images work correctly, investigate synthetic image generation
-  - [ ] Look for artifacts in synthetic images that confuse the model
-
-#### Deliverables
-- [ ] Detailed investigation report documenting:
-  - [ ] Root cause of "Hellg" vs "Hello" discrepancy
-  - [ ] Exact preprocessing differences from PaddleOCR (if any)
-  - [ ] Model compatibility issues (if any)
-  - [ ] Dictionary mapping issues (if any)
-- [ ] Fix implementation or workaround
-- [ ] Regression tests to prevent recurrence
-- [ ] Updated documentation
-
-**Success Metric**: Understand exact cause of "Hellg" bug and implement fix so "Hello" is recognized correctly
-
-**Priority**: CRITICAL - Blocking all OCR accuracy validation
-
-### 0.2 Performance Investigation and Optimization
-
-**Issue**: OCR processing times out after several minutes even on small images
-**Impact**: Unable to process documents in reasonable time
-
-- [ ] Profile recognition model inference to identify bottlenecks:
-  - [ ] Add timing instrumentation to batch processing pipeline
-  - [ ] Measure preprocessing, inference, and postprocessing stages
-  - [ ] Compare with PaddleOCR Python implementation performance
-- [ ] Investigate potential causes:
-  - [ ] Check if batch processing is inefficient for single regions
-  - [ ] Verify ONNX Runtime session configuration is optimal
-  - [ ] Review tensor allocation and memory operations
-  - [ ] Check if thread pool settings need adjustment
-- [ ] Implement performance optimizations:
-  - [ ] Optimize batch tensor creation and normalization
-  - [ ] Add caching for commonly used model inputs
-  - [ ] Consider model quantization or optimization
-- [ ] Add performance benchmarks and monitoring:
-  - [ ] Set reasonable timeout thresholds
-  - [ ] Add progress reporting for long operations
-  - [ ] Document expected processing times per image size
-
-**Success Metric**: Process 800x600 image in <10 seconds on CPU
-
-### 0.3 PDF Page Extraction Fix
-
-**Issue**: PDF processing reports "0 pages" even for valid single-page PDFs
-**Impact**: Cannot process PDF documents
-
-- [ ] Debug PDF page extraction in `internal/pdf/processor.go`:
-  - [ ] Add logging to trace PDF processing flow
-  - [ ] Verify page count detection logic
-  - [ ] Check image extraction from PDF pages
-- [ ] Test with various PDF types:
-  - [ ] Scanned PDFs (image-only)
-  - [ ] Text PDFs with embedded fonts
-  - [ ] Hybrid PDFs (text + images)
-  - [ ] Password-protected PDFs
-- [ ] Fix page extraction issues:
-  - [ ] Ensure proper PDF library initialization
-  - [ ] Verify page iteration and rendering
-  - [ ] Handle edge cases (rotated pages, unusual dimensions)
-- [ ] Add comprehensive PDF tests:
-  - [ ] Unit tests for page counting
-  - [ ] Integration tests with sample PDFs
-  - [ ] Error handling for corrupt/invalid PDFs
-
-**Success Metric**: Successfully extract and process all pages from test PDFs
-
-### 0.4 Model and Dictionary Configuration
-
-**Issue**: Need proper model-dictionary pairing and configuration management
-
-- [ ] Create model configuration profiles:
-  - [ ] PP-OCRv5 mobile (with ppocrv5_dict.txt)
-  - [ ] PP-OCRv5 server (with ppocrv5_dict.txt)
-  - [ ] Legacy PP-OCRv4 (with ppocr_keys_v1.txt if needed)
-- [ ] Update model auto-detection logic:
-  - [ ] Detect model version from filename or metadata
-  - [ ] Automatically select correct dictionary
-  - [ ] Warn if dictionary mismatch detected
-- [ ] Improve error messages:
-  - [ ] Clear errors when dictionary size doesn't match model
-  - [ ] Suggest correct dictionary for detected model
-  - [ ] Add validation during initialization
-- [ ] Update documentation:
-  - [ ] Document model-dictionary requirements
-  - [ ] Add troubleshooting guide for recognition issues
-  - [ ] Create migration guide from v4 to v5 models
-
-**Success Metric**: Correct model-dictionary pairing with helpful error messages
-
----
-
-## Phase 1: Testing Foundation (Week 3-4)
-
-### 1.1 Unit Test Coverage Completion
-
-- [x] Achieve >90% code coverage for core components:
-  - [x] Complete detection model management testing (DetectRegions 0% coverage)
-  - [x] Finish recognition model lifecycle testing (warmup, configuration getters)
-  - [x] Complete pipeline core processing testing (ProcessImagesParallelContext, ProcessPDFContext, applyOrientationDetection, applyRectification)
-  - [x] Add orientation configuration testing (24 new tests covering config conversion, GPU integration, thresholds, defaults, and field validation)
-- [x] Implement property-based testing for algorithms:
-  - [x] Detection post-processing algorithms
-  - [x] Recognition CTC decoding
-  - [x] Geometry processing functions
-  - [x] Image transformation utilities
-
-### 1.2 Integration & Specialized Testing
-
-- [x] Complete integration testing:
-  - [x] Write CLI integration tests (comprehensive BDD test suite with 30+ scenarios covering all CLI commands, output formats, error handling, and configuration options)
-  - [x] Write server API tests (complete REST API test coverage including POST /ocr/image, POST /ocr/pdf, multipart uploads, concurrent processing, and error scenarios)
-  - [x] Add output format validation and testing (JSON, CSV, text formats with schema validation)
-  - [x] Write orientation integration tests (EXIF handling, rotation detection, and coordinate transformation)
-- [x] PDF processing test suite:
-  - [x] Write PDF extraction tests (unit tests for image extraction, text extraction, hybrid processing, and password handling - 9 test functions with 100+ sub-tests)
-  - [x] Write PDF integration tests (CLI PDF processing with page ranges, confidence filtering, batch processing, and error handling)
-  - [x] Write PDF output tests (server API PDF endpoints with multipart uploads, output format validation, and concurrent processing)
-- [x] Configuration and output testing:
-  - [x] Write configuration tests (CLI flags, environment variables, model paths, and validation)
-  - [x] Write output formatting tests (structured output validation, CSV headers, JSON schema compliance)
-  - [x] Write server API tests (HTTP endpoints, request/response validation, error handling, and performance)
-
-### 1.3 Test Infrastructure
-
-- [ ] Add comprehensive edge case testing
-- [ ] Create test result visualization tools
-- [ ] Implement reference comparison testing:
-  - [ ] Compare with PaddleOCR outputs
-  - [ ] Validate against known ground truth
-  - [ ] Accuracy benchmarking
-
-**Success Metrics**: >90% unit test coverage, comprehensive integration tests, automated accuracy validation
-
----
-
-## Phase 2: Performance Optimization & Benchmarking (Week 5-6)
-
-### 2.1 Memory Management & Optimization
-
-- [ ] Memory-efficient loading for large images:
-  - [ ] Implement streaming image loading
-  - [ ] Add memory-mapped image handling
-  - [ ] Create progressive loading for very large images
-- [x] Memory pooling for tensors/buffers in detection path:
-  - [x] Tensor memory pool implementation
-  - [x] Buffer reuse between pipeline stages
-  - [x] Zero-copy paths where feasible
-- [x] Add memory leak detection:
-  - [x] Implement memory profiling tools
-  - [x] Add leak detection in long-running operations
-  - [x] Create memory usage monitoring
-
-### 2.2 Performance Benchmarking Framework
-
-- [ ] Write performance benchmarks:
-  - [ ] Single image processing speed
-  - [ ] Batch processing throughput
-  - [ ] Memory usage profiling
-  - [ ] GPU acceleration benchmarks
-- [ ] Create performance regression detection:
-  - [ ] Automated performance monitoring
-  - [ ] Benchmarks on varied resolutions
-  - [ ] Add regression guardrails
-- [ ] Add load testing for server mode:
-  - [ ] Implement resource usage monitoring
-  - [ ] Write performance optimization guidelines
-  - [ ] Detailed metrics: per-stage timings, IoU histograms, region count stats
-
-**Success Metrics**: Memory usage <500MB for standard operations, performance benchmarks within 10% of targets
-
----
-
-## Phase 3: Advanced Detection Features (Week 7)
-
-### 3.1 Multi-Scale & Advanced Detection
-
-- [x] Multi-scale inference + result merging (IoU/IoB based):
-  - [x] Image pyramid processing
-  - [x] Scale-aware result fusion
-  - [x] IoU-based duplicate removal
-- [x] Optional image pyramid for small text sensitivity:
-  - [x] Pyramid level configuration
-  - [x] Adaptive pyramid scaling
-  - [x] Memory-efficient pyramid processing
-
-### 3.2 Detection Enhancement & Testing
-
-- [x] Alternative confidence metrics:
-  - [x] Multiple confidence calculation methods
-  - [x] Confidence calibration
-  - [x] Adaptive confidence thresholding
-- [ ] Robustness tests: fuzz prob maps, extreme aspect ratios, empty outputs:
-  - [x] Fuzzing test framework
-  - [x] Edge case validation
-  - [ ] Stress testing for extreme inputs
-
-**Success Metrics**: Improved small text detection, robust handling of edge cases, configurable detection strategies
-
----
-
-## Phase 4: Barcode Detection & Integration (Week 8)
-
-### 4.1 Symbologies & Libraries
-
-- [x] Decision: Use pure Go ZXing port `gozxing` (github.com/makiuchi-d/gozxing) as the initial/default backend; barcode is an edge-case feature so prioritize portability and simple builds (no CGO).
-- [x] Supported symbologies (as provided by `gozxing`): QR, Data Matrix, Aztec, PDF417, Code128, Code39, EAN-8/13, UPC-A/E, ITF, Codabar
-- [x] Add dependency and wrapper:
-  - [x] Introduce `barcode` package with a small adapter over `gozxing`
-  - [x] Map options: requested formats, try-harder, multi-detect, ROI
-  - [x] Normalize results: type, value, points/bbox, rotation (if available), confidence (-1 if unavailable)
-- [x] Keep interface pluggable for future backends (zxing-cpp/zbar) but defer implementation
-
-### 4.2 Image Pipeline Integration
-
-- [x] Optional barcode stage in image processing:
-  - [x] Flags: --barcodes, --barcode-types, --barcode-min-size
-  - [x] Multi-scale/adaptive sampling for tiny/low-res codes
-  - [x] Return bbox, rotation, type, value, confidence
-- [x] Debug overlays for detected barcodes
-
-### 4.3 PDF Pipeline Integration
-
-- [x] Detect barcodes on rendered pages:
-  - [x] Page-level toggle and type filter
-  - [x] DPI heuristics (target ~150 DPI with capped upscale)
-  - [x] Map results to PDF coordinate space (page_box in points)
-- [x] Batch PDFs with page-range and concurrency controls
-  - [x] Page-level concurrency with worker pool (CLI/server configurable)
-
-### 4.4 CLI & Server APIs
-
-- [x] CLI:
-  - [x] Add flags to image/pdf commands (see 4.2)
-  - [x] Embed barcodes array alongside texts in outputs
-- [x] Server:
-  - [x] Accept barcode flags in multipart/form fields
-  - [x] Extend response schema
-  - [x] Add OpenAPI docs
-  - [x] Add server flag for PDF barcode DPI (default 150)
-  - [x] Add CLI flag for PDF barcode DPI (default 150)
-
-### 4.5 Testing & Datasets
-
-- [ ] Unit tests with fixtures for each symbology
-- [ ] Golden tests on mixed-content images/PDFs
-- [ ] Fuzz tests for noisy/rotated/partial barcodes
-- [ ] Performance tests for batches and high-DPI PDFs
-
-### 4.6 Output Schema & Docs
-
-- [x] Extend JSON/CSV with fields: type, value, confidence, bbox, page, rotation
-- [ ] Document supported symbologies, caveats, and best practices
-
-**Success Metrics**: 95%+ decode rate on common symbologies, robust mixed-content handling, <50ms per barcode on 1080p images
-
----
-
-## Phase 5: Advanced Recognition & Language Features (Week 9)
-
-### 5.1 Advanced Recognition Algorithms
-
-- [ ] Add alternative decoding methods (beam search):
-  - [ ] Beam search CTC decoding implementation
-  - [ ] Language model integration
-  - [ ] Configurable beam width
-  - [ ] Performance optimization for beam search
-
-### 5.2 Dynamic Language Support
-
-- [ ] Dynamic language switching (per-request override TBD):
-  - [ ] Per-request language override in server
-  - [ ] Auto-select recognition model by requested language (configurable mapping)
-  - [ ] Dictionary pack management (download/verify multiple dicts for languages)
-  - [ ] Expose detected language distribution in image summary (counts/percents)
-- [ ] Write multi-language documentation:
-  - [ ] Language-specific setup guides
-  - [ ] Model compatibility documentation
-  - [ ] Best practices for multi-language OCR
-
-**Success Metrics**: Support for 10+ languages, dynamic language switching, improved recognition accuracy
-
----
-
-## Phase 6: GPU & Provider Support (Week 10)
-
-### 6.1 Multi-Provider GPU Support
-
-- [ ] Provider options (CUDA/DirectML) and graph optimization levels:
-  - [ ] CUDA execution provider with device selection
-  - [ ] TensorRT optimization for NVIDIA GPUs
-  - [ ] DirectML for Windows/Xbox platforms
-  - [ ] OpenVINO for Intel hardware acceleration
-- [ ] Unified provider selection (CPU/GPU) and device options at pipeline level:
-  - [ ] Provider abstraction layer
-  - [ ] Automatic provider fallback
-  - [ ] Device enumeration and selection
-
-### 6.2 GPU Memory Management
-
-- [ ] GPU memory management and monitoring:
-  - [ ] GPU memory pooling and allocation strategies
-  - [ ] Multi-GPU load balancing
-  - [ ] GPU memory monitoring and optimization
-  - [ ] Fallback to CPU on GPU memory exhaustion
-  - [ ] GPU warmup and model preloading
-
-**Success Metrics**: Multi-GPU support, 50%+ performance improvement with GPU acceleration, robust fallback mechanisms
-
----
-
-## Phase 7: Advanced PDF Processing (Week 11)
-
-### 7.1 Enhanced PDF Capabilities
-
-- [x] Handle vector-based PDFs (text extraction vs OCR):
-  - [x] Vector text detection and extraction
-  - [x] Hybrid vector/raster processing
-  - [x] Quality assessment for OCR vs extraction decision
-- [x] Process password-protected PDFs:
-  - [x] Password prompt and handling
-  - [x] Secure password storage
-  - [x] Batch processing with credentials
-
-### 7.2 PDF Robustness & Scale
-
-- [ ] Manage large PDF files efficiently:
-  - [ ] Streaming PDF processing
-  - [ ] Memory-efficient page handling
-  - [ ] Progress tracking for large documents
-- [ ] Handle corrupted or malformed PDFs:
-  - [ ] Error recovery mechanisms
-  - [ ] Partial processing capabilities
-  - [ ] Diagnostic reporting
-- [ ] Add PDF processing limitations documentation
-- [ ] Create comprehensive PDF test suite
-
-### 7.3 Advanced PDF Features
-
-- [ ] PDF form field processing:
-  - [ ] Form field detection and extraction
-  - [ ] Structured form data output
-  - [ ] Form validation and verification
-- [ ] Encrypted PDF handling with password support
-
-**Success Metrics**: Process PDFs up to 100 pages, handle 95% of real-world PDF formats, robust error handling
-
----
-
-## Phase 8: Server & API Enhancements (Week 12)
-
-### 8.1 API Endpoint Extensions
-
-- [x] Add server endpoint: POST /ocr/pdf - PDF OCR:
-  - [x] PDF upload and processing
-  - [x] Page range selection
-  - [x] Batch PDF processing
-- [x] Server rate limiting:
-  - [x] Request rate limiting
-  - [x] Resource-based throttling
-  - [x] User quota management
-- [x] Code organization improvements:
-  - [x] Split handlers_test.go into focused test files (handlers, image, pdf, middleware, helpers)
-  - [x] Refactored handler code into separate files (image_handlers.go, pdf_handlers.go)
-  - [x] Improved code maintainability and test organization
-
-### 8.2 Advanced Server Features
-
-- [x] Enhanced server capabilities:
-  - [x] Graceful shutdown handling
-  - [x] Metrics/Prometheus endpoint
-  - [x] WebSocket support for real-time OCR
-  - [x] Batch processing endpoint
-- [x] Server: accept dict-langs and language overrides per request (multipart fields):
-  - [x] Dynamic language configuration
-  - [x] Request-specific model selection
-  - [x] Configuration validation
-
-### 8.3 API Testing & Documentation
-
-- [x] Write server API tests:
-  - [x] API endpoint testing
-  - [x] Load testing
-  - [x] Error handling validation
-  - [x] Performance testing
-
-**Success Metrics**: Complete REST API, WebSocket real-time processing, robust rate limiting, comprehensive API tests
-
----
-
-## Phase 9: CLI & Configuration Improvements (Week 13)
-
-### 9.1 Enhanced CLI Features
-
-- [ ] Add enhanced CLI features:
-  - [ ] --dry-run flag for testing configurations
-  - [ ] Proper --version flag with build-time version info
-  - [ ] XML output format for compatibility
-- [ ] Add output validation:
-  - [ ] Output format validation
-  - [ ] Schema validation for structured outputs
-  - [ ] Data integrity checks
-
-### 9.2 Configuration System Enhancement
-
-- [ ] Implement configuration documentation:
-  - [ ] Auto-generated configuration docs
-  - [ ] Configuration examples and templates
-  - [ ] Best practices guide
-- [ ] Orientation model flags:
-  - [ ] Add --orientation-model and --textline-model flags
-  - [ ] Confidence guardrails: --min-orientation-conf to suppress low-confidence rotations
-  - [ ] Debug outputs: dump intermediate (rotated) images and per-line crops
-
-**Success Metrics**: Comprehensive CLI interface, robust configuration system, excellent user experience
-
----
-
-## Phase 10: Pipeline Enhancements (Week 14)
-
-### 10.1 Processing Intelligence
-
-- [ ] Profiles/presets (performance vs accuracy) for easy tuning:
-  - [ ] Predefined configuration profiles
-  - [ ] Custom profile creation
-  - [ ] Profile switching at runtime
-- [ ] Reading-order heuristics and line/paragraph grouping for images:
-  - [ ] Text flow analysis
-  - [ ] Reading order detection
-  - [ ] Paragraph and column detection
-
-### 10.2 Coordinate & Processing Improvements
-
-- [ ] Return both original and working (post-rotation) coordinates when orientation applied:
-  - [ ] Coordinate transformation tracking
-  - [ ] Original coordinate preservation
-  - [ ] Transformation matrix output
-- [ ] Add explicit orientation stage timing in image-level Processing:
-  - [ ] Per-stage timing collection
-  - [ ] Processing statistics
-  - [ ] Performance profiling integration
-- [ ] Include orientation model info and thresholds in pipeline.Info() consistently
-- [ ] Document rectification limitations
-
-**Success Metrics**: Intelligent processing workflows, comprehensive coordinate tracking, detailed processing metrics
-
----
-
-## Phase 11: Orientation & Processing Improvements (Week 15)
-
-### 11.1 Orientation Performance Optimization
-
-- [ ] Batch orientation for multi-image inputs (reduce per-image overhead):
-  - [ ] Batch orientation processing
-  - [ ] Amortized inference costs
-  - [ ] Parallel orientation detection
-- [ ] Early-exit: skip orientation if EXIF orientation present or image is near-square:
-  - [ ] EXIF orientation detection
-  - [ ] Geometric heuristics
-  - [ ] Smart orientation skipping
-- [ ] Orientation warmup + IO binding for faster first predictions
-- [ ] Optional heuristic-only mode with tunable thresholds for CPU-constrained environments
-
-### 11.2 Advanced Text Orientation
-
-- [ ] Batch classify per-line orientation across regions to amortize runtime:
-  - [ ] Per-line orientation batching
-  - [ ] Regional orientation analysis
-  - [ ] Efficient batch processing
-- [ ] Slant/skew regression: support small-angle deskew (<15°) before recognition:
-  - [ ] Fine-angle detection
-  - [ ] Skew correction algorithms
-  - [ ] Quality-guided deskewing
-- [ ] Vertical-script mode (CJK vertical text) with dedicated rotation policy:
-  - [ ] Vertical text detection
-  - [ ] CJK-specific processing
-  - [ ] Specialized rotation handling
-- [ ] Cache per-region orientation between retries/passes to avoid rework
-
-**Success Metrics**: 50% faster orientation processing, support for vertical scripts, intelligent processing optimization
-
----
-
-## Phase 12: Quality Assurance & CI/CD (Week 16)
-
-### 12.1 Advanced Testing & Validation
-
-- [ ] Golden tests for orientation/overlay coordinate mapping:
-  - [ ] Reference coordinate validation
-  - [ ] Transformation accuracy testing
-  - [ ] Visual regression testing
-- [ ] Property tests for language detection over synthetic/real snippets:
-  - [ ] Property-based testing framework
-  - [ ] Synthetic data generation
-  - [ ] Real-world data validation
-- [ ] Benchmarks for orientation and per-line rotation to track regressions
-
-### 12.2 Continuous Integration
-
-- [ ] Set up continuous integration:
-  - [ ] Automated testing on multiple platforms (Linux, macOS, Windows)
-  - [ ] Code quality checks (golangci-lint)
-  - [ ] Security vulnerability scanning
-  - [ ] Dependency update monitoring
-- [ ] Create code review guidelines:
-  - [ ] PR review checklist
-  - [ ] Code quality standards
-  - [ ] Testing requirements
-- [ ] Implement automated performance monitoring:
-  - [ ] Performance regression detection
-  - [ ] Benchmarking automation
-  - [ ] Alert system for degradations
-
-### 12.3 Security & Quality
-
-- [ ] Add security audit procedures:
-  - [ ] Security scanning automation
-  - [ ] Vulnerability assessment
-  - [ ] Compliance checking
-- [ ] Write quality assurance documentation:
-  - [ ] QA processes and procedures
-  - [ ] Testing strategies
-  - [ ] Release criteria
-
-**Success Metrics**: Automated CI/CD pipeline, comprehensive security scanning, quality gates for releases
-
----
-
-## Phase 13: Deployment & Distribution (Week 17)
-
-### 13.1 Release Automation
-
-- [ ] Create release automation:
-  - [ ] Binary building for multiple platforms (Linux, macOS, Windows, ARM)
-  - [ ] Package manager integration (Homebrew, apt, yum, choco)
-  - [ ] Automated version tagging and changelog generation
-- [ ] Set up GitHub releases:
-  - [ ] Automated release workflows
-  - [ ] Binary distribution
-  - [ ] Release notes generation
-
-### 13.2 Deployment Infrastructure
-
-- [ ] Implement deployment configurations:
-  - [ ] Kubernetes manifests for cloud deployment
-  - [ ] Systemd service files for Linux
-  - [ ] Helm charts for Kubernetes
-- [ ] Create deployment documentation:
-  - [ ] Installation guides
-  - [ ] Configuration examples
-  - [ ] Troubleshooting guides
-
-### 13.3 Distribution & Updates
-
-- [ ] Package distributions:
-  - [ ] Go module publishing
-  - [ ] Docker Hub publishing
-  - [ ] Package manager submissions
-- [ ] Implement update mechanisms:
-  - [ ] Auto-update checking
-  - [ ] Secure update delivery
-  - [ ] Rollback capabilities
-- [ ] Add monitoring and observability setup:
-  - [ ] Prometheus metrics
-  - [ ] Grafana dashboards
-  - [ ] Alert configurations
-- [ ] Write operational runbooks
-
-**Success Metrics**: Multi-platform distribution, automated deployments, comprehensive monitoring
-
----
-
-## Phase 14: Advanced Testing (Week 18)
-
-### 14.1 Integration Test Completion
-
-- [ ] Integration test completion (270 remaining steps):
-  - [ ] CLI command testing
-  - [ ] API endpoint validation
-  - [ ] End-to-end workflow testing
-- [ ] CLI integration tests:
-  - [ ] Command-line interface testing
-  - [ ] Flag and argument validation
-  - [ ] Output format verification
-
-### 14.2 Performance & Stress Testing
-
-- [ ] Performance tests (single image, batch, memory, GPU):
-  - [ ] Single image performance benchmarks
-  - [ ] Batch processing throughput tests
-  - [ ] Memory usage profiling
-  - [ ] GPU acceleration validation
-- [ ] Stress testing:
-  - [ ] High-load testing
-  - [ ] Resource exhaustion testing
-  - [ ] Reliability testing
-
-**Success Metrics**: Complete test coverage, performance validation, stress test compliance
-
----
-
-## Phase 16: Documentation & Community (Week 19)
-
-### 15.1 Documentation Completion
-
-- [ ] Create community engagement plan:
-  - [ ] Contribution guidelines
-  - [ ] Issue templates
-  - [ ] Discussion forums setup
-- [ ] Write project roadmap:
-  - [ ] Feature roadmap
-  - [ ] Release planning
-  - [ ] Community milestones
-
-### 15.2 Technical Documentation
-
-- [ ] Comprehensive API documentation:
-  - [ ] Go package documentation (godoc)
-  - [ ] REST API documentation
-  - [ ] Configuration reference
-- [ ] Architecture documentation:
-  - [ ] System design overview
-  - [ ] Component interaction diagrams
-  - [ ] Data flow documentation
-- [ ] Performance tuning guide:
-  - [ ] Optimization strategies
-  - [ ] Troubleshooting guide
-  - [ ] Best practices
-
-### 15.3 User Documentation
-
-- [ ] User manual and tutorials:
-  - [ ] Quick start guide
-  - [ ] Advanced usage scenarios
-  - [ ] Integration examples
-- [ ] Contributing guidelines:
-  - [ ] Development setup
-  - [ ] Code contribution process
-  - [ ] Testing guidelines
-
-**Success Metrics**: Complete documentation, active community engagement, clear contribution pathways
-
----
-
-## Phase 17: Enterprise Features (Week 20-21)
-
-### 16.1 Library-First Architecture
-
-- [ ] Library-first API refactor:
-  - [ ] Comprehensive Go SDK
-  - [ ] Rich public API
-  - [ ] Example applications
-- [ ] Builder patterns for all components:
-  - [ ] Configuration builders
-  - [ ] Pipeline builders
-  - [ ] Component builders
-- [ ] Plugin architecture:
-  - [ ] Plugin interface design
-  - [ ] Plugin loading system
-  - [ ] Plugin marketplace
-
-### 16.2 Enterprise Security & Management
-
-- [ ] Multi-tenancy support:
-  - [ ] Tenant isolation
-  - [ ] Resource quotas
-  - [ ] Billing integration
-- [ ] RBAC implementation:
-  - [ ] Role-based access control
-  - [ ] Permission management
-  - [ ] User management
-- [ ] SSO integration:
-  - [ ] SAML support
-  - [ ] OAuth integration
-  - [ ] Active Directory support
-- [ ] Audit logging & compliance:
-  - [ ] Comprehensive audit trails
-  - [ ] Compliance reporting
-  - [ ] Data governance
-
-**Success Metrics**: Enterprise-ready features, multi-tenant architecture, compliance standards
-
----
-
-## Phase 18: Advanced Visualization (Week 22)
-
-### 17.1 Rich Visualization System
-
-- [ ] Font rendering system:
-  - [ ] TrueType font support
-  - [ ] Text layout engine
-  - [ ] Multi-language text rendering
-- [ ] Rich visualizations:
-  - [ ] Advanced drawing capabilities
-  - [ ] Color schemes and themes
-  - [ ] Interactive visualizations
-- [ ] SVG/PDF output:
-  - [ ] Vector graphics output
-  - [ ] Print-quality rendering
-  - [ ] Scalable visualizations
-
-### 17.2 Visualization Features
-
-- [ ] Interactive visualizations:
-  - [ ] Zoom and pan functionality
-  - [ ] Region selection
-  - [ ] Real-time updates
-- [ ] Visualization configuration system:
-  - [ ] Style templates
-  - [ ] Custom themes
-  - [ ] Configuration presets
-
-**Success Metrics**: Professional-quality visualizations, interactive features, configurable output
-
----
-
-## Phase 19: Cloud Native Features (Week 23)
-
-### 18.1 Kubernetes Integration
-
-- [ ] Kubernetes operator:
-  - [ ] Custom resource definitions
-  - [ ] Operator logic
-  - [ ] Helm chart distribution
-- [ ] S3/blob storage integration:
-  - [ ] Cloud storage backends
-  - [ ] Streaming processing
-  - [ ] Caching strategies
-
-### 18.2 Serverless & Cloud Services
-
-- [ ] Serverless deployment support:
-  - [ ] AWS Lambda functions
-  - [ ] Google Cloud Functions
-  - [ ] Azure Functions
-- [ ] Multi-region support:
-  - [ ] Geographic distribution
-  - [ ] Data locality
-  - [ ] Failover mechanisms
-- [ ] Cloud monitoring integration:
-  - [ ] CloudWatch integration
-  - [ ] Google Cloud Monitoring
-  - [ ] Azure Monitor
-
-**Success Metrics**: Cloud-native deployment, serverless support, multi-region availability
-
----
-
-## Success Metrics & Acceptance Criteria
-
-### Performance Requirements
-
-- [ ] Single image processing: <2 seconds (mobile models)
-- [ ] Batch processing: >10 images/minute
-- [ ] Memory usage: <500MB for standard operations
-- [ ] Server response time: <3 seconds for typical images
-- [ ] Startup time: <5 seconds (model loading)
-
-### Quality Requirements
-
-- [ ] Unit test coverage: >90%
-- [ ] Integration test coverage: >80%
-- [ ] Zero memory leaks in long-running operations
-- [ ] No crashes on malformed input files
-- [ ] Graceful degradation under resource constraints
-
-### Functional Requirements
-
-- [ ] Achieve >95% text detection accuracy compared to PaddleOCR
-- [ ] Maintain >90% text recognition accuracy
-- [ ] Support processing of 10+ image formats
-- [ ] Handle PDF files up to 100 pages efficiently
-- [ ] Process images up to 10 megapixels without memory issues
-
-### Deployment Requirements
-
-- [ ] Single binary deployment (minimal dependencies)
-- [ ] Cross-platform compatibility (Linux, macOS, Windows)
-- [ ] Container deployment ready
-- [ ] Cloud service deployment capable
-- [ ] Horizontal scaling support
-
-### Innovation Metrics
-
-- [ ] Feature parity with OAR-OCR library functionality
-- [ ] Superior CLI interface compared to OAR-OCR examples
-- [ ] Advanced server capabilities beyond OAR-OCR scope
-- [ ] Comprehensive model ecosystem matching OAR-OCR
-- [ ] Performance leadership in key benchmarks
-
----
-
-## Final Acceptance Criteria
-
-- [ ] Complete OCR pipeline with advanced features
-- [ ] Production-ready CLI tool and HTTP server
-- [ ] Comprehensive model management system
-- [ ] Enterprise-grade security and compliance
-- [ ] Cloud-native deployment capabilities
-- [ ] Extensive testing and quality assurance
-- [ ] Complete documentation and community resources
-- [ ] Performance metrics meeting all requirements
-
-This restructured plan provides a clear roadmap for completing the remaining 247 tasks, organized into logical phases that build upon each other while allowing for parallel development where possible.
+# Phases
+
+No week estimates. The old plan's 23-week schedule was fiction. Each task names a
+file or a command, and each carries an acceptance test that describes what must
+be true **after** it — not what happens to be true now. An acceptance test that
+cannot fail is not one.
+
+## Phase 0 — A clean base
+
+Done. Recorded here because the rest builds on it.
+
+- **T0.1** Commit the treefmt formatting pass as its own `style:` commit.
+  _Accept:_ `just check-formatted` exits 0.
+- **T0.2** Enable revive's `file-length-limit` at 1500 in `.golangci.toml`.
+  _Accept:_ the limit produces findings rather than being inert.
+- **T0.3** Point the orientation scenarios at `testdata/images/rotated/rotated_45.png`;
+  `testdata/images/rotated_text.png` does not exist.
+  _Accept:_ the "Orientation detection configuration" scenario passes.
+- **T0.4** Resolve testdata from the project root instead of the package CWD,
+  reusing `testutil.GetProjectRoot` / `GetFixturesDir`; delete the two untracked
+  symlinks that were propping this up.
+  _Accept:_ `go test ./internal/pipeline -run TestOCRAccuracy` finds its fixtures
+  with no symlink present anywhere in the tree.
+- **T0.5** Ignore coverage artifacts and `/overlays/`; delete the superseded
+  `GOAL.md`, `COMPARISON.md`, `WORK_INVOICE.md`, `QWEN.md`.
+  _Accept:_ `git status --porcelain` is empty on a clean checkout.
+
+_Exit: working tree clean, `just build` green, `just check-formatted` green._
+
+## Phase 1 — Make it read "Hello"
+
+### 1.1 Make the harness able to fail first
+
+- **T1.1** Raise every case in `ocr_accuracy.json` to exact match
+  (`min_similarity`, `min_car`, `min_war` all `1.0`).
+  _Accept:_ the suite fails, printing actual vs expected for every wrong case.
+  This failure is the baseline the rest of the phase is measured against.
+- **T1.2** Hand-key a real `expected` string for `german_text.png`, replacing
+  `""` and the `contains_any` fallback.
+  _Accept:_ the case asserts a concrete string; no case in the file has an empty
+  `expected`.
+- **T1.3** Default `accuracy_test.go:89` to the mobile models; keep the server
+  models behind `POGO_ACCURACY_MODELS=server`.
+  _Accept:_ `go test ./internal/pipeline` finishes in under 60 s (it takes 715 s
+  today, almost all of it this one test).
+
+### 1.2 Assert the class count at load
+
+- **T1.4** Read the recognizer's real output class count from the ONNX output
+  shape at init. `internal/onnx` already exposes I/O info; the seam is
+  `recognizer.go:185-203`.
+  _Accept:_ a unit test asserts 18385 for both bundled recognizer models, read
+  from the graph rather than hardcoded.
+- **T1.5** Fail recognizer construction when
+  `charset size + specials != model classes`, naming both numbers in the error.
+  _Accept:_ loading PP-OCRv5 rec with `ppocr_keys_v1.txt` (142 lines) returns an
+  error containing both `18385` and `143`; loading it with `ppocrv5_dict.txt`
+  returns no error. A dictionary/model mismatch can no longer reach inference.
+
+### 1.3 The space token
+
+- **T1.6** Add an explicit append-space step to charset loading in
+  `dictionary.go`, off by default and on for PP-OCRv5.
+  _Accept:_ charset size becomes 18384 and T1.5 passes with the real dictionary.
+- **T1.7** Verify the decode index mapping end to end.
+  _Accept:_ `rotated/rotated_0.png` recognizes as `Rotated Text`, with the space.
+  A test asserts on the space specifically, so its loss cannot regress silently.
+
+### 1.4 One normalizer, parameterized
+
+- **T1.8** Collapse `NormalizeImage` / `NormalizeImageIntoBuffer` /
+  `NormalizeImagePooled` (`image_processing.go:154/197/233`) into one
+  implementation taking scale, mean and std; keep the buffer and pooled variants
+  as thin wrappers over it.
+  _Accept:_ a table test checks one known pixel through both a `[0,1]` and a
+  `[-1,1]` parameterization; the three entry points produce identical values.
+- **T1.9** Detector passes ImageNet mean/std; recognizer passes `0.5/0.5`.
+  Update the `rectify` and `orientation` call sites too.
+  _Accept:_ per-consumer tests assert the resulting tensor's range — recognizer
+  input reaches negative values, detector input is ImageNet-centred.
+- **T1.10** Replace the hardcoded channel literal `3` (`preprocess.go:188,203`,
+  `detector.go:143`) with a value carried on the config path.
+  _Accept:_ `grep -rn "NewImageTensor(.*, 3," internal/` returns nothing.
+
+### 1.5 Declare, don't infer
+
+- **T1.11** Replace `determineClassesFirst` (`inference.go:527`) with a declared
+  `NTC`/`NCT` layout on the recognizer config, and make `blankIndex` a field
+  rather than the literal at `inference.go:190` and `:501`.
+  _Accept:_ synthetic-tensor tests decode correctly under both layouts, and a
+  declared layout that contradicts the model's actual shape is a load-time error
+  rather than a silent fallback.
+
+_Phase 1 exit: all 14 fixtures pass at exact match. `TestProcessImage_Smoke`
+reads `hello`, not `hel1o`. Both failing `TestRecognizeBatch` tests are green.
+`go test ./...` passes apart from the PDF scenarios Phase 3 deletes, and no
+package takes over 60 s._
+
+## Phase 2 — Measure something real
+
+### 2.1 Take the thresholds away from the data
+
+- **T2.1** Split `ocr_accuracy.json` into a corpus manifest carrying only
+  `image` and `expected`.
+  _Accept:_ the file contains no `min_*` key. Grepping for one returns nothing.
+- **T2.2** Define one corpus-level gate in code: mean CER, mean WER, exact-match
+  count.
+  _Accept:_ degrading any single case fails the corpus gate, and there is no
+  per-case knob that can silence it.
+
+### 2.2 `pogo eval`
+
+- **T2.3** Promote the harness in `accuracy_test.go` into
+  `pogo eval <corpus-dir>`, printing per-case and aggregate CER/WER.
+  _Accept:_ `pogo eval ./testdata/corpus` prints a table and exits 0.
+- **T2.4** Commit a baseline per corpus; `eval` compares against it and exits
+  non-zero on regression.
+  _Accept:_ deliberately truncating the dictionary makes `pogo eval` exit 1 and
+  name the metric that moved.
+
+### 2.3 A corpus that isn't synthetic
+
+- **T2.5** Add at least 10 real scans, German included, with hand-keyed ground
+  truth under `testdata/corpus/real/`.
+  _Accept:_ every image is a real capture rather than a render, and each has
+  ground truth committed beside it.
+- **T2.6** Give the real corpus its own committed baseline.
+  _Accept:_ `pogo eval ./testdata/corpus/real` exits 0 and its CER is recorded
+  in the repo, so the next change has something to be compared against.
+
+_Phase 2 exit: one committed CER/WER baseline per corpus. Nothing merges
+afterwards that moves CER the wrong way._
+
+## Phase 3 — Cut
+
+Strictly leaf-first — the order below is the dependency order, and taking it out
+of order means editing code twice. Each task is one commit and ends with the same
+three checks: `go build ./...`, `go test ./...`, and `pogo eval` showing CER
+unchanged from the Phase 2 baseline. Only the extra acceptance criteria are
+listed per task.
+
+- **T3.1** Empty directories (`pkg/ocr/`, `internal/version/`,
+  `cmd/simple-model-test/`), plus `deployment/` and `.goreleaser.yaml`.
+  _Accept:_ no build reference to any of them remains.
+- **T3.2** `cmd/benchmark` + `internal/benchmark` (657 src). One caller each.
+  _Accept:_ the binary is gone and nothing imports the package.
+- **T3.3** `cmd/ocr/cmd/batch.go` + `internal/batch` (646). Re-home
+  `pipeline.CalculateParallelStats`, which `internal/batch/config.go` is the only
+  external user of.
+  _Accept:_ `pogo --help` no longer lists `batch`.
+- **T3.4** `cmd/ocr/cmd/serve.go` + `internal/server` (2,699), the four
+  `server_*.feature` files, and `support/server_*.go`.
+  _Accept:_ gorilla/websocket and the Prometheus client leave `go.mod`.
+- **T3.5** `cmd/ocr/cmd/pdf.go` + `internal/pdf` (2,834) +
+  `pipeline/process_pdf.go` + `pdf_processing.feature` + `testdata/documents/`.
+  _Accept:_ pdfcpu leaves `go.mod`.
+- **T3.6** `internal/barcode` + `pipeline/barcodes*.go` + the 12 barcode CLI
+  flags.
+  _Accept:_ **`go mod tidy -diff` exits 0.** This is the task that repairs
+  `just check-tidy`.
+- **T3.7** Pipeline dead code: `parallel.go`, `profile.go`, `monitor.go`,
+  `ProcessImages` (keep `ProcessImagesContext`), and `AdaptiveWorkerPool` from
+  `resources.go`. `ResourceManager` and `MemoryMonitor` stay — `pipeline.go`
+  wires them.
+  _Accept:_ `resources_test.go` shrinks rather than breaking.
+- **T3.8** Detector dead code: `batch.go`'s `RunBatchInference`, `benchmark.go`,
+  `DefaultAdaptiveNMSThresholds`. `multiscale.go`, `adaptive_threshold.go` and
+  the NMS variants stay.
+  _Accept:_ the `--det-multiscale` flag still works and the YAML-configured
+  adaptive NMS path still has a test.
+- **T3.9** `internal/rectify` (978) + `internal/orientation` (902), their config
+  fields, and the three `internal/recognizer` call sites.
+  _Accept:_ the config struct loses every rectify and orientation field, and no
+  flag referencing them survives in `--help`.
+- **T3.10** `internal/mempool` (130 src, 1,007 test) — last, because it has 12
+  call sites across detector, recognizer and utils.
+  _Accept:_ `pogo eval` wall-clock is not materially worse than before the
+  removal; if it is, that is a real finding and pooling comes back with a
+  benchmark that justifies it.
+- **T3.11** Godog: delete the features for deleted subsystems, write step
+  definitions for what survives, set `godog.Options{Strict: true}`, and fix
+  `just test-integration` — it runs `-run "Integration"` while the entry point
+  is `TestFeatures`, so today it runs no scenarios at all.
+  _Accept:_ zero undefined and zero failing scenarios, and removing any single
+  step definition turns the suite red instead of silently passing. (Today: 179
+  scenarios, 76 pass, 64 fail, 39 undefined and invisible.)
+- **T3.12** Clear the remaining golangci-lint findings in the surviving code.
+  _Accept:_ `just lint` exits 0.
+
+_Phase 3 exit: `internal/` source under 6,000 lines. **`just check` exits 0** —
+all four steps, for the first time. CER unchanged from Phase 2._
+
+## Phase 4 — The library exists
+
+- **T4.1** Define the `Detector` and `Recognizer` interfaces in `pkg/pogo`.
+  _Accept:_ a fake detector and fake recognizer drive the pipeline in a unit test
+  with no ONNX runtime loaded at all.
+- **T4.2** Make `pipeline.Pipeline` hold those interfaces instead of the concrete
+  structs at `pipeline.go:512-521`.
+  _Accept:_ CER unchanged; the fakes from T4.1 substitute cleanly.
+- **T4.3** Implement `Engine` — `Open` / `Read` / `Close` — plus `Result`,
+  `Line` and `Quad`.
+  _Accept:_ `go doc ./pkg/pogo` fits on one screen.
+- **T4.4** Reduce `cmd/pogo` to a thin consumer: roughly 12 flags instead of
+  ~272, and a config struct of roughly 15 fields instead of 99.
+  _Accept:_ `pogo image --help` fits in one terminal page and every remaining
+  flag has a test that exercises it.
+- **T4.5** Add `example_test.go` and a scratch-module smoke check.
+  _Accept:_ a 20-line `main.go` in a module **outside** this repo imports pogo
+  and prints boxes with text and confidence.
+
+_Phase 4 exit: that scratch module compiles and prints correct text._
+
+## Phase 5 — The model is swappable
+
+- **T5.1** `ModelSpec` type and YAML loader (`kind`, `decode`, `input`, `ctc`,
+  `charset`).
+  _Accept:_ a spec whose `assert_classes` does not match the model is a load-time
+  error naming both numbers — this subsumes the hand-rolled check from T1.5.
+- **T5.2** Drive preprocessing from `input:` and decoding from `ctc:`.
+  _Accept:_ changing `mean` or `std` in the YAML changes the produced tensor,
+  with no recompile.
+- **T5.3** Write sidecar specs for the four bundled models and delete
+  `internal/models/paths.go`.
+  _Accept:_ a missing model produces an error naming the path that was searched,
+  not `Protobuf parsing failed`; and an installed binary run outside a Go module
+  resolves its models correctly.
+- **T5.4** Model store: a manifest of name → URL + sha256, and
+  `pogo models pull` fetching into `~/.cache/pogo/models`.
+  _Accept:_ with an empty cache, `pogo models pull && pogo image x.png` works;
+  a corrupted download fails its checksum and is not cached.
+- **T5.5** Untrack the weights, fix the ignore pattern to `/models/**/*.onnx`,
+  and teach CI to pull. No history rewrite.
+  _Accept:_ `git ls-files models | grep '\.onnx$'` is empty, and a fresh clone
+  plus `pogo models pull` passes `pogo eval`.
+- **T5.6** Prove swappability.
+  _Accept:_ a second, structurally different recognizer runs end to end via a new
+  YAML file and **zero Go changes**.
+
+_Phase 5 exit: T5.6 passes and no weights remain in the working tree._
+
+## Verification
+
+From a cold clone:
+
+```sh
+just build                      # every phase
+just check                      # format + lint + test + tidy; green from Phase 3
+pogo models pull                # Phase 5
+pogo eval ./testdata/corpus     # Phase 2: prints CER/WER, compares to baseline
+```
+
+For Phase 4, in a scratch module outside the repo:
+
+```go
+f, _ := os.Open("scan.png")
+img, _ := png.Decode(f)
+
+e, err := pogo.Open(pogo.DefaultModels())
+if err != nil { panic(err) }
+defer e.Close()
+
+res, _ := e.Read(img)
+for _, l := range res.Lines {
+    fmt.Printf("%v %q %.2f\n", l.Box, l.Text, l.Confidence)
+}
+```
+
+If that compiles and prints correct text, pogo is what it set out to be.
