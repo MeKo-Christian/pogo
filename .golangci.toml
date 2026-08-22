@@ -1,4 +1,4 @@
-version = '2'
+version = "2"
 
 [linters]
 default = 'none'
@@ -79,6 +79,7 @@ enable = [
   'wastedassign',
   'whitespace',
   'zerologlint',
+  "revive",
 ]
 
 [linters.settings]
@@ -88,7 +89,23 @@ enable = [
 json = 'camel'
 
 [linters.settings.varnamelen]
-ignore-names = ['rx', 'tx', 'db', 'ok', 'mw', 'gw', 'rt', 'id', 'x', 'y', 'w', 'h', 'i', 'j', 'k']
+ignore-names = [
+  'rx',
+  'tx',
+  'db',
+  'ok',
+  'mw',
+  'gw',
+  'rt',
+  'id',
+  'x',
+  'y',
+  'w',
+  'h',
+  'i',
+  'j',
+  'k',
+]
 ignore-decls = ['w http.ResponseWriter', 'r *http.Request', 'c *gin.Context']
 
 [linters.settings.lll]
@@ -98,6 +115,14 @@ line-length = 120
 lines = 100
 statements = 50
 
+[linters.settings.revive]
+[[linters.settings.revive.rules]]
+name = "file-length-limit"
+
+[[linters.settings.revive.rules.arguments]]
+max = 1500
+skip-comments = false
+skip-blank-lines = false
 [linters.exclusions]
 generated = 'lax'
 paths = [
