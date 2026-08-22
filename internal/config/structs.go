@@ -100,6 +100,12 @@ type RecognizerConfig struct {
 	PadWidthMultiple int     `mapstructure:"pad_width_multiple" yaml:"pad_width_multiple" json:"pad_width_multiple"`
 	MinConfidence    float64 `mapstructure:"min_confidence" yaml:"min_confidence" json:"min_confidence"`
 	NumThreads       int     `mapstructure:"num_threads" yaml:"num_threads" json:"num_threads"`
+	// AppendSpaceToken controls whether the space class that PaddleOCR CTC heads
+	// declare after the dictionary entries is appended to the charset. Leave it
+	// unset to keep the recognizer default (enabled, matching the bundled
+	// PP-OCRv5 models) and set it to false for a custom model whose class count
+	// is dictionary tokens + blank only.
+	AppendSpaceToken *bool `mapstructure:"append_space_token" yaml:"append_space_token,omitempty" json:"append_space_token,omitempty"`
 }
 
 // ParallelConfig contains parallel processing settings.

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 
@@ -226,18 +227,34 @@ func loadAndValidateCharset(config Config, outputInfo onnxrt.InputOutputInfo) (*
 	return charset, nil
 }
 
-// outputClassCount returns the number of output classes declared by the model,
-// i.e. the last dimension of its output shape. It returns 0 when that dimension
-// is dynamic or absent, in which case the class count is unknown.
-func outputClassCount(dims []int64) int {
-	if len(dims) == 0 {
-		return 0
+// modelClassCandidates returns the statically declared sizes of the axes that
+// can carry the class dimension, trailing axis first. A PP-OCR CTC head is
+// emitted either as [N, T, C] (classes last) or as [N, C, T] (classes first, see
+// determineClassesFirst), so both trailing axes are candidates. Axes the model
+// leaves dynamic are omitted; an empty result means the class count is unknown.
+func modelClassCandidates(dims []int64) []int {
+	candidates := make([]int, 0, 2)
+	for i := len(dims) - 1; i >= 0 && i >= len(dims)-2; i-- {
+		if dims[i] > 0 {
+			candidates = append(candidates, int(dims[i]))
+		}
 	}
-	last := dims[len(dims)-1]
-	if last <= 0 {
-		return 0
+	return candidates
+}
+
+// resolveOutputClasses picks the class count out of the declared output shape.
+// Since the position of the class axis depends on the model layout, the axis
+// whose size matches expected wins; otherwise the trailing static axis is used.
+// It returns 0 when neither candidate axis is statically declared.
+func resolveOutputClasses(dims []int64, expected int) int {
+	candidates := modelClassCandidates(dims)
+	if slices.Contains(candidates, expected) {
+		return expected
 	}
-	return int(last)
+	if len(candidates) > 0 {
+		return candidates[0]
+	}
+	return 0
 }
 
 // dictionaryDescription renders the configured dictionary path(s) for error messages.
@@ -251,22 +268,29 @@ func dictionaryDescription(config Config) string {
 // validateCharsetAgainstModel fails construction when the dictionary cannot
 // possibly match the model head. A PP-OCR CTC head has one class per dictionary
 // token plus one CTC blank, so charset.Size()+1 must equal the model's class
-// count. The check is skipped when the model leaves that dimension dynamic.
+// count. The class axis is resolved the same way decoding resolves it, so a
+// classes-first [N, C, T] output is accepted too. The check is skipped when the
+// model leaves both candidate axes dynamic.
 func validateCharsetAgainstModel(charset *Charset, outputInfo onnxrt.InputOutputInfo, config Config) error {
-	classes := outputClassCount(outputInfo.Dimensions)
-	if classes == 0 {
+	expected := charset.Size() + 1
+	candidates := modelClassCandidates(outputInfo.Dimensions)
+	if len(candidates) == 0 {
 		slog.Debug("Model output class dimension is dynamic; skipping dictionary/model class count check",
 			"output_shape", outputInfo.Dimensions)
 		return nil
 	}
-	expected := charset.Size() + 1
-	if expected == classes {
+	if slices.Contains(candidates, expected) {
 		return nil
 	}
+
+	hint := ""
+	if config.AppendSpaceToken && slices.Contains(candidates, charset.Size()) {
+		hint = "; the model declares no space class, set append_space_token=false for this dictionary"
+	}
 	return fmt.Errorf(
-		"dictionary does not match model: model declares %d output classes, but dictionary %s yields %d "+
-			"(%d tokens + 1 CTC blank)",
-		classes, dictionaryDescription(config), expected, charset.Size(),
+		"dictionary does not match model: model output shape %v declares %v as possible class counts, "+
+			"but dictionary %s yields %d (%d tokens + 1 CTC blank)%s",
+		outputInfo.Dimensions, candidates, dictionaryDescription(config), expected, charset.Size(), hint,
 	)
 }
 
@@ -279,12 +303,19 @@ func loadFilterCharsetForRecognizer(config Config) (*Charset, error) {
 	var filterCharset *Charset
 	var err error
 
+	// The filter charset has to know about the space token as well: Filter drops
+	// every rune it does not contain, and the bundled filterable dictionaries
+	// have no literal space line. Without this it would strip the very spaces the
+	// model just decoded.
+	opts := CharsetOptions{AppendSpace: config.AppendSpaceToken}
+
 	if len(config.FilterDictPaths) > 0 {
-		slog.Debug("Loading merged filter dictionaries", "count", len(config.FilterDictPaths), "paths", config.FilterDictPaths)
-		filterCharset, err = LoadCharsets(config.FilterDictPaths)
+		slog.Debug("Loading merged filter dictionaries", "count", len(config.FilterDictPaths),
+			"paths", config.FilterDictPaths, "append_space", opts.AppendSpace)
+		filterCharset, err = LoadCharsetsWithOptions(config.FilterDictPaths, opts)
 	} else {
-		slog.Debug("Loading single filter dictionary", "path", config.FilterDictPath)
-		filterCharset, err = LoadCharset(config.FilterDictPath)
+		slog.Debug("Loading single filter dictionary", "path", config.FilterDictPath, "append_space", opts.AppendSpace)
+		filterCharset, err = LoadCharsetWithOptions(config.FilterDictPath, opts)
 	}
 
 	if err != nil {
@@ -379,11 +410,11 @@ func (r *Recognizer) GetOutputShape() []int64 {
 }
 
 // OutputClasses returns the number of output classes declared by the loaded
-// model, or 0 when the model leaves that dimension dynamic.
+// model, or 0 when the model leaves the class dimension dynamic.
 func (r *Recognizer) OutputClasses() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return outputClassCount(r.outputInfo.Dimensions)
+	return resolveOutputClasses(r.outputInfo.Dimensions, r.charset.Size()+1)
 }
 
 // GetCharset returns the loaded character set.

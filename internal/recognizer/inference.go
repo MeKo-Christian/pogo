@@ -372,8 +372,11 @@ func extractSequenceData(seq interface{}) ([]int, []float64, float64) {
 }
 
 // convertIndicesToRunes converts CTC class indices to text using the charset.
-// Class 0 is the CTC blank, so class i maps to charset token i-1. The last class
-// is the space token when the charset was loaded with CharsetOptions.AppendSpace.
+// Class 0 is the CTC blank, so class i maps to charset token i-1 — the last
+// class therefore maps to whatever the charset's final token is. With
+// CharsetOptions.AppendSpace that is usually SpaceToken, but only when the
+// dictionary did not already contain it somewhere else; AppendSpace only
+// guarantees that the charset contains SpaceToken, not that it comes last.
 // Optionally applies filtering if filterCharset is non-nil.
 func convertIndicesToRunes(indices []int, charset *Charset, filterCharset *Charset) string {
 	runes := make([]rune, 0, len(indices))

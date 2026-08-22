@@ -441,6 +441,9 @@ func (c *Config) toRecognizerConfig() recognizer.Config {
 	if c.Pipeline.Recognizer.DictPath != "" {
 		cfg.DictPath = c.Pipeline.Recognizer.DictPath
 	}
+	if c.Pipeline.Recognizer.AppendSpaceToken != nil {
+		cfg.AppendSpaceToken = *c.Pipeline.Recognizer.AppendSpaceToken
+	}
 	return cfg
 }
 

@@ -126,7 +126,9 @@ func newCharset(tokens []string, opts CharsetOptions) *Charset {
 }
 
 // LoadCharset loads a dictionary file where each non-empty line is a token.
-// Leading/trailing whitespace is trimmed. UTF-8 BOM is removed if present.
+// Only the line terminator (\r\n or \n) and a leading UTF-8 BOM are stripped;
+// all other whitespace is preserved, so a whitespace-only line stays a valid
+// token. Lines that are empty after that stripping are skipped.
 func LoadCharset(path string) (*Charset, error) {
 	return LoadCharsetWithOptions(path, CharsetOptions{})
 }
