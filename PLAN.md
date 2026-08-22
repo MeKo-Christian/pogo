@@ -262,96 +262,224 @@ About 15,000 lines of source.
 
 # Phases
 
-No week estimates. The old plan's 23-week schedule was fiction. Each task names a
-file or a command, and each carries an acceptance test that describes what must
-be true **after** it — not what happens to be true now. An acceptance test that
-cannot fail is not one.
+No week estimates. The old plan's 23-week schedule was fiction. Every task names
+a file or a command, breaks into checkable subtasks, and carries an acceptance
+test that describes what must be true **after** it — not what happens to be true
+now. An acceptance test that cannot fail is not one.
+
+Checkboxes are the working state: `[x]` is done and committed, `[ ]` is not.
 
 ## Phase 0 — A clean base
 
-Done. Recorded here because the rest builds on it.
+Done. Recorded because the rest builds on it, and because two of its tasks were
+not foreseen.
 
-- **T0.1** Commit the treefmt formatting pass as its own `style:` commit.
-  _Accept:_ `just check-formatted` exits 0.
-- **T0.2** Enable revive's `file-length-limit` at 1500 in `.golangci.toml`.
-  _Accept:_ the limit produces findings rather than being inert.
-- **T0.3** Point the orientation scenarios at `testdata/images/rotated/rotated_45.png`;
-  `testdata/images/rotated_text.png` does not exist.
-  _Accept:_ the "Orientation detection configuration" scenario passes.
-- **T0.4** Resolve testdata from the project root instead of the package CWD,
-  reusing `testutil.GetProjectRoot` / `GetFixturesDir`; delete the two untracked
-  symlinks that were propping this up.
-  _Accept:_ `go test ./internal/pipeline -run TestOCRAccuracy` finds its fixtures
-  with no symlink present anywhere in the tree.
-- **T0.5** Ignore coverage artifacts and `/overlays/`; delete the superseded
-  `GOAL.md`, `COMPARISON.md`, `WORK_INVOICE.md`, `QWEN.md`.
-  _Accept:_ `git status --porcelain` is empty on a clean checkout.
+### Task 0.1 — Commit the treefmt formatting pass
 
-_Exit: working tree clean, `just build` green, `just check-formatted` green._
+- [x] Stage the ~40 files touched only by gofumpt, gci and prettier
+- [x] Keep them apart from the intentional edits so later diffs stay readable
+- [x] Commit as `style: apply treefmt across the tree` (`5ab2473`)
+
+**Accept:** the formatting churn is one commit and contains no behaviour change.
+
+### Task 0.2 — Enable revive's file-length limit
+
+- [x] Add `revive` to the enabled linters in `.golangci.toml`
+- [x] Configure `file-length-limit` at 1500 lines, counting comments and blanks
+- [x] Confirm the rule actually fires (`internal/pdf/hybrid_test.go`, 1623 lines)
+
+**Accept:** the limit produces a finding rather than being inert.
+
+### Task 0.3 — Point the orientation scenarios at an existing fixture
+
+- [x] Replace `testdata/images/rotated_text.png` — which exists nowhere in the
+      repo — with `testdata/images/rotated/rotated_45.png` in
+      `configuration.feature` and `orientation_integration.feature`
+- [x] Note in the commit that the `orientation_integration.feature` edit is
+      inert until Task 3.11 writes the missing step definitions
+
+**Accept:** the "Orientation detection configuration" scenario passes.
+
+### Task 0.4 — Commit the regenerated overlay fixture
+
+- [x] Commit `overlays/simple_text_overlay.png` (`63dbfc7`)
+
+**Accept:** the working tree carries no unexplained binary diff.
+
+### Task 0.5 — Resolve testdata from the project root, not the CWD
+
+- [x] Reuse the existing `testutil.GetProjectRoot` and `testutil.GetFixturesDir`
+      rather than adding a new helper
+- [x] Join `ocr_accuracy.json` and each fixture image path against the root in
+      `internal/pipeline/accuracy_test.go`
+- [x] Delete `internal/pipeline/testdata` and the self-referential
+      `testdata/testdata` symlink that were propping the old paths up
+- [x] Run one accuracy subtest to prove the paths resolve without them
+
+**Accept:** `go test ./internal/pipeline -run TestOCRAccuracy` finds its fixtures
+with no symlink present anywhere in the tree.
+
+### Task 0.6 — Ignore coverage artifacts and generated overlays
+
+- [x] Add `coverage_*.out`, `*_coverage.out` and `/overlays/` to `.gitignore`
+- [x] Delete the nine stale coverage files from the working tree
+
+**Accept:** a full test-and-coverage run leaves `git status --porcelain` empty.
+
+### Task 0.7 — Remove superseded planning documents
+
+- [x] Delete `GOAL.md` (56 KB), `COMPARISON.md`, `WORK_INVOICE.md`
+- [x] Delete the 0-byte `QWEN.md`
+
+**Accept:** no document in the repo describes scope the project has dropped.
+
+### Task 0.8 — Repair `docs/openapi.yaml`
+
+Unforeseen. Found while checking Phase 0's own exit criterion.
+
+- [x] Fix the mis-indented `properties` block under the `/ocr/pdf` request body
+      (line 88), which made the file invalid YAML
+- [x] Understand the blast radius: yamlfmt aborts its entire pass on one parse
+      error, so **no YAML file in the repo had ever been formatted**
+- [x] Let the formatter reflow the four other YAML files
+
+**Accept:** `python3 -c "import yaml; yaml.safe_load(open('docs/openapi.yaml'))"`
+succeeds, and yamlfmt processes the YAML set instead of bailing out.
+
+### Task 0.9 — Let yamlfmt own YAML formatting
+
+Unforeseen. `just check-formatted` still failed on a byte-identical tree.
+
+- [x] Diagnose: prettier and yamlfmt both claimed `*.yaml`/`*.yml`, so each run
+      rewrote `docs/openapi.yaml` and tripped `--fail-on-change`
+- [x] Drop YAML from prettier's `includes` in `treefmt.toml`
+- [x] Verify idempotency by running the check three times
+
+**Accept:** `just check-formatted` exits 0, and exits 0 again immediately after.
+
+_Phase 0 exit: working tree clean, `just build` green, `just check-formatted`
+green and idempotent._
 
 ## Phase 1 — Make it read "Hello"
 
-### 1.1 Make the harness able to fail first
+The harness is made able to fail first, then the two defects are fixed against
+it. Tasks 1.1–1.3 must land before 1.4, or there is nothing to measure against.
 
-- **T1.1** Raise every case in `ocr_accuracy.json` to exact match
-  (`min_similarity`, `min_car`, `min_war` all `1.0`).
-  _Accept:_ the suite fails, printing actual vs expected for every wrong case.
-  This failure is the baseline the rest of the phase is measured against.
-- **T1.2** Hand-key a real `expected` string for `german_text.png`, replacing
-  `""` and the `contains_any` fallback.
-  _Accept:_ the case asserts a concrete string; no case in the file has an empty
-  `expected`.
-- **T1.3** Default `accuracy_test.go:89` to the mobile models; keep the server
-  models behind `POGO_ACCURACY_MODELS=server`.
-  _Accept:_ `go test ./internal/pipeline` finishes in under 60 s (it takes 715 s
-  today, almost all of it this one test).
+### Task 1.1 — Raise every fixture to exact match
 
-### 1.2 Assert the class count at load
+- [ ] Set `min_similarity`, `min_car` and `min_war` to `1.0` for all 14 cases in
+      `testdata/fixtures/ocr_accuracy.json`
+- [ ] Run the suite and record the failure output verbatim in the commit message
+- [ ] Confirm the failures are the expected ones: `Hellg`, `Hor1c`, `""`,
+      `Samele`, `Rotatedlext`, `Rot.at.ectext.`, `scannecoccument.`, `Haoetr`
 
-- **T1.4** Read the recognizer's real output class count from the ONNX output
-  shape at init. `internal/onnx` already exposes I/O info; the seam is
-  `recognizer.go:185-203`.
-  _Accept:_ a unit test asserts 18385 for both bundled recognizer models, read
-  from the graph rather than hardcoded.
-- **T1.5** Fail recognizer construction when
-  `charset size + specials != model classes`, naming both numbers in the error.
-  _Accept:_ loading PP-OCRv5 rec with `ppocr_keys_v1.txt` (142 lines) returns an
-  error containing both `18385` and `143`; loading it with `ppocrv5_dict.txt`
-  returns no error. A dictionary/model mismatch can no longer reach inference.
+**Accept:** the suite fails, printing actual vs expected for every wrong case.
+That failure is the baseline the rest of the phase is measured against.
 
-### 1.3 The space token
+### Task 1.2 — Give `german_text.png` a real expectation
 
-- **T1.6** Add an explicit append-space step to charset loading in
-  `dictionary.go`, off by default and on for PP-OCRv5.
-  _Accept:_ charset size becomes 18384 and T1.5 passes with the real dictionary.
-- **T1.7** Verify the decode index mapping end to end.
-  _Accept:_ `rotated/rotated_0.png` recognizes as `Rotated Text`, with the space.
-  A test asserts on the space specifically, so its loss cannot regress silently.
+- [ ] Read the image and hand-key its actual text
+- [ ] Replace `expected: ""` with that string
+- [ ] Delete the `contains_any` / `min_contains` fallback, which is the only
+      thing that case ever asserted
 
-### 1.4 One normalizer, parameterized
+**Accept:** no case in the file has an empty `expected`, and grepping for
+`contains_any` returns nothing.
 
-- **T1.8** Collapse `NormalizeImage` / `NormalizeImageIntoBuffer` /
-  `NormalizeImagePooled` (`image_processing.go:154/197/233`) into one
-  implementation taking scale, mean and std; keep the buffer and pooled variants
-  as thin wrappers over it.
-  _Accept:_ a table test checks one known pixel through both a `[0,1]` and a
-  `[-1,1]` parameterization; the three entry points produce identical values.
-- **T1.9** Detector passes ImageNet mean/std; recognizer passes `0.5/0.5`.
-  Update the `rectify` and `orientation` call sites too.
-  _Accept:_ per-consumer tests assert the resulting tensor's range — recognizer
-  input reaches negative values, detector input is ImageNet-centred.
-- **T1.10** Replace the hardcoded channel literal `3` (`preprocess.go:188,203`,
-  `detector.go:143`) with a value carried on the config path.
-  _Accept:_ `grep -rn "NewImageTensor(.*, 3," internal/` returns nothing.
+### Task 1.3 — Stop the accuracy test from taking twelve minutes
 
-### 1.5 Declare, don't infer
+- [ ] Default `accuracy_test.go:89` to the mobile detection and recognition
+      models instead of the server ones
+- [ ] Keep the server models reachable via `POGO_ACCURACY_MODELS=server`
+- [ ] Record both models' CER in the commit message, so the trade is explicit
 
-- **T1.11** Replace `determineClassesFirst` (`inference.go:527`) with a declared
-  `NTC`/`NCT` layout on the recognizer config, and make `blankIndex` a field
-  rather than the literal at `inference.go:190` and `:501`.
-  _Accept:_ synthetic-tensor tests decode correctly under both layouts, and a
-  declared layout that contradicts the model's actual shape is a load-time error
-  rather than a silent fallback.
+**Accept:** `go test ./internal/pipeline` finishes in under 60 s. It takes 715 s
+today, almost all of it this one test.
+
+### Task 1.4 — Read the model's real class count
+
+- [ ] Find the output-shape accessor already exposed by `internal/onnx`
+- [ ] Read the recognizer's output class count at init; the seam is
+      `loadCharsetForRecognizer`, `recognizer.go:185-203`
+- [ ] Surface it on the recognizer so Task 1.5 can assert against it
+
+**Accept:** a unit test asserts 18385 for both bundled recognizer models, read
+from the graph rather than hardcoded.
+
+### Task 1.5 — Make a dictionary/model mismatch a startup error
+
+- [ ] Fail recognizer construction when
+      `charset size + specials != model classes`
+- [ ] Name both numbers in the error message
+- [ ] Add the negative test: PP-OCRv5 rec + `ppocr_keys_v1.txt` (142 lines)
+- [ ] Add the positive test: PP-OCRv5 rec + `ppocrv5_dict.txt`
+
+**Accept:** the negative case returns an error containing both `18385` and
+`143`; the positive case returns no error. A mismatch can no longer reach
+inference at all.
+
+### Task 1.6 — Append the space token
+
+- [ ] Add an explicit append-space step to charset loading in `dictionary.go`,
+      off by default
+- [ ] Turn it on for PP-OCRv5
+- [ ] Leave `dictionary.go:75`'s empty-line skip alone — the fix is code, not a
+      blank line in the dictionary file
+
+**Accept:** charset size becomes 18384 and Task 1.5's assertion passes with the
+real dictionary.
+
+### Task 1.7 — Prove the decode index mapping end to end
+
+- [ ] Trace `inference.go:229`'s `LookupToken(idx - 1)` against the new size
+- [ ] Add a test asserting on the space character specifically, not just on
+      overall similarity
+
+**Accept:** `rotated/rotated_0.png` recognizes as `Rotated Text`, with the
+space — and losing the space again turns a test red rather than shaving a
+similarity score.
+
+### Task 1.8 — Collapse the three normalizers into one
+
+- [ ] Write one implementation taking scale, mean and std
+- [ ] Reduce `NormalizeImage`, `NormalizeImageIntoBuffer` and
+      `NormalizeImagePooled` (`image_processing.go:154/197/233`) to thin
+      wrappers that differ only in how they allocate
+- [ ] Add a table test covering a known pixel through both a `[0,1]` and a
+      `[-1,1]` parameterization
+
+**Accept:** the three entry points produce identical values for identical
+parameters, and the arithmetic exists in exactly one place.
+
+### Task 1.9 — Give each consumer its own constants
+
+- [ ] Detector passes ImageNet mean/std
+- [ ] Recognizer passes `0.5/0.5`, yielding `(x/255 - 0.5) / 0.5`
+- [ ] Update the `internal/rectify` and `internal/orientation` call sites
+- [ ] Assert the resulting tensor range per consumer
+
+**Accept:** recognizer input reaches negative values; detector input is
+ImageNet-centred. Neither is `[0,1]` any more.
+
+### Task 1.10 — Stop hardcoding the channel count
+
+- [ ] Replace the literal `3` at `preprocess.go:188`, `preprocess.go:203` and
+      `detector.go:143` with a value carried on the config path
+
+**Accept:** `grep -rn "NewImageTensor(.*, 3," internal/` returns nothing.
+
+### Task 1.11 — Declare the CTC layout instead of inferring it
+
+- [ ] Add an `NTC`/`NCT` layout field to the recognizer config
+- [ ] Delete `determineClassesFirst` (`inference.go:527-548`)
+- [ ] Make `blankIndex` a field, replacing the literals at `inference.go:190`
+      and `inference.go:501`
+- [ ] Validate the declared layout against the model's actual output shape at
+      load
+
+**Accept:** synthetic-tensor tests decode correctly under both layouts, and a
+declared layout contradicting the model is a load-time error rather than a
+silent fallback that happens to be right.
 
 _Phase 1 exit: all 14 fixtures pass at exact match. `TestProcessImage_Smoke`
 reads `hello`, not `hel1o`. Both failing `TestRecognizeBatch` tests are green.
@@ -360,35 +488,56 @@ package takes over 60 s._
 
 ## Phase 2 — Measure something real
 
-### 2.1 Take the thresholds away from the data
+### Task 2.1 — Take the thresholds away from the ground truth
 
-- **T2.1** Split `ocr_accuracy.json` into a corpus manifest carrying only
-  `image` and `expected`.
-  _Accept:_ the file contains no `min_*` key. Grepping for one returns nothing.
-- **T2.2** Define one corpus-level gate in code: mean CER, mean WER, exact-match
-  count.
-  _Accept:_ degrading any single case fails the corpus gate, and there is no
-  per-case knob that can silence it.
+- [ ] Reduce `ocr_accuracy.json` to a manifest of `image` and `expected` only
+- [ ] Delete `MinSimilarity`, `MinCAR`, `MinWAR`, `MinAvgConf`, `MinContains`
+      from the `accuracyCase` struct (`accuracy_test.go:17-26`)
 
-### 2.2 `pogo eval`
+**Accept:** grepping the manifest for `min_` returns nothing. A failing case can
+no longer be fixed by editing its own row.
 
-- **T2.3** Promote the harness in `accuracy_test.go` into
-  `pogo eval <corpus-dir>`, printing per-case and aggregate CER/WER.
-  _Accept:_ `pogo eval ./testdata/corpus` prints a table and exits 0.
-- **T2.4** Commit a baseline per corpus; `eval` compares against it and exits
-  non-zero on regression.
-  _Accept:_ deliberately truncating the dictionary makes `pogo eval` exit 1 and
-  name the metric that moved.
+### Task 2.2 — Define one corpus-level gate
 
-### 2.3 A corpus that isn't synthetic
+- [ ] Express the gate in code: mean CER, mean WER, exact-match count
+- [ ] Verify no per-case escape hatch survives anywhere on the path
 
-- **T2.5** Add at least 10 real scans, German included, with hand-keyed ground
-  truth under `testdata/corpus/real/`.
-  _Accept:_ every image is a real capture rather than a render, and each has
-  ground truth committed beside it.
-- **T2.6** Give the real corpus its own committed baseline.
-  _Accept:_ `pogo eval ./testdata/corpus/real` exits 0 and its CER is recorded
-  in the repo, so the next change has something to be compared against.
+**Accept:** degrading any single case fails the corpus gate, and there is no knob
+that silences it short of changing the gate itself.
+
+### Task 2.3 — Promote the harness into `pogo eval`
+
+- [ ] Move the CER/WER measurement out of `accuracy_test.go` into a command
+- [ ] Print per-case rows plus the aggregate
+- [ ] Keep the Go test as a thin caller so `go test` still gates the corpus
+
+**Accept:** `pogo eval ./testdata/corpus` prints a table and exits 0.
+
+### Task 2.4 — Commit a baseline and compare against it
+
+- [ ] Write a baseline file per corpus
+- [ ] Have `eval` compare and exit non-zero on regression, naming the metric
+- [ ] Prove it by truncating the dictionary and watching it fail
+
+**Accept:** a deliberate regression makes `pogo eval` exit 1 and say which metric
+moved and by how much.
+
+### Task 2.5 — Add a corpus that isn't synthetic
+
+- [ ] Collect at least 10 real scans, German included
+- [ ] Hand-key ground truth for each
+- [ ] Commit them under `testdata/corpus/real/` beside their ground truth
+
+**Accept:** every image is a real capture rather than a render. All 14 cases
+today are synthetic, which is why a wrong normalization constant survived.
+
+### Task 2.6 — Baseline the real corpus
+
+- [ ] Run `pogo eval` over it and commit the resulting baseline
+- [ ] Record the number in the commit message
+
+**Accept:** `pogo eval ./testdata/corpus/real` exits 0 and its CER is recorded in
+the repo, so the next change has something to be compared against.
 
 _Phase 2 exit: one committed CER/WER baseline per corpus. Nothing merges
 afterwards that moves CER the wrong way._
@@ -396,110 +545,247 @@ afterwards that moves CER the wrong way._
 ## Phase 3 — Cut
 
 Strictly leaf-first — the order below is the dependency order, and taking it out
-of order means editing code twice. Each task is one commit and ends with the same
-three checks: `go build ./...`, `go test ./...`, and `pogo eval` showing CER
-unchanged from the Phase 2 baseline. Only the extra acceptance criteria are
-listed per task.
+of order means editing the same code twice. Each task is one commit and ends with
+the same three checks, which are therefore not repeated per task:
 
-- **T3.1** Empty directories (`pkg/ocr/`, `internal/version/`,
-  `cmd/simple-model-test/`), plus `deployment/` and `.goreleaser.yaml`.
-  _Accept:_ no build reference to any of them remains.
-- **T3.2** `cmd/benchmark` + `internal/benchmark` (657 src). One caller each.
-  _Accept:_ the binary is gone and nothing imports the package.
-- **T3.3** `cmd/ocr/cmd/batch.go` + `internal/batch` (646). Re-home
-  `pipeline.CalculateParallelStats`, which `internal/batch/config.go` is the only
-  external user of.
-  _Accept:_ `pogo --help` no longer lists `batch`.
-- **T3.4** `cmd/ocr/cmd/serve.go` + `internal/server` (2,699), the four
-  `server_*.feature` files, and `support/server_*.go`.
-  _Accept:_ gorilla/websocket and the Prometheus client leave `go.mod`.
-- **T3.5** `cmd/ocr/cmd/pdf.go` + `internal/pdf` (2,834) +
-  `pipeline/process_pdf.go` + `pdf_processing.feature` + `testdata/documents/`.
-  _Accept:_ pdfcpu leaves `go.mod`.
-- **T3.6** `internal/barcode` + `pipeline/barcodes*.go` + the 12 barcode CLI
-  flags.
-  _Accept:_ **`go mod tidy -diff` exits 0.** This is the task that repairs
-  `just check-tidy`.
-- **T3.7** Pipeline dead code: `parallel.go`, `profile.go`, `monitor.go`,
-  `ProcessImages` (keep `ProcessImagesContext`), and `AdaptiveWorkerPool` from
-  `resources.go`. `ResourceManager` and `MemoryMonitor` stay — `pipeline.go`
-  wires them.
-  _Accept:_ `resources_test.go` shrinks rather than breaking.
-- **T3.8** Detector dead code: `batch.go`'s `RunBatchInference`, `benchmark.go`,
-  `DefaultAdaptiveNMSThresholds`. `multiscale.go`, `adaptive_threshold.go` and
-  the NMS variants stay.
-  _Accept:_ the `--det-multiscale` flag still works and the YAML-configured
-  adaptive NMS path still has a test.
-- **T3.9** `internal/rectify` (978) + `internal/orientation` (902), their config
-  fields, and the three `internal/recognizer` call sites.
-  _Accept:_ the config struct loses every rectify and orientation field, and no
-  flag referencing them survives in `--help`.
-- **T3.10** `internal/mempool` (130 src, 1,007 test) — last, because it has 12
-  call sites across detector, recognizer and utils.
-  _Accept:_ `pogo eval` wall-clock is not materially worse than before the
-  removal; if it is, that is a real finding and pooling comes back with a
-  benchmark that justifies it.
-- **T3.11** Godog: delete the features for deleted subsystems, write step
-  definitions for what survives, set `godog.Options{Strict: true}`, and fix
-  `just test-integration` — it runs `-run "Integration"` while the entry point
-  is `TestFeatures`, so today it runs no scenarios at all.
-  _Accept:_ zero undefined and zero failing scenarios, and removing any single
-  step definition turns the suite red instead of silently passing. (Today: 179
-  scenarios, 76 pass, 64 fail, 39 undefined and invisible.)
-- **T3.12** Clear the remaining golangci-lint findings in the surviving code.
-  _Accept:_ `just lint` exits 0.
+- [ ] `go build ./...` green
+- [ ] `go test ./...` green
+- [ ] `pogo eval` CER unchanged from the Phase 2 baseline
+
+### Task 3.1 — Delete the empty and premature
+
+- [ ] `pkg/ocr/`, `internal/version/`, `cmd/simple-model-test/` — all three are
+      empty directories
+- [ ] `deployment/` and `.goreleaser.yaml` — premature; `--version` prints a
+      hardcoded string regardless
+
+**Accept:** no build reference to any of them remains.
+
+### Task 3.2 — Delete the benchmark binary and package
+
+- [ ] `cmd/benchmark` (117 LOC) and `internal/benchmark` (540 LOC)
+- [ ] Confirm `internal/benchmark` had exactly one caller before removing it
+
+**Accept:** nothing imports the package and the binary is gone. `pogo eval`
+replaces it, measuring accuracy rather than speed.
+
+### Task 3.3 — Delete the batch command and package
+
+- [ ] Re-home `pipeline.CalculateParallelStats` — `internal/batch/config.go` is
+      its only external user, and Task 3.7 needs it gone from `parallel.go`
+- [ ] `cmd/ocr/cmd/batch.go` (242 LOC) and `internal/batch` (646 LOC)
+
+**Accept:** `pogo --help` no longer lists `batch`. A `for` loop over `Read()`
+belongs in `cmd/`.
+
+### Task 3.4 — Delete the server
+
+- [ ] `cmd/ocr/cmd/serve.go` (452 LOC, ~106 flags) and `internal/server` (2,699)
+- [ ] The four `server_*.feature` files and `test/integration/cli/support/server_*.go`
+- [ ] `docs/openapi.yaml`, which documents only this API
+
+**Accept:** gorilla/websocket and the Prometheus client leave `go.mod`.
+
+### Task 3.5 — Delete PDF
+
+- [ ] `cmd/ocr/cmd/pdf.go` (722 LOC, ~65 flags) and `internal/pdf` (2,834)
+- [ ] `internal/pipeline/process_pdf.go`, the second of the two divergent
+      implementations
+- [ ] `pdf_processing.feature` and `testdata/documents/`
+
+**Accept:** pdfcpu leaves `go.mod`. Nothing is fixed on the way out — the
+one-line bug at `pdf.go:687` goes with the file.
+
+### Task 3.6 — Delete barcodes and unblock `go mod tidy`
+
+- [ ] `internal/barcode` (337 LOC) and `internal/pipeline/barcodes*.go` (237)
+- [ ] The 12 barcode flags across the surviving commands
+- [ ] Confirm the dependency actually leaves the module graph
+
+**Accept:** **`go mod tidy -diff` exits 0.** This is the task that repairs
+`just check-tidy`, which fails today because `gozxing_backend.go` imports
+`gozxing/pdf417` — a package that exists in no published version of that module.
+
+### Task 3.7 — Delete pipeline dead code
+
+- [ ] `parallel.go` (411 LOC) — its four exported entry points have zero
+      non-test callers
+- [ ] `profile.go` (39) and `monitor.go` (27) — self-references only
+- [ ] `ProcessImages`, keeping `ProcessImagesContext`
+- [ ] `AdaptiveWorkerPool` from `resources.go` (~98 LOC), keeping
+      `ResourceManager` and `MemoryMonitor` — `pipeline.go` wires both
+
+**Accept:** `resources_test.go` shrinks rather than breaking. This is a partial
+file delete, not a whole one; getting it wrong takes live code with it.
+
+### Task 3.8 — Delete detector dead code
+
+- [ ] `batch.go`'s `RunBatchInference` (202 LOC + 333 test)
+- [ ] `benchmark.go` (141 LOC)
+- [ ] `DefaultAdaptiveNMSThresholds` (`nms.go:25`)
+- [ ] Leave `multiscale.go`, `adaptive_threshold.go` and the NMS variants alone
+
+**Accept:** `--det-multiscale` still works and the YAML-configured adaptive NMS
+path still has a test. Those paths have no CLI flag but are reachable through
+config (`config/loader.go:271-272`, `detector/postprocess_onnx.go:66-96`).
+
+### Task 3.9 — Delete rectify and orientation
+
+- [ ] `internal/rectify` (978 LOC) — UVDoc is off by default and the DocTR path
+      is dead, its model file absent
+- [ ] `internal/orientation` (902 LOC) — off by default, four overlapping
+      escape hatches
+- [ ] Their fields in `internal/config`
+- [ ] The three orientation call sites in `internal/recognizer`
+- [ ] Salvage the homography and warping code into `internal/detect` for crop
+      rectification before deleting the rest
+
+**Accept:** the config struct loses every rectify and orientation field, and no
+flag referencing them survives in `--help`.
+
+### Task 3.10 — Delete mempool
+
+- [ ] `internal/mempool`: 130 lines of source against 1,007 lines of tests
+- [ ] Its 12 call sites across `internal/detector`, `internal/recognizer` and
+      `internal/utils`
+- [ ] Compare `pogo eval` wall-clock before and after
+
+**Accept:** no material slowdown. If there is one, that is a real finding, and
+pooling comes back with the benchmark that justifies it — which is more than it
+has today.
+
+### Task 3.11 — Make the godog suite mean something
+
+- [ ] Delete the feature files for every subsystem removed above
+- [ ] Write step definitions for what survives — 39 scenarios currently have
+      none and are invisible
+- [ ] Set `godog.Options{Strict: true}` so undefined steps fail
+- [ ] Fix `just test-integration`: it runs `-run "Integration"` while the entry
+      point is `TestFeatures`, so today it runs no scenarios at all
+
+**Accept:** zero undefined and zero failing scenarios, and deleting any single
+step definition turns the suite red. Today: 179 scenarios, 76 pass, 64 fail,
+39 undefined and silent.
+
+### Task 3.12 — Clear the lint backlog
+
+- [ ] Work through the remaining golangci-lint findings in surviving code
+- [ ] Expect the count to fall well below 131 on deletions alone; fix the rest
+
+**Accept:** `just lint` exits 0.
 
 _Phase 3 exit: `internal/` source under 6,000 lines. **`just check` exits 0** —
 all four steps, for the first time. CER unchanged from Phase 2._
 
 ## Phase 4 — The library exists
 
-- **T4.1** Define the `Detector` and `Recognizer` interfaces in `pkg/pogo`.
-  _Accept:_ a fake detector and fake recognizer drive the pipeline in a unit test
-  with no ONNX runtime loaded at all.
-- **T4.2** Make `pipeline.Pipeline` hold those interfaces instead of the concrete
-  structs at `pipeline.go:512-521`.
-  _Accept:_ CER unchanged; the fakes from T4.1 substitute cleanly.
-- **T4.3** Implement `Engine` — `Open` / `Read` / `Close` — plus `Result`,
-  `Line` and `Quad`.
-  _Accept:_ `go doc ./pkg/pogo` fits on one screen.
-- **T4.4** Reduce `cmd/pogo` to a thin consumer: roughly 12 flags instead of
-  ~272, and a config struct of roughly 15 fields instead of 99.
-  _Accept:_ `pogo image --help` fits in one terminal page and every remaining
-  flag has a test that exercises it.
-- **T4.5** Add `example_test.go` and a scratch-module smoke check.
-  _Accept:_ a 20-line `main.go` in a module **outside** this repo imports pogo
-  and prints boxes with text and confidence.
+### Task 4.1 — Define the seams
+
+- [ ] Declare `Detector` and `Recognizer` in `pkg/pogo`
+- [ ] Delete the dead test scaffolding at `parallel_test.go:322,330`, which
+      declared such interfaces and never used them
+- [ ] Write a fake of each
+
+**Accept:** the fakes drive the pipeline in a unit test with no ONNX runtime
+loaded at all.
+
+### Task 4.2 — Make the pipeline hold interfaces
+
+- [ ] Replace the concrete structs at `pipeline.go:512-521` with the interfaces
+- [ ] Substitute the Task 4.1 fakes in a test
+
+**Accept:** CER unchanged, and the pipeline can be exercised without models.
+
+### Task 4.3 — Implement `Engine`
+
+- [ ] `Open`, `Read`, `Close`
+- [ ] `Result`, `Line`, `Quad`
+- [ ] Document every exported symbol
+
+**Accept:** `go doc ./pkg/pogo` fits on one screen.
+
+### Task 4.4 — Reduce the CLI to a consumer
+
+- [ ] Cut roughly 272 flag declarations to about 12
+- [ ] Cut the config struct from 99 fields to about 15
+- [ ] Give every surviving flag a test that exercises it
+
+**Accept:** `pogo image --help` fits in one terminal page, and no flag exists
+that nothing tests.
+
+### Task 4.5 — Prove it is importable
+
+- [ ] Add `example_test.go`
+- [ ] Write a scratch-module smoke check outside the repo
+
+**Accept:** a 20-line `main.go` in a module **outside** this repo imports pogo
+and prints boxes with text and confidence.
 
 _Phase 4 exit: that scratch module compiles and prints correct text._
 
 ## Phase 5 — The model is swappable
 
-- **T5.1** `ModelSpec` type and YAML loader (`kind`, `decode`, `input`, `ctc`,
-  `charset`).
-  _Accept:_ a spec whose `assert_classes` does not match the model is a load-time
-  error naming both numbers — this subsumes the hand-rolled check from T1.5.
-- **T5.2** Drive preprocessing from `input:` and decoding from `ctc:`.
-  _Accept:_ changing `mean` or `std` in the YAML changes the produced tensor,
-  with no recompile.
-- **T5.3** Write sidecar specs for the four bundled models and delete
-  `internal/models/paths.go`.
-  _Accept:_ a missing model produces an error naming the path that was searched,
-  not `Protobuf parsing failed`; and an installed binary run outside a Go module
-  resolves its models correctly.
-- **T5.4** Model store: a manifest of name → URL + sha256, and
-  `pogo models pull` fetching into `~/.cache/pogo/models`.
-  _Accept:_ with an empty cache, `pogo models pull && pogo image x.png` works;
-  a corrupted download fails its checksum and is not cached.
-- **T5.5** Untrack the weights, fix the ignore pattern to `/models/**/*.onnx`,
-  and teach CI to pull. No history rewrite.
-  _Accept:_ `git ls-files models | grep '\.onnx$'` is empty, and a fresh clone
-  plus `pogo models pull` passes `pogo eval`.
-- **T5.6** Prove swappability.
-  _Accept:_ a second, structurally different recognizer runs end to end via a new
-  YAML file and **zero Go changes**.
+### Task 5.1 — `ModelSpec` and its loader
 
-_Phase 5 exit: T5.6 passes and no weights remain in the working tree._
+- [ ] Define the type: `kind`, `decode`, `input`, `ctc`, `charset`
+- [ ] Write the YAML loader
+- [ ] Implement `assert_classes` against the model's real output shape
+
+**Accept:** a spec whose `assert_classes` does not match is a load-time error
+naming both numbers. This subsumes the hand-rolled check from Task 1.5.
+
+### Task 5.2 — Drive preprocessing and decoding from the spec
+
+- [ ] Preprocessing reads `input:` — scale, mean, std, layout, channels, resize
+- [ ] Decoding reads `ctc:` — `blank_index`, `layout`
+- [ ] Charset loading reads `charset:` — including `append_space`
+
+**Accept:** changing `mean` or `std` in the YAML changes the produced tensor,
+with no recompile.
+
+### Task 5.3 — Retire `internal/models/paths.go`
+
+- [ ] Write sidecar specs for the four bundled models
+- [ ] Delete the hardcoded filenames (`:13-29`)
+- [ ] Delete the walk-up-for-`go.mod` heuristic (`:53-75`), which breaks for
+      installed binaries
+- [ ] Delete `ResolveModelPath`'s fallback to a flat path it never stats
+      (`:108-128`)
+
+**Accept:** a missing model produces an error naming the path searched, not
+`Protobuf parsing failed`; and an installed binary run outside a Go module
+resolves its models correctly.
+
+### Task 5.4 — The model store
+
+- [ ] Write a manifest of name → URL + sha256
+- [ ] Implement `pogo models pull` into `~/.cache/pogo/models`
+- [ ] Verify checksums and refuse to cache a bad download
+
+**Accept:** with an empty cache, `pogo models pull && pogo image x.png` works;
+a corrupted download fails its checksum and is not cached.
+
+### Task 5.5 — Get the weights out of the working tree
+
+- [ ] `git rm --cached` the 12 tracked `.onnx` files (229 MB)
+- [ ] Fix the ignore pattern to `/models/**/*.onnx` — `/models/*.onnx` never
+      matched the nested paths, which is exactly how they got committed
+- [ ] Teach CI to pull models before testing
+- [ ] No history rewrite: `.git` stays 274 MB, by decision, so no clone breaks
+
+**Accept:** `git ls-files models | grep '\.onnx$'` is empty, and a fresh clone
+plus `pogo models pull` passes `pogo eval`.
+
+### Task 5.6 — Prove swappability
+
+- [ ] Pick a structurally different recognizer
+- [ ] Write its spec — around 15 lines of YAML
+- [ ] Run it end to end
+
+**Accept:** it works with **zero Go changes**. If any Go file had to change, the
+spec is not yet the description of the model.
+
+_Phase 5 exit: Task 5.6 passes and no weights remain in the working tree._
 
 ## Verification
 
