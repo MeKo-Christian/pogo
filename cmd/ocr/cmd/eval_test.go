@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/MeKo-Tech/pogo/internal/eval"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -71,4 +72,34 @@ func TestEvalFindsTheBundledCorpus(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, manifests, 1)
 	assert.Contains(t, manifests[0], filepath.Join("synthetic", "manifest.json"))
+}
+
+// A negative tolerance would report every metric as moved, which is the
+// opposite of what the flag is for.
+func TestEvalRejectsANegativeTolerance(t *testing.T) {
+	err := runEvalCmd(t, "testdata", "--tolerance", "-0.1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be negative")
+}
+
+// A failing run says which of the three things went wrong, because they lead to
+// different next steps.
+func TestFailureReasonsNameTheActualProblem(t *testing.T) {
+	tests := []struct {
+		name   string
+		report evalReport
+		want   string
+	}{
+		{"gate", evalReport{violations: []eval.Violation{{Group: "upright", Metric: "mean CER"}}}, "1 gate violation(s)"},
+		{"regression", evalReport{changes: []eval.Change{{Group: "upright", Regression: true}}}, "1 regression(s)"},
+		{"baseline", evalReport{baselineErr: assert.AnError}, "1 baseline(s) could not be compared"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reasons := failureReasons([]evalReport{tt.report})
+			require.Len(t, reasons, 1)
+			assert.Contains(t, reasons[0], tt.want)
+		})
+	}
+	assert.Empty(t, failureReasons([]evalReport{{}}))
 }

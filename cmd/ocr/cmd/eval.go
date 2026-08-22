@@ -98,12 +98,35 @@ func runEval(cmd *cobra.Command, args []string) error {
 	if err := writeEvalReports(cmd.OutOrStdout(), reports); err != nil {
 		return err
 	}
-	for _, r := range reports {
-		if !r.passed() {
-			return errors.New("evaluation failed: see the violations above")
-		}
+	if reasons := failureReasons(reports); len(reasons) > 0 {
+		return fmt.Errorf("evaluation failed: %s", strings.Join(reasons, ", "))
 	}
 	return nil
+}
+
+// failureReasons names why a run failed, in the operator's terms. A gate
+// violation, a regression against the baseline and an unusable baseline are
+// three different problems and lead to three different next steps.
+func failureReasons(reports []evalReport) []string {
+	var gates, regressions, baselines int
+	for _, r := range reports {
+		gates += len(r.violations)
+		regressions += len(eval.Regressions(r.changes))
+		if r.baselineErr != nil {
+			baselines++
+		}
+	}
+	var reasons []string
+	if gates > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d gate violation(s)", gates))
+	}
+	if regressions > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d regression(s) against the baseline", regressions))
+	}
+	if baselines > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d baseline(s) could not be compared", baselines))
+	}
+	return reasons
 }
 
 // evalCorpus measures one corpus. Rendering happens afterwards, once, so that a
@@ -164,6 +187,11 @@ func resolveCorpora(dir string) ([]string, error) {
 	if evalOpts.format != outputFormatText && evalOpts.format != outputFormatJSON {
 		return nil, fmt.Errorf("invalid format %q (must be %s or %s)",
 			evalOpts.format, outputFormatText, outputFormatJSON)
+	}
+	// A negative tolerance would report every metric as moved, inverting what
+	// the flag is for.
+	if evalOpts.tolerance < 0 {
+		return nil, fmt.Errorf("invalid tolerance %.4f (must not be negative)", evalOpts.tolerance)
 	}
 	manifests, err := findCorpora(dir)
 	if err != nil {

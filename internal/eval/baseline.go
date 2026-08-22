@@ -52,7 +52,9 @@ func (b Baseline) Save(path string) error {
 	if err != nil {
 		return fmt.Errorf("encode baseline: %w", err)
 	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+	// 0644 rather than 0600: a baseline is committed and read back in shared
+	// workspaces and CI. It holds measurements, not secrets.
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil { //nolint:gosec // G306: see above.
 		return fmt.Errorf("write baseline %s: %w", path, err)
 	}
 	return nil
@@ -75,7 +77,17 @@ type Change struct {
 	Regression bool
 }
 
+// Metric values that describe the group itself rather than one of its numbers.
+const (
+	newGroupMetric     = "not in the baseline; re-record with --update-baseline"
+	missingGroupMetric = "in the baseline but missing from this run"
+)
+
 func (c Change) String() string {
+	switch c.Metric {
+	case newGroupMetric, missingGroupMetric:
+		return fmt.Sprintf("group %q: %s", c.Group, c.Metric)
+	}
 	direction := "improved"
 	if c.Regression {
 		direction = "regressed"
@@ -85,9 +97,14 @@ func (c Change) String() string {
 }
 
 // Compare reports every metric that moved by more than tolerance, in either
-// direction. A group present in the baseline but missing from the run — or the
-// reverse — is reported as a regression, because a silently dropped group is
-// how a corpus stops measuring anything.
+// direction.
+//
+// A group in the baseline that the run no longer produces is a regression: a
+// silently dropped group is how a corpus stops measuring anything. The reverse —
+// a group the run produces that the baseline has never seen — is reported but is
+// not a regression, because there is nothing to compare it against yet; it is
+// still gated like every other group, and it moves the corpus-wide "overall"
+// summary, which is compared.
 func (b Baseline) Compare(groups []GroupSummary, overall GroupSummary,
 	models ModelIdentity, tolerance float64,
 ) ([]Change, error) {
@@ -102,7 +119,7 @@ func (b Baseline) Compare(groups []GroupSummary, overall GroupSummary,
 		seen[cur.Group] = true
 		was, ok := b.group(cur.Group)
 		if !ok {
-			changes = append(changes, Change{Group: cur.Group, Metric: "group", Regression: false})
+			changes = append(changes, Change{Group: cur.Group, Metric: newGroupMetric, Regression: false})
 			continue
 		}
 		changes = append(changes, compareMetrics(was, cur, tolerance)...)
@@ -110,7 +127,7 @@ func (b Baseline) Compare(groups []GroupSummary, overall GroupSummary,
 	for _, was := range b.Groups {
 		if !seen[was.Group] {
 			changes = append(changes, Change{
-				Group: was.Group, Metric: "group missing from this run", Was: float64(was.N), Regression: true,
+				Group: was.Group, Metric: missingGroupMetric, Was: float64(was.N), Regression: true,
 			})
 		}
 	}

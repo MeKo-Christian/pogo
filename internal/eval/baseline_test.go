@@ -10,10 +10,10 @@ import (
 )
 
 var (
-	mobileModels = ModelIdentity{Variant: "mobile", Fingerprint: "0123456789abcdef"}
+	mobileModels = ModelIdentity{Variant: variantMobile, Fingerprint: "0123456789abcdef"}
 	serverModels = ModelIdentity{Variant: "server", Fingerprint: "fedcba9876543210"}
 	// Same variant, different weights: --models-dir pointed somewhere else.
-	otherMobileModels = ModelIdentity{Variant: "mobile", Fingerprint: "aaaaaaaaaaaaaaaa"}
+	otherMobileModels = ModelIdentity{Variant: variantMobile, Fingerprint: "aaaaaaaaaaaaaaaa"}
 )
 
 // baselineFor is the reference measurement the Compare tests move away from.
@@ -104,7 +104,7 @@ func TestCompareFlagsAMissingGroup(t *testing.T) {
 	require.NoError(t, err)
 	regressions := Regressions(changes)
 	require.Len(t, regressions, 1)
-	assert.Contains(t, regressions[0].String(), "missing")
+	assert.Contains(t, regressions[0].String(), "missing from this run")
 }
 
 // The variant alone is not an identity: --models-dir can point "mobile" at
@@ -117,4 +117,20 @@ func TestCompareRejectsTheSameVariantWithDifferentWeights(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "0123456789abcdef")
 	assert.Contains(t, err.Error(), "aaaaaaaaaaaaaaaa")
+}
+
+// A group the baseline has never seen is reported, but it is not a regression:
+// there is nothing to compare it against yet. It is still gated, and it moves
+// the corpus-wide summary, which is compared.
+func TestCompareReportsANewGroupWithoutCallingItARegression(t *testing.T) {
+	base := baselineFor()
+	groups, overall := summaries(0.2, 0.6, 3)
+	groups = append(groups, GroupSummary{Group: GroupRotated, N: 5, MeanCER: 0.5, MeanWER: 1})
+
+	changes, err := base.Compare(groups, overall, mobileModels, 0.005)
+	require.NoError(t, err)
+	require.Len(t, changes, 1)
+	assert.Equal(t, GroupRotated, changes[0].Group)
+	assert.Contains(t, changes[0].String(), "not in the baseline")
+	assert.Empty(t, Regressions(changes))
 }

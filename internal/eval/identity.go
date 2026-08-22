@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 )
 
@@ -25,19 +26,26 @@ type ModelIdentity struct {
 // recognizer graphs and every dictionary — into one identity. Files are hashed
 // by content, so a rebuilt or swapped model is a different identity even at the
 // same path.
+//
+// Only the base name is folded in beside the content, never the directory. A
+// baseline is committed and has to match on any checkout: the same weights under
+// /home/runner/work and under /mnt/projekte must produce the same identity. The
+// name still tells two dictionaries with different roles apart.
 func Fingerprint(variant string, paths []string) (ModelIdentity, error) {
-	sorted := append([]string{}, paths...)
-	sort.Strings(sorted)
-	sum := sha256.New()
-	for _, p := range sorted {
+	entries := make([]string, 0, len(paths))
+	for _, p := range paths {
 		h, err := hashFile(p)
 		if err != nil {
 			return ModelIdentity{}, err
 		}
-		// The path is folded in as well, so moving a model to a different
-		// filename is visible even when the bytes are identical.
-		// Writing to a hash never fails.
-		_, _ = fmt.Fprintf(sum, "%s:%s\n", p, h)
+		entries = append(entries, filepath.Base(p)+":"+h)
+	}
+	// Sorted after hashing, so the order a caller happens to pass paths in does
+	// not change the identity.
+	sort.Strings(entries)
+	sum := sha256.New()
+	for _, e := range entries {
+		_, _ = fmt.Fprintln(sum, e) // writing to a hash never fails
 	}
 	return ModelIdentity{Variant: variant, Fingerprint: hex.EncodeToString(sum.Sum(nil))[:16]}, nil
 }
