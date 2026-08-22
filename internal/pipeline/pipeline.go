@@ -94,6 +94,14 @@ func (b *Builder) WithDictionaryPath(path string) *Builder {
 	return b
 }
 
+// WithAppendSpaceToken controls whether the trailing space class of a PaddleOCR
+// CTC head is appended to the charset. Pass false for a custom model whose class
+// count is dictionary tokens + CTC blank only.
+func (b *Builder) WithAppendSpaceToken(enabled bool) *Builder {
+	b.cfg.Recognizer.AppendSpaceToken = enabled
+	return b
+}
+
 // WithDictionaryPaths overrides the dictionary paths with a merged list.
 func (b *Builder) WithDictionaryPaths(paths []string) *Builder {
 	// Clean empty entries

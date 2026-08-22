@@ -23,6 +23,12 @@ import (
 // PP-OCRv5 recognition models: 1 CTC blank + 18383 dictionary tokens + 1 space.
 const ppocrv5Classes = 18385
 
+// Fixture names shared by the validation tests below.
+const (
+	recOutputName = "fetch_name_0"
+	stubDictPath  = "dict.txt"
+)
+
 // Task 1.4 -------------------------------------------------------------------
 
 func TestOutputClasses_BundledModels(t *testing.T) {
@@ -60,22 +66,43 @@ func TestOutputClasses_BundledModels(t *testing.T) {
 	}
 }
 
-func TestOutputClassCount(t *testing.T) {
+func TestResolveOutputClasses(t *testing.T) {
 	tests := []struct {
-		name string
-		dims []int64
-		want int
+		name     string
+		dims     []int64
+		expected int
+		want     int
 	}{
-		{name: "static class dim", dims: []int64{-1, -1, 18385}, want: 18385},
-		{name: "dynamic class dim", dims: []int64{-1, -1, -1}, want: 0},
-		{name: "zero class dim", dims: []int64{1, 1, 0}, want: 0},
-		{name: "empty", dims: nil, want: 0},
+		{name: "classes last, static", dims: []int64{-1, -1, 18385}, expected: 18385, want: 18385},
+		{name: "classes first, static", dims: []int64{-1, 18385, -1}, expected: 18385, want: 18385},
+		{name: "classes first, both static", dims: []int64{1, 18385, 40}, expected: 18385, want: 18385},
+		{name: "classes last, both static", dims: []int64{1, 40, 18385}, expected: 18385, want: 18385},
+		{name: "no match falls back to trailing axis", dims: []int64{-1, -1, 6625}, expected: 18385, want: 6625},
+		{name: "dynamic class dim", dims: []int64{-1, -1, -1}, expected: 18385, want: 0},
+		{name: "zero class dim", dims: []int64{1, 1, 0}, expected: 18385, want: 1},
+		{name: "empty", dims: nil, expected: 18385, want: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, outputClassCount(tt.dims))
+			assert.Equal(t, tt.want, resolveOutputClasses(tt.dims, tt.expected))
 		})
 	}
+}
+
+// A classes-first [N, C, T] output must not be rejected: determineClassesFirst
+// supports that layout, so validation has to identify the same axis.
+func TestValidateCharsetAgainstModel_ClassesFirstLayout(t *testing.T) {
+	cs := newCharset([]string{"a", "b", "c"}, CharsetOptions{})
+	info := onnxrt.InputOutputInfo{Name: recOutputName, Dimensions: onnxrt.NewShape(-1, 4, 25)}
+	require.NoError(t, validateCharsetAgainstModel(cs, info, Config{DictPath: stubDictPath}))
+}
+
+func TestValidateCharsetAgainstModel_MismatchHintsAtSpaceToken(t *testing.T) {
+	cs := newCharset([]string{"a", "b", "c"}, CharsetOptions{AppendSpace: true})
+	info := onnxrt.InputOutputInfo{Name: recOutputName, Dimensions: onnxrt.NewShape(-1, -1, 4)}
+	err := validateCharsetAgainstModel(cs, info, Config{DictPath: stubDictPath, AppendSpaceToken: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "append_space_token=false")
 }
 
 // Task 1.6 -------------------------------------------------------------------
@@ -186,8 +213,8 @@ func TestNewRecognizer_DictionaryModelMatch(t *testing.T) {
 
 func TestValidateCharsetAgainstModel_DynamicClassDimIsSkipped(t *testing.T) {
 	cs := newCharset([]string{"a", "b"}, CharsetOptions{})
-	info := onnxrt.InputOutputInfo{Name: "fetch_name_0", Dimensions: onnxrt.NewShape(-1, -1, -1)}
-	require.NoError(t, validateCharsetAgainstModel(cs, info, Config{DictPath: "dict.txt"}))
+	info := onnxrt.InputOutputInfo{Name: recOutputName, Dimensions: onnxrt.NewShape(-1, -1, -1)}
+	require.NoError(t, validateCharsetAgainstModel(cs, info, Config{DictPath: stubDictPath}))
 }
 
 // Task 1.7 -------------------------------------------------------------------
