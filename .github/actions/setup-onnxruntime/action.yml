@@ -16,8 +16,9 @@ runs:
     - name: Export ONNX Runtime environment
       shell: bash
       run: |
+        onnx_lib="${{ github.workspace }}/onnxruntime/lib"
         {
-          echo "CGO_CFLAGS=-I${{ github.workspace }}/onnxruntime/include"
-          echo "CGO_LDFLAGS=-L${{ github.workspace }}/onnxruntime/lib -lonnxruntime"
-          echo "LD_LIBRARY_PATH=${{ github.workspace }}/onnxruntime/lib"
+          echo "CGO_CFLAGS=${CGO_CFLAGS:+$CGO_CFLAGS }-I${{ github.workspace }}/onnxruntime/include"
+          echo "CGO_LDFLAGS=${CGO_LDFLAGS:+$CGO_LDFLAGS }-L$onnx_lib -lonnxruntime"
+          echo "LD_LIBRARY_PATH=$onnx_lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
         } >>"$GITHUB_ENV"

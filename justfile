@@ -60,6 +60,11 @@ go-onnx *ARGS:
 test:
     just go-onnx test -v ./...
 
+# Run the full suite without -short, with a timeout that fits the slow
+# end-to-end packages (the CLI feature suite exceeds go test's 10m default)
+test-full:
+    just go-onnx test -v -timeout 30m ./...
+
 # Run tests with coverage
 test-coverage:
     just go-onnx test -v -coverprofile=coverage.out ./...
