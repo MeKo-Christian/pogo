@@ -179,28 +179,70 @@ func applyPaddingIfNeeded(resized image.Image, newW, targetHeight, padToMultiple
 	return canvas, outW, targetHeight, nil
 }
 
-// NormalizeForRecognition converts an image to a float32 NCHW tensor in [0,1].
+// Recognition input normalization constants.
+//
+// The PaddleOCR recognition models expect input in [-1, 1]:
+//
+//	(pixel/255 - 0.5) / 0.5
+const (
+	// recognitionChannels is the number of input channels of the recognition model.
+	recognitionChannels = 3
+	// recognitionScale converts the raw 0..255 component to [0,1].
+	recognitionScale = 1.0 / 255.0
+	// recognitionMeanValue and recognitionStdValue centre [0,1] onto [-1,1].
+	recognitionMeanValue = 0.5
+	recognitionStdValue  = 0.5
+)
+
+// DefaultNormalizeParams returns the normalization parameters expected by the
+// recognition models: values scaled from [0,255] to [-1,1].
+func DefaultNormalizeParams() utils.NormalizeParams {
+	return utils.NormalizeParams{
+		Channels: recognitionChannels,
+		Scale:    recognitionScale,
+		Mean:     [3]float32{recognitionMeanValue, recognitionMeanValue, recognitionMeanValue},
+		Std:      [3]float32{recognitionStdValue, recognitionStdValue, recognitionStdValue},
+	}
+}
+
+// NormalizeForRecognition converts an image to a float32 NCHW tensor in [-1,1].
 func NormalizeForRecognition(img image.Image) (onnx.Tensor, error) {
-	data, w, h, err := utils.NormalizeImage(img)
+	return NormalizeForRecognitionWith(img, DefaultNormalizeParams())
+}
+
+// NormalizeForRecognitionWith converts an image to a float32 NCHW tensor using
+// the supplied normalization parameters.
+func NormalizeForRecognitionWith(img image.Image, p utils.NormalizeParams) (onnx.Tensor, error) {
+	data, w, h, err := utils.NormalizeImageWith(img, p)
 	if err != nil {
 		return onnx.Tensor{}, err
 	}
-	return onnx.NewImageTensor(data, 3, h, w)
+	return onnx.NewImageTensor(data, p.Channels, h, w)
 }
 
 // NormalizeForRecognitionWithPool normalizes using a reusable buffer pool.
 // Caller should return the provided buffer via mempool.PutFloat32 after it is no longer used.
 func NormalizeForRecognitionWithPool(img image.Image) (onnx.Tensor, []float32, error) {
+	return NormalizeForRecognitionWithPoolAnd(img, DefaultNormalizeParams())
+}
+
+// NormalizeForRecognitionWithPoolAnd normalizes using a reusable buffer pool and
+// the supplied normalization parameters.
+// Caller should return the provided buffer via mempool.PutFloat32 after it is no longer used.
+func NormalizeForRecognitionWithPoolAnd(
+	img image.Image,
+	p utils.NormalizeParams,
+) (onnx.Tensor, []float32, error) {
 	// Estimate required size from bounds
 	b := img.Bounds()
-	need := 3 * b.Dx() * b.Dy()
+	need := p.Channels * b.Dx() * b.Dy()
 	buf := mempool.GetFloat32(need)
-	data, w, h, err := utils.NormalizeImageIntoBuffer(img, buf)
+	data, w, h, err := utils.NormalizeImageIntoBufferWith(img, buf, p)
 	if err != nil {
 		mempool.PutFloat32(buf)
 		return onnx.Tensor{}, nil, err
 	}
-	ten, err := onnx.NewImageTensor(data, 3, h, w)
+	ten, err := onnx.NewImageTensor(data, p.Channels, h, w)
 	if err != nil {
 		mempool.PutFloat32(buf)
 		return onnx.Tensor{}, nil, err

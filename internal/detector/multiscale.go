@@ -62,14 +62,15 @@ func (d *Detector) detectRegionsMultiScale(img image.Image) ([]DetectedRegion, e
 		}
 
 		// Normalize without additional resizing
-		tensorData, width, height, err := utils.NormalizeImagePooled(scaled)
+		params := d.config.normalizeParams()
+		tensorData, width, height, err := utils.NormalizeImagePooledWith(scaled, params)
 		if err != nil {
 			slog.Warn("Multi-scale normalize failed, skipping scale", "scale", s, "error", err)
 			continue
 		}
 
 		// Create tensor and run inference
-		tensor, err := onnx.NewImageTensor(tensorData, 3, height, width)
+		tensor, err := onnx.NewImageTensor(tensorData, params.Channels, height, width)
 		if err != nil {
 			mempool.PutFloat32(tensorData)
 			slog.Warn("Multi-scale tensor creation failed, skipping scale", "scale", s, "error", err)

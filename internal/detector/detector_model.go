@@ -7,6 +7,7 @@ import (
 
 	"github.com/MeKo-Tech/pogo/internal/models"
 	"github.com/MeKo-Tech/pogo/internal/onnx"
+	"github.com/MeKo-Tech/pogo/internal/utils"
 	"github.com/yalue/onnxruntime_go"
 )
 
@@ -47,6 +48,52 @@ type Config struct {
 
 	// Multi-scale inference configuration
 	MultiScale MultiScaleConfig
+
+	// Normalize controls how pixels are converted into the input tensor.
+	Normalize utils.NormalizeParams
+}
+
+// Detection input normalization constants.
+//
+// The PaddleOCR detection models are trained on ImageNet-normalized input:
+// the pixel is scaled to [0,1] and then centred with the ImageNet mean/std.
+const (
+	// detectionChannels is the number of input channels of the detection model.
+	detectionChannels = 3
+	// detectionScale converts the raw 0..255 component to [0,1].
+	detectionScale = 1.0 / 255.0
+)
+
+var (
+	detectionMean = [3]float32{0.485, 0.456, 0.406}
+	detectionStd  = [3]float32{0.229, 0.224, 0.225}
+)
+
+// DefaultNormalizeParams returns the normalization parameters expected by the
+// detection models (ImageNet mean/std centring).
+func DefaultNormalizeParams() utils.NormalizeParams {
+	return utils.NormalizeParams{
+		Channels: detectionChannels,
+		Scale:    detectionScale,
+		Mean:     detectionMean,
+		Std:      detectionStd,
+	}
+}
+
+// normalizeParams returns the configured normalization parameters, falling back
+// to the detection defaults when the config was constructed as a bare literal
+// and therefore carries a zero-valued (unusable) NormalizeParams.
+func (c Config) normalizeParams() utils.NormalizeParams {
+	p := c.Normalize
+	if p.Channels <= 0 {
+		return DefaultNormalizeParams()
+	}
+	for _, s := range p.Std {
+		if s == 0 {
+			return DefaultNormalizeParams()
+		}
+	}
+	return p
 }
 
 // DefaultConfig returns a default detector configuration.
@@ -82,6 +129,9 @@ func DefaultConfig() Config {
 
 		// Multi-scale defaults
 		MultiScale: DefaultMultiScaleConfig(),
+
+		// Input normalization defaults (ImageNet mean/std)
+		Normalize: DefaultNormalizeParams(),
 	}
 }
 

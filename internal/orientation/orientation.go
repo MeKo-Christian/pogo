@@ -308,6 +308,32 @@ func (c *Classifier) predictWithONNX(img image.Image) (Result, error) {
 	return Result{Angle: angle, Confidence: confidence}, nil
 }
 
+// Orientation input normalization constants.
+//
+// These are deliberately the identity parameters, i.e. plain [0,1] scaling,
+// which is exactly what this package did before normalization became
+// configurable. What the PPLCNet orientation classifier actually expects is not
+// established in this repository, and guessing a mean/std here would silently
+// change classification output. The call site is parameterized so the values
+// can be corrected once they are known.
+const (
+	// orientationChannels is the number of input channels of the classifier.
+	orientationChannels = 3
+	// orientationScale converts the raw 0..255 component to [0,1].
+	orientationScale = 1.0 / 255.0
+)
+
+// defaultNormalizeParams returns the normalization parameters used for
+// orientation classification input (unchanged [0,1] scaling, see above).
+func defaultNormalizeParams() utils.NormalizeParams {
+	return utils.NormalizeParams{
+		Channels: orientationChannels,
+		Scale:    orientationScale,
+		Mean:     [3]float32{0, 0, 0},
+		Std:      [3]float32{1, 1, 1},
+	}
+}
+
 func (c *Classifier) prepareInputTensor(img image.Image) (*onnxrt.Tensor[float32], func(), error) {
 	inH, inW := c.inH, c.inW
 	if inH <= 0 || inW <= 0 {
@@ -315,12 +341,13 @@ func (c *Classifier) prepareInputTensor(img image.Image) (*onnxrt.Tensor[float32
 	}
 
 	resized := imaging.Resize(img, inW, inH, imaging.Lanczos)
-	data, w, h, err := utils.NormalizeImage(resized)
+	params := defaultNormalizeParams()
+	data, w, h, err := utils.NormalizeImageWith(resized, params)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	tensor, err := onnx.NewImageTensor(data, 3, h, w)
+	tensor, err := onnx.NewImageTensor(data, params.Channels, h, w)
 	if err != nil {
 		return nil, nil, err
 	}

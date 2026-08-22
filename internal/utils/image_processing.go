@@ -147,47 +147,137 @@ func PadImage(img image.Image, targetWidth, targetHeight int) (image.Image, erro
 	return result, nil
 }
 
+// NormalizeParams describes how raw 8-bit pixel components are converted into
+// tensor values. For every channel c the stored value is
+//
+//	(raw*Scale - Mean[c]) / Std[c]
+//
+// where raw is the 0..255 component of the pixel. This mirrors the PaddleOCR
+// reference preprocessing, where Scale is typically 1/255.
+//
+// Identity parameters (Scale = 1/255, Mean = {0,0,0}, Std = {1,1,1}) yield the
+// plain [0,1] scaling that all consumers used before normalization became
+// configurable; see DefaultNormalizeParams.
+type NormalizeParams struct {
+	// Channels is the number of output channels of the NCHW tensor. Only 3
+	// (RGB) is currently supported, because the source pixels are RGB.
+	Channels int
+	// Scale is applied to the raw 0..255 component before mean subtraction.
+	Scale float32
+	// Mean and Std are per-channel (R, G, B) offset and divisor.
+	Mean, Std [3]float32
+}
+
+// DefaultNormalizeParams returns identity parameters that scale pixel values to
+// the [0,1] range without any mean/std centring.
+func DefaultNormalizeParams() NormalizeParams {
+	return NormalizeParams{
+		Channels: 3,
+		Scale:    1.0 / 255.0,
+		Mean:     [3]float32{0, 0, 0},
+		Std:      [3]float32{1, 1, 1},
+	}
+}
+
+// validate checks that the parameters can be applied to an RGB source image.
+func (p NormalizeParams) validate() error {
+	if p.Channels != normalizeChannels {
+		return &ImageProcessingError{
+			Operation: opNormalize,
+			Err:       fmt.Errorf("unsupported channel count %d, only %d is supported", p.Channels, normalizeChannels),
+		}
+	}
+	for i, s := range p.Std {
+		if s == 0 {
+			return &ImageProcessingError{
+				Operation: opNormalize,
+				Err:       fmt.Errorf("std for channel %d must not be zero", i),
+			}
+		}
+	}
+	return nil
+}
+
+const (
+	// normalizeChannels is the number of channels produced by the normalizers.
+	normalizeChannels = 3
+	// opNormalize labels normalization errors.
+	opNormalize = "normalize"
+)
+
+// normalizePrepare converts the input into an NRGBA copy and validates its
+// dimensions. It is shared by all normalization entry points so that they all
+// perform the same checks.
+func normalizePrepare(img image.Image, p NormalizeParams) (*image.NRGBA, int, int, error) {
+	if img == nil {
+		return nil, 0, 0, &ImageProcessingError{Operation: opNormalize, Err: errors.New("input image is nil")}
+	}
+	if err := p.validate(); err != nil {
+		return nil, 0, 0, err
+	}
+
+	// Convert to NRGBA to ensure we have RGB channels.
+	nrgba := imaging.Clone(img)
+	bounds := nrgba.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	if width <= 0 || height <= 0 {
+		return nil, 0, 0, &ImageProcessingError{Operation: opNormalize, Err: errors.New("invalid image dimensions")}
+	}
+	return nrgba, width, height, nil
+}
+
+// normalizeInto writes the normalized pixels of nrgba into dst in NCHW order
+// ([1, C, H, W], channel 0 = red, 1 = green, 2 = blue).
+//
+// Every element of dst is written unconditionally: pooled buffers are not
+// zeroed and are rounded up to a size class, so skipping writes would leak
+// stale values into the tensor.
+//
+// Note that At().RGBA() returns alpha-premultiplied 0..65535 components; the
+// >>8 shift reduces them to the premultiplied 0..255 range, which is the
+// behaviour every consumer has relied on so far.
+func normalizeInto(nrgba *image.NRGBA, dst []float32, p NormalizeParams) {
+	bounds := nrgba.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	plane := width * height
+
+	// Precompute reciprocals so the inner loop avoids divisions.
+	var invStd [normalizeChannels]float32
+	for i := range invStd {
+		invStd[i] = 1.0 / p.Std[i]
+	}
+
+	for y := range height {
+		for x := range width {
+			r, g, b, _ := nrgba.At(x+bounds.Min.X, y+bounds.Min.Y).RGBA()
+			idx := y*width + x
+			dst[idx] = (float32(r>>8)*p.Scale - p.Mean[0]) * invStd[0]
+			dst[plane+idx] = (float32(g>>8)*p.Scale - p.Mean[1]) * invStd[1]
+			dst[2*plane+idx] = (float32(b>>8)*p.Scale - p.Mean[2]) * invStd[2]
+		}
+	}
+}
+
 // NormalizeImage normalizes an image for OCR processing:
 // - Converts to RGB (removes alpha channel)
 // - Scales pixel values from 0-255 to 0-1
 // - Reorders channels from RGB to NCHW format for ONNX.
 func NormalizeImage(img image.Image) ([]float32, int, int, error) {
-	if img == nil {
-		return nil, 0, 0, &ImageProcessingError{Operation: "normalize", Err: errors.New("input image is nil")}
+	return NormalizeImageWith(img, DefaultNormalizeParams())
+}
+
+// NormalizeImageWith normalizes an image into a freshly allocated NCHW tensor
+// using the supplied parameters.
+func NormalizeImageWith(img image.Image, p NormalizeParams) ([]float32, int, int, error) {
+	nrgba, width, height, err := normalizePrepare(img, p)
+	if err != nil {
+		return nil, 0, 0, err
 	}
 
-	// Convert to NRGBA to ensure we have RGB channels
-	nrgba := imaging.Clone(img)
-	bounds := nrgba.Bounds()
-	width := bounds.Dx()
-	height := bounds.Dy()
-
-	// Prepare NCHW tensor: [1, 3, height, width]
-	// We use batch size 1 for single image processing
-	tensor := make([]float32, 3*height*width)
-
-	// Convert and normalize pixels
-	for y := range height {
-		for x := range width {
-			r, g, b, _ := nrgba.At(x+bounds.Min.X, y+bounds.Min.Y).RGBA()
-
-			// Convert from 0-65535 to 0-255, then to 0-1
-			rFloat := float32(r>>8) / 255.0
-			gFloat := float32(g>>8) / 255.0
-			bFloat := float32(b>>8) / 255.0
-
-			// Store in NCHW format: [batch=0, channel, y, x]
-			// Channel 0: Red, Channel 1: Green, Channel 2: Blue
-			rIdx := 0*height*width + y*width + x
-			gIdx := 1*height*width + y*width + x
-			bIdx := 2*height*width + y*width + x
-
-			tensor[rIdx] = rFloat
-			tensor[gIdx] = gFloat
-			tensor[bIdx] = bFloat
-		}
-	}
-
+	tensor := make([]float32, p.Channels*height*width)
+	normalizeInto(nrgba, tensor, p)
 	return tensor, width, height, nil
 }
 
@@ -195,34 +285,28 @@ func NormalizeImage(img image.Image) ([]float32, int, int, error) {
 // sufficient capacity. If buf is nil or too small, a new buffer is allocated.
 // Returns the slice used (length set appropriately) and image width/height.
 func NormalizeImageIntoBuffer(img image.Image, buf []float32) ([]float32, int, int, error) {
-	if img == nil {
-		return nil, 0, 0, &ImageProcessingError{Operation: "normalize", Err: errors.New("input image is nil")}
+	return NormalizeImageIntoBufferWith(img, buf, DefaultNormalizeParams())
+}
+
+// NormalizeImageIntoBufferWith normalizes an image into the provided buffer
+// using the supplied parameters. If buf is nil or too small, a new buffer is
+// allocated.
+func NormalizeImageIntoBufferWith(
+	img image.Image,
+	buf []float32,
+	p NormalizeParams,
+) ([]float32, int, int, error) {
+	nrgba, width, height, err := normalizePrepare(img, p)
+	if err != nil {
+		return nil, 0, 0, err
 	}
 
-	nrgba := imaging.Clone(img)
-	bounds := nrgba.Bounds()
-	width := bounds.Dx()
-	height := bounds.Dy()
-	if width <= 0 || height <= 0 {
-		return nil, 0, 0, &ImageProcessingError{Operation: "normalize", Err: errors.New("invalid image dimensions")}
-	}
-	needed := 3 * width * height
+	needed := p.Channels * width * height
 	if buf == nil || cap(buf) < needed {
 		buf = make([]float32, needed)
 	}
 	data := buf[:needed]
-	for y := range height {
-		for x := range width {
-			r, g, b, _ := nrgba.At(x+bounds.Min.X, y+bounds.Min.Y).RGBA()
-			rFloat := float32(r>>8) / 255.0
-			gFloat := float32(g>>8) / 255.0
-			bFloat := float32(b>>8) / 255.0
-			idx := y*width + x
-			data[idx] = rFloat
-			data[width*height+idx] = gFloat
-			data[2*width*height+idx] = bFloat
-		}
-	}
+	normalizeInto(nrgba, data, p)
 	return data, width, height, nil
 }
 
@@ -231,46 +315,22 @@ func NormalizeImageIntoBuffer(img image.Image, buf []float32) ([]float32, int, i
 // Converts to RGB (removes alpha channel), scales pixel values from 0-255 to 0-1,
 // and reorders channels from RGB to NCHW format for ONNX.
 func NormalizeImagePooled(img image.Image) ([]float32, int, int, error) {
-	if img == nil {
-		return nil, 0, 0, &ImageProcessingError{Operation: "normalize", Err: errors.New("input image is nil")}
+	return NormalizeImagePooledWith(img, DefaultNormalizeParams())
+}
+
+// NormalizeImagePooledWith normalizes an image into a pooled buffer using the
+// supplied parameters. The caller should return the buffer to the pool via
+// mempool.PutFloat32 when done.
+func NormalizeImagePooledWith(img image.Image, p NormalizeParams) ([]float32, int, int, error) {
+	nrgba, width, height, err := normalizePrepare(img, p)
+	if err != nil {
+		return nil, 0, 0, err
 	}
 
-	// Convert to NRGBA to ensure we have RGB channels
-	nrgba := imaging.Clone(img)
-	bounds := nrgba.Bounds()
-	width := bounds.Dx()
-	height := bounds.Dy()
-
-	if width <= 0 || height <= 0 {
-		return nil, 0, 0, &ImageProcessingError{Operation: "normalize", Err: errors.New("invalid image dimensions")}
-	}
-
-	// Allocate buffer from pool
-	needed := 3 * width * height
-	tensor := mempool.GetFloat32(needed)
-
-	// Convert and normalize pixels
-	for y := range height {
-		for x := range width {
-			r, g, b, _ := nrgba.At(x+bounds.Min.X, y+bounds.Min.Y).RGBA()
-
-			// Convert from 0-65535 to 0-255, then to 0-1
-			rFloat := float32(r>>8) / 255.0
-			gFloat := float32(g>>8) / 255.0
-			bFloat := float32(b>>8) / 255.0
-
-			// Store in NCHW format: [batch=0, channel, y, x]
-			// Channel 0: Red, Channel 1: Green, Channel 2: Blue
-			rIdx := 0*height*width + y*width + x
-			gIdx := 1*height*width + y*width + x
-			bIdx := 2*height*width + y*width + x
-
-			tensor[rIdx] = rFloat
-			tensor[gIdx] = gFloat
-			tensor[bIdx] = bFloat
-		}
-	}
-
+	// Pooled buffers are neither zeroed nor exactly sized, so normalizeInto
+	// must (and does) write every element of the returned slice.
+	tensor := mempool.GetFloat32(p.Channels * width * height)
+	normalizeInto(nrgba, tensor, p)
 	return tensor, width, height, nil
 }
 

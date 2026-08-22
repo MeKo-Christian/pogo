@@ -117,10 +117,30 @@ func TestDetector_PreprocessImage(t *testing.T) {
 	expectedLen := tensor.Shape[0] * tensor.Shape[1] * tensor.Shape[2] * tensor.Shape[3]
 	assert.Len(t, tensor.Data, int(expectedLen))
 
-	// Verify tensor values are normalized (0-1 range)
-	for _, val := range tensor.Data {
-		assert.GreaterOrEqual(t, val, float32(0.0))
-		assert.LessOrEqual(t, val, float32(1.0))
+	// Verify tensor values are ImageNet-centred, not plain [0,1].
+	// For a raw component in [0,255] the value is (raw/255 - mean_c) / std_c.
+	// The source image is pure white, so every channel must hold exactly
+	// (1 - mean_c) / std_c, which is well above 1.0 and therefore impossible
+	// under the old [0,1] normalization.
+	params := config.normalizeParams()
+	plane := int(tensor.Shape[2] * tensor.Shape[3])
+	for c := range 3 {
+		want := (1 - params.Mean[c]) / params.Std[c]
+		assert.Greater(t, want, float32(1.0))
+		for i := range plane {
+			assert.InDelta(t, want, tensor.Data[c*plane+i], 1e-6)
+		}
+	}
+
+	// A black image must produce negative (below-mean) values.
+	black, err := detector.preprocessImage(testutil.CreateTestImage(640, 480, color.RGBA{0, 0, 0, 255}))
+	require.NoError(t, err)
+	for c := range 3 {
+		want := -params.Mean[c] / params.Std[c]
+		assert.Negative(t, want)
+		for i := range plane {
+			assert.InDelta(t, want, black.Data[c*plane+i], 1e-6)
+		}
 	}
 }
 

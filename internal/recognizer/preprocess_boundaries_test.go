@@ -47,8 +47,15 @@ func TestNormalizeForRecognition_ValueRange(t *testing.T) {
 	require.Equal(t, int64(3), ten.Shape[1])
 	require.Equal(t, int64(outH), ten.Shape[2])
 	require.Equal(t, int64(outW), ten.Shape[3])
+
+	// Recognition input is centred to [-1, 1]; it must not be [0,1] any more.
+	sawNegative := false
 	for _, v := range ten.Data {
-		assert.GreaterOrEqual(t, v, float32(0))
+		assert.GreaterOrEqual(t, v, float32(-1))
 		assert.LessOrEqual(t, v, float32(1))
+		if v < 0 {
+			sawNegative = true
+		}
 	}
+	assert.True(t, sawNegative, "recognition input must reach negative values")
 }
