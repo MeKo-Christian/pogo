@@ -567,21 +567,46 @@ reads `hello`, not `hel1o`. Both failing `TestRecognizeBatch` tests are green.
 `go test ./...` passes apart from the PDF scenarios Phase 3 deletes, and no
 package takes over 60 s._
 
+**Phase 1 has not exited.** Measured on `main` (`ea2b511`) by the Task 2.2
+harness, mobile weights:
+
+| group   |  n  | exact | mean CER | mean WER |
+| ------- | :-: | :---: | -------: | -------: |
+| upright |  9  |   3   |   0.2036 |   0.6667 |
+| rotated |  5  |   0   |   0.8333 |   1.0000 |
+
+Task 1.6/1.7 landed — `rotated_0.png` reads `Rotated Text`, space included — but
+six upright cases are still wrong at the character level: `Hel1o`, `Wor1d`,
+`Samele`, `Test.`, `HaloWeitr`, and `3a Scannecuccment.` for
+`Scanned Document Sample`. The spaces are fixed; the glyph confusions are not.
+The `upright` gate in `internal/eval/gate.go` states the bar rather than the
+current number, so this failure is visible on every run and cannot be tuned
+away. Closing it is what remains of Phase 1.
+
 ## Phase 2 — Measure something real
 
 ### Task 2.1 — Take the thresholds away from the ground truth
 
-- [ ] Reduce `ocr_accuracy.json` to a manifest of `image` and `expected` only
-- [ ] Delete `MinSimilarity`, `MinCAR`, `MinWAR`, `MinAvgConf`, `MinContains`
-      from the `accuracyCase` struct (`accuracy_test.go:17-26`)
+- [x] Reduce `ocr_accuracy.json` to a manifest of `group`, `image` and
+      `expected` only
+- [x] Delete `MinSimilarity`, `MinCAR`, `MinWAR`, `MinAvgConf` from the
+      `accuracyCase` struct — the struct itself goes, replaced by `eval.Case`
+      (`MinContains` had already gone with Task 1.2)
+- [x] Move the metrics out of `accuracy_test.go`, where nothing outside
+      `go test` could reach them, into `internal/eval`
 
 **Accept:** grepping the manifest for `min_` returns nothing. A failing case can
 no longer be fixed by editing its own row.
 
 ### Task 2.2 — Define one corpus-level gate
 
-- [ ] Express the gate in code: mean CER, mean WER, exact-match count
-- [ ] Verify no per-case escape hatch survives anywhere on the path
+- [x] Express the gate in code: mean CER, mean WER, exact-match fraction
+      (`internal/eval/gate.go`), one per group, no per-case knob
+- [x] Verify no per-case escape hatch survives anywhere on the path — a group
+      with no gate is a violation, not a skipped check, so a typo in the
+      manifest cannot remove a case from the corpus
+- [x] Replace the bag-of-words word rate with a positional WER: the old
+      `wordAccuracyRate` scored "Text Rotated" against "Rotated Text" as perfect
 
 **Accept:** degrading any single case fails the corpus gate, and there is no knob
 that silences it short of changing the gate itself.

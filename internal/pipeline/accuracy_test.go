@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"encoding/json"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
@@ -11,120 +10,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MeKo-Tech/pogo/internal/eval"
 	"github.com/MeKo-Tech/pogo/internal/models"
 	"github.com/MeKo-Tech/pogo/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// accuracyCase is one ground-truth entry from testdata/fixtures/ocr_accuracy.json.
+// TestOCRAccuracy_SimpleFixtures measures the fixture corpus and holds it to the
+// gates declared in internal/eval.
 //
-// Group tiers the corpus. "upright" cases are held to exact match; "rotated"
-// cases keep similarity bars because the deskew packages that could make them
-// exact (internal/rectify, internal/orientation) are scheduled for deletion in
-// PLAN.md Task 3.9. Phase 3 decides whether they survive at all.
-type accuracyCase struct {
-	Group         string  `json:"group"`
-	Image         string  `json:"image"`
-	Expected      string  `json:"expected"`
-	MinSimilarity float64 `json:"min_similarity"`
-	MinCAR        float64 `json:"min_car"`
-	MinWAR        float64 `json:"min_war"`
-	MinAvgConf    float64 `json:"min_avg_conf"`
-}
-
-func levenshtein(a, b string) int {
-	ra := []rune(a)
-	rb := []rune(b)
-	if len(ra) == 0 {
-		return len(rb)
-	}
-	if len(rb) == 0 {
-		return len(ra)
-	}
-	prev := make([]int, len(rb)+1)
-	cur := make([]int, len(rb)+1)
-	for j := range prev {
-		prev[j] = j
-	}
-	for i := 1; i <= len(ra); i++ {
-		cur[0] = i
-		for j := 1; j <= len(rb); j++ {
-			cost := 0
-			if ra[i-1] != rb[j-1] {
-				cost = 1
-			}
-			// min of delete, insert, substitute
-			del := prev[j] + 1
-			ins := cur[j-1] + 1
-			sub := prev[j-1] + cost
-			if del < ins {
-				if del < sub {
-					cur[j] = del
-				} else {
-					cur[j] = sub
-				}
-			} else {
-				if ins < sub {
-					cur[j] = ins
-				} else {
-					cur[j] = sub
-				}
-			}
-		}
-		copy(prev, cur)
-	}
-	return prev[len(rb)]
-}
-
-func similarity(a, b string) float64 {
-	a = strings.TrimSpace(strings.ToLower(a))
-	b = strings.TrimSpace(strings.ToLower(b))
-	if a == "" && b == "" {
-		return 1
-	}
-	d := float64(levenshtein(a, b))
-	la := float64(len([]rune(a)))
-	lb := float64(len([]rune(b)))
-	maxLen := la
-	if lb > maxLen {
-		maxLen = lb
-	}
-	if maxLen == 0 {
-		return 1
-	}
-	return 1.0 - d/maxLen
-}
-
-func charAccuracyRate(a, b string) float64 { return similarity(a, b) }
-
-func wordAccuracyRate(a, b string) float64 {
-	aw := strings.Fields(strings.ToLower(a))
-	bw := strings.Fields(strings.ToLower(b))
-	if len(bw) == 0 && len(aw) == 0 {
-		return 1
-	}
-	if len(bw) == 0 {
-		return 0
-	}
-	// exact match ratio on expected words
-	matched := 0
-	// build set from aw
-	set := make(map[string]int)
-	for _, w := range aw {
-		set[w]++
-	}
-	for _, w := range bw {
-		if set[w] > 0 {
-			matched++
-			set[w]--
-		}
-	}
-	return float64(matched) / float64(len(bw))
-}
-
-// TestOCRAccuracy_SimpleFixtures validates text output against ground truth fixtures
-// using a similarity threshold to be robust to minor decoding differences.
+// The corpus manifest carries ground truth only. There is deliberately no
+// per-case threshold: a case that reads wrong cannot be answered by editing its
+// own row, only by fixing the engine or by moving a gate in eval.Gates, in code,
+// in a reviewable diff.
 func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 	// The pipeline builder defaults to the mobile variants, so gate on the models
 	// that are actually loaded. Set POGO_ACCURACY_MODELS=server to run the server
@@ -142,17 +41,13 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 		}
 	}
 
-	// Load fixtures. Paths are resolved against the project root rather than
-	// the package working directory, so no testdata symlink is required.
+	// Fixture paths are resolved against the project root rather than the package
+	// working directory, so no testdata symlink is required.
 	root, err := testutil.GetProjectRoot()
 	require.NoError(t, err)
-	data, err := os.ReadFile(filepath.Join(testutil.GetFixturesDir(t), "ocr_accuracy.json"))
+	cases, err := eval.LoadManifest(filepath.Join(testutil.GetFixturesDir(t), "ocr_accuracy.json"), root)
 	require.NoError(t, err)
-	var cases []accuracyCase
-	require.NoError(t, json.Unmarshal(data, &cases))
-	require.NotEmpty(t, cases)
 
-	// Build pipeline
 	b := NewBuilder().WithModelsDir(models.GetModelsDir(""))
 	b.WithImageHeight(48)
 	b.WithServerModels(useServer)
@@ -162,58 +57,54 @@ func TestOCRAccuracy_SimpleFixtures(t *testing.T) {
 	}
 	defer func() { _ = p.Close() }()
 
+	results := make([]eval.CaseResult, 0, len(cases))
 	for _, c := range cases {
-		t.Run(c.Group+"/"+c.Image, func(t *testing.T) {
-			started := time.Now()
-			var regionCount int
-			var recognized string
-			defer func() {
-				t.Logf("elapsed=%s regions=%d text=%q",
-					time.Since(started).Round(time.Millisecond), regionCount, recognized)
-			}()
-			//nolint:gosec // G304: the path comes from the checked-in fixture file, not from user input.
-			f, err := os.Open(filepath.Join(root, c.Image))
-			require.NoError(t, err)
-			defer func() { _ = f.Close() }()
-			img, _, err := image.Decode(f)
-			require.NoError(t, err)
-			res, err := p.ProcessImage(img)
-			require.NoError(t, err)
-			regionCount = len(res.Regions)
-			txt, err := ToPlainTextImage(res)
-			require.NoError(t, err)
-			recognized = txt
-			sim := similarity(txt, c.Expected)
-			assert.GreaterOrEqualf(t, sim, c.MinSimilarity, "similarity=%.3f text=%q expected=%q", sim, txt, c.Expected)
-			car := charAccuracyRate(txt, c.Expected)
-			assert.GreaterOrEqualf(t, car, c.MinCAR, "CAR=%.3f text=%q expected=%q", car, txt, c.Expected)
-			war := wordAccuracyRate(txt, c.Expected)
-			assert.GreaterOrEqualf(t, war, c.MinWAR, "WAR=%.3f text=%q expected=%q", war, txt, c.Expected)
-
-			// similarity, CAR and WAR all fold case, so a 1.0 bar on its own
-			// would still accept "hello" for "Hello". Cases that ask for a
-			// perfect score get a case-sensitive equality check on top,
-			// normalizing only whitespace.
-			if c.MinSimilarity >= 1.0 {
-				assert.Equalf(t, c.Expected, strings.Join(strings.Fields(txt), " "),
-					"exact match required, text=%q expected=%q", txt, c.Expected)
-			}
-
-			// Minimum average recognition confidence across regions (if present)
-			if c.MinAvgConf > 0 {
-				var sum float64
-				var count int
-				for _, r := range res.Regions {
-					if strings.TrimSpace(r.Text) != "" {
-						sum += r.RecConfidence
-						count++
-					}
-				}
-				if count > 0 {
-					avg := sum / float64(count)
-					assert.GreaterOrEqualf(t, avg, c.MinAvgConf, "avg_rec_conf=%.3f below min %.3f", avg, c.MinAvgConf)
-				}
-			}
-		})
+		results = append(results, runAccuracyCase(t, p, root, c))
 	}
+
+	groups, overall := eval.Summarize(results)
+	// Logged on every run, not only on failure: this table is the measurement,
+	// and it is what the gates in eval.Gates were set from.
+	t.Log("\n" + eval.FormatResults(results, groups, overall))
+
+	violations := eval.CheckAll(groups)
+	for _, v := range violations {
+		t.Error(v.String())
+	}
+	assert.Emptyf(t, violations, "corpus gate failed; see the table above for the offending cases")
+}
+
+// runAccuracyCase reads one fixture through the pipeline and scores it.
+func runAccuracyCase(t *testing.T, p *Pipeline, root string, c eval.Case) eval.CaseResult {
+	t.Helper()
+	started := time.Now()
+	//nolint:gosec // G304: the path comes from the checked-in manifest, not from user input.
+	f, err := os.Open(filepath.Join(root, c.Image))
+	require.NoError(t, err)
+	defer func() { _ = f.Close() }()
+	img, _, err := image.Decode(f)
+	require.NoError(t, err)
+	res, err := p.ProcessImage(img)
+	require.NoError(t, err)
+	txt, err := ToPlainTextImage(res)
+	require.NoError(t, err)
+	return eval.Score(c, txt, len(res.Regions), avgRecConfidence(res), time.Since(started))
+}
+
+// avgRecConfidence averages recognition confidence over the regions that
+// produced text. It is reported rather than gated: every fixture carried
+// min_avg_conf: 0.0, so the old assertion never once executed.
+func avgRecConfidence(res *OCRImageResult) float64 {
+	var sum float64
+	var n int
+	for _, r := range res.Regions {
+		if strings.TrimSpace(r.Text) != "" {
+			sum += r.RecConfidence
+			n++
+		}
+	}
+	if n == 0 {
+		return 0
+	}
+	return sum / float64(n)
 }
