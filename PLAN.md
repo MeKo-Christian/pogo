@@ -436,21 +436,21 @@ suite stays fast — that is a workaround, not the fix.
 
 ### Task 1.4 — Read the model's real class count
 
-- [ ] Find the output-shape accessor already exposed by `internal/onnx`
-- [ ] Read the recognizer's output class count at init; the seam is
+- [x] Find the output-shape accessor already exposed by `internal/onnx`
+- [x] Read the recognizer's output class count at init; the seam is
       `loadCharsetForRecognizer`, `recognizer.go:185-203`
-- [ ] Surface it on the recognizer so Task 1.5 can assert against it
+- [x] Surface it on the recognizer so Task 1.5 can assert against it
 
 **Accept:** a unit test asserts 18385 for both bundled recognizer models, read
 from the graph rather than hardcoded.
 
 ### Task 1.5 — Make a dictionary/model mismatch a startup error
 
-- [ ] Fail recognizer construction when
+- [x] Fail recognizer construction when
       `charset size + specials != model classes`
-- [ ] Name both numbers in the error message
-- [ ] Add the negative test: PP-OCRv5 rec + `ppocr_keys_v1.txt` (142 lines)
-- [ ] Add the positive test: PP-OCRv5 rec + `ppocrv5_dict.txt`
+- [x] Name both numbers in the error message
+- [x] Add the negative test: PP-OCRv5 rec + `ppocr_keys_v1.txt` (142 lines)
+- [x] Add the positive test: PP-OCRv5 rec + `ppocrv5_dict.txt`
 
 **Accept:** the negative case returns an error containing both `18385` and
 `143`; the positive case returns no error. A mismatch can no longer reach
@@ -458,10 +458,10 @@ inference at all.
 
 ### Task 1.6 — Append the space token
 
-- [ ] Add an explicit append-space step to charset loading in `dictionary.go`,
+- [x] Add an explicit append-space step to charset loading in `dictionary.go`,
       off by default
-- [ ] Turn it on for PP-OCRv5
-- [ ] Leave `dictionary.go:75`'s empty-line skip alone — the fix is code, not a
+- [x] Turn it on for PP-OCRv5
+- [x] Leave `dictionary.go:75`'s empty-line skip alone — the fix is code, not a
       blank line in the dictionary file
 
 **Accept:** charset size becomes 18384 and Task 1.5's assertion passes with the
@@ -469,8 +469,8 @@ real dictionary.
 
 ### Task 1.7 — Prove the decode index mapping end to end
 
-- [ ] Trace `inference.go:229`'s `LookupToken(idx - 1)` against the new size
-- [ ] Add a test asserting on the space character specifically, not just on
+- [x] Trace `inference.go:229`'s `LookupToken(idx - 1)` against the new size
+- [x] Add a test asserting on the space character specifically, not just on
       overall similarity
 
 **Accept:** `rotated/rotated_0.png` recognizes as `Rotated Text`, with the

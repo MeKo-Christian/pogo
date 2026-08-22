@@ -224,21 +224,9 @@ func (r *Recognizer) decodeOutput(output *modelOutput, preprocessed *preprocesse
 		return nil, 0, errors.New("unknown sequence type")
 	}
 
-	runes := make([]rune, 0, len(collapsed))
-	for _, idx := range collapsed {
-		// map index to token; idx in [0..classes-1], 0 is blank
-		ch := r.charset.LookupToken(idx - 1) // shift by -1 to skip blank
-		if ch == "" {
-			continue
-		}
-		runes = append(runes, []rune(ch)...)
-	}
-	text := string(runes)
-
-	// Apply filter charset if configured (removes characters not in filter dictionary)
-	if r.filterCharset != nil {
-		text = r.filterCharset.Filter(text)
-	}
+	// Single-region and batch decoding share one index -> rune mapping so the two
+	// paths cannot drift apart.
+	text := convertIndicesToRunes(collapsed, r.charset, r.filterCharset)
 
 	return &Result{
 		Text:            text,
@@ -383,12 +371,14 @@ func extractSequenceData(seq interface{}) ([]int, []float64, float64) {
 	}
 }
 
-// convertIndicesToRunes converts token indices to runes using the charset.
+// convertIndicesToRunes converts CTC class indices to text using the charset.
+// Class 0 is the CTC blank, so class i maps to charset token i-1. The last class
+// is the space token when the charset was loaded with CharsetOptions.AppendSpace.
 // Optionally applies filtering if filterCharset is non-nil.
 func convertIndicesToRunes(indices []int, charset *Charset, filterCharset *Charset) string {
 	runes := make([]rune, 0, len(indices))
 	for _, idx := range indices {
-		ch := charset.LookupToken(idx - 1)
+		ch := charset.LookupToken(idx - 1) // shift by -1 to skip blank
 		if ch == "" {
 			continue
 		}
