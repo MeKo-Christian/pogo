@@ -567,18 +567,20 @@ reads `hello`, not `hel1o`. Both failing `TestRecognizeBatch` tests are green.
 `go test ./...` passes apart from the PDF scenarios Phase 3 deletes, and no
 package takes over 60 s._
 
-**Phase 1 has not exited.** Measured on `main` (`ea2b511`) by the Task 2.2
-harness, mobile weights:
+**Phase 1 has not exited.** Measured on `main` (`ff34854`, i.e. after Task
+1.12's contour fix) by the Task 2.2 harness, mobile weights, in 6.7 s:
 
 | group   |  n  | exact | mean CER | mean WER |
 | ------- | :-: | :---: | -------: | -------: |
-| upright |  9  |   3   |   0.2036 |   0.6667 |
+| upright |  9  |   4   |   0.1867 |   0.5556 |
 | rotated |  5  |   0   |   0.8333 |   1.0000 |
 
-Task 1.6/1.7 landed — `rotated_0.png` reads `Rotated Text`, space included — but
-six upright cases are still wrong at the character level: `Hel1o`, `Wor1d`,
-`Samele`, `Test.`, `HaloWeitr`, and `3a Scannecuccment.` for
-`Scanned Document Sample`. The spaces are fixed; the glyph confusions are not.
+Task 1.6/1.7 landed — `rotated_0.png` reads `Rotated Text`, space included — and
+Task 1.12 fixed `simple_1_Hello` on the way past (`Hel1o` → `Hello`, a contour
+tracer that never terminated). Five upright cases are still wrong at the
+character level: `Wor1d`, `Samele`, `Test.`, `Haloet`, and `3a ScaonedHcument`
+for `Scanned Document Sample`. The spaces are fixed; the glyph confusions are
+not.
 The `upright` gate in `internal/eval/gate.go` states the bar rather than the
 current number, so this failure is visible on every run and cannot be tuned
 away. Closing it is what remains of Phase 1.

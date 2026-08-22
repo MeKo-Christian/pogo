@@ -19,9 +19,9 @@ type Gate struct {
 //
 // "upright" is held to exact match: the nine upright fixtures are clean renders
 // of short strings, and there is no reason for any of them to be off by a
-// character. It does not pass today — the corpus reads "Hel1o", "Wor1d",
-// "Samele", "Test." and "HaloWeitr", so 3 of 9 are exact and mean CER is
-// 0.2036. PLAN.md's Phase 1 exit line claims otherwise; the measurement says
+// character. It does not pass today — the corpus reads "Wor1d", "Samele",
+// "Test.", "Haloet" and "3a ScaonedHcument", so 4 of 9 are exact and mean CER
+// is 0.1867. PLAN.md's Phase 1 exit line claims otherwise; the measurement says
 // it is not met. That failure is the point: the bar states what must be true,
 // not what happens to be true, and there is no longer any row to edit to make
 // it green.
