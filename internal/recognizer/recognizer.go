@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"sync"
 
@@ -36,6 +35,13 @@ type Config struct {
 	// Decoding parameters
 	DecodingMethod string // "greedy" or "beam_search"
 	BeamWidth      int    // Beam width for beam search (ignored for greedy)
+	// CTCLayout declares how the model lays out its output tensor: LayoutNTC
+	// ([N, T, C], the PaddleOCR default) or LayoutNCT ([N, C, T]). It is
+	// declared rather than inferred, and is checked against the model's own
+	// output shape at load time.
+	CTCLayout CTCLayout
+	// BlankIndex is the CTC blank class. PaddleOCR heads put it at 0.
+	BlankIndex int
 	// AppendSpaceToken appends the space character as an extra token after the
 	// dictionary entries. PaddleOCR recognition heads are laid out as
 	// ["blank"] + dictionary + [" "], so the bundled PP-OCRv5 models declare one
@@ -58,6 +64,8 @@ func DefaultConfig() Config {
 		GPU:              onnx.DefaultGPUConfig(),
 		DecodingMethod:   "greedy",
 		BeamWidth:        10,
+		CTCLayout:        LayoutNTC,
+		BlankIndex:       0,
 		AppendSpaceToken: true, // every bundled model is PP-OCRv5
 	}
 }
@@ -144,20 +152,29 @@ func validateRecognizerConfig(config Config) error {
 	if config.DictPath == "" && len(config.DictPaths) == 0 {
 		return errors.New("dictionary path cannot be empty")
 	}
+	if err := config.CTCLayout.validate(); err != nil {
+		return err
+	}
+	if config.BlankIndex < 0 {
+		return fmt.Errorf("blank index cannot be negative, got %d", config.BlankIndex)
+	}
 
 	if _, err := os.Stat(config.ModelPath); os.IsNotExist(err) {
 		return fmt.Errorf("model file not found: %s", config.ModelPath)
 	}
 
-	if len(config.DictPaths) > 0 {
-		for _, p := range config.DictPaths {
-			if _, err := os.Stat(p); os.IsNotExist(err) {
-				return fmt.Errorf("dictionary file not found: %s", p)
-			}
-		}
-	} else {
-		if _, err := os.Stat(config.DictPath); os.IsNotExist(err) {
-			return fmt.Errorf("dictionary file not found: %s", config.DictPath)
+	return validateDictionaryPaths(config)
+}
+
+// validateDictionaryPaths checks that every configured dictionary file exists.
+func validateDictionaryPaths(config Config) error {
+	paths := config.DictPaths
+	if len(paths) == 0 {
+		paths = []string{config.DictPath}
+	}
+	for _, p := range paths {
+		if _, err := os.Stat(p); os.IsNotExist(err) {
+			return fmt.Errorf("dictionary file not found: %s", p)
 		}
 	}
 	return nil
@@ -221,40 +238,81 @@ func loadAndValidateCharset(config Config, outputInfo onnxrt.InputOutputInfo) (*
 	if err != nil {
 		return nil, err
 	}
+	if err := validateCTCLayout(charset, outputInfo, config); err != nil {
+		return nil, err
+	}
 	if err := validateCharsetAgainstModel(charset, outputInfo, config); err != nil {
 		return nil, err
 	}
 	return charset, nil
 }
 
-// modelClassCandidates returns the statically declared sizes of the axes that
-// can carry the class dimension, trailing axis first. A PP-OCR CTC head is
-// emitted either as [N, T, C] (classes last) or as [N, C, T] (classes first, see
-// determineClassesFirst), so both trailing axes are candidates. Axes the model
-// leaves dynamic are omitted; an empty result means the class count is unknown.
-func modelClassCandidates(dims []int64) []int {
-	candidates := make([]int, 0, 2)
-	for i := len(dims) - 1; i >= 0 && i >= len(dims)-2; i-- {
-		if dims[i] > 0 {
-			candidates = append(candidates, int(dims[i]))
-		}
+// normalizeOutputDims strips trailing unit dimensions until the shape is rank 3,
+// so [N, T, C, 1] and [N, T, C] are treated alike.
+func normalizeOutputDims(dims []int64) []int64 {
+	out := make([]int64, len(dims))
+	copy(out, dims)
+	for len(out) > 3 && out[len(out)-1] == 1 {
+		out = out[:len(out)-1]
 	}
-	return candidates
+	return out
 }
 
-// resolveOutputClasses picks the class count out of the declared output shape.
-// Since the position of the class axis depends on the model layout, the axis
-// whose size matches expected wins; otherwise the trailing static axis is used.
-// It returns 0 when neither candidate axis is statically declared.
-func resolveOutputClasses(dims []int64, expected int) int {
-	candidates := modelClassCandidates(dims)
-	if slices.Contains(candidates, expected) {
-		return expected
+// classDimIndex returns the index of the class dimension under the given
+// layout: [N, T, C] puts it last, [N, C, T] puts it in the middle.
+func classDimIndex(layout CTCLayout) int {
+	if layout.classesFirst() {
+		return 1
 	}
-	if len(candidates) > 0 {
-		return candidates[0]
+	return 2
+}
+
+// outputClassCount returns the number of output classes declared by the model,
+// reading whichever dimension the declared layout says carries the classes. It
+// returns 0 when that dimension is dynamic or absent, in which case the class
+// count is unknown.
+func outputClassCount(dims []int64, layout CTCLayout) int {
+	norm := normalizeOutputDims(dims)
+	if len(norm) < 3 {
+		if len(norm) == 0 {
+			return 0
+		}
+		last := norm[len(norm)-1]
+		if last <= 0 {
+			return 0
+		}
+		return int(last)
+	}
+	if d := norm[classDimIndex(layout)]; d > 0 {
+		return int(d)
 	}
 	return 0
+}
+
+// validateCTCLayout rejects a declared layout that the model's own output shape
+// contradicts. If the dimension the declaration calls "time" is static and holds
+// exactly the class count the dictionary implies, while the dimension it calls
+// "classes" does not, the declaration is the wrong way round. When both
+// dimensions are dynamic there is nothing to check and the declaration stands.
+func validateCTCLayout(charset *Charset, outputInfo onnxrt.InputOutputInfo, config Config) error {
+	dims := normalizeOutputDims(outputInfo.Dimensions)
+	if len(dims) < 3 || charset == nil {
+		return nil
+	}
+	layout := config.ctcLayout()
+	expected := int64(charset.Size() + 1)
+	classIdx := classDimIndex(layout)
+	timeIdx := 3 - classIdx
+	if dims[classIdx] == expected {
+		return nil
+	}
+	if dims[timeIdx] == expected {
+		return fmt.Errorf(
+			"ctc layout %q contradicts the model: %d classes sit in dimension %d, not %d (output shape %v)",
+			layout, expected, timeIdx, classIdx, outputInfo.Dimensions,
+		)
+	}
+	return nil
 }
 
 // dictionaryDescription renders the configured dictionary path(s) for error messages.
@@ -268,29 +326,29 @@ func dictionaryDescription(config Config) string {
 // validateCharsetAgainstModel fails construction when the dictionary cannot
 // possibly match the model head. A PP-OCR CTC head has one class per dictionary
 // token plus one CTC blank, so charset.Size()+1 must equal the model's class
-// count. The class axis is resolved the same way decoding resolves it, so a
-// classes-first [N, C, T] output is accepted too. The check is skipped when the
-// model leaves both candidate axes dynamic.
+// count. The class axis is the one the declared layout names, which
+// validateCTCLayout has already checked against the model's own shape. The
+// check is skipped when the model leaves that axis dynamic.
 func validateCharsetAgainstModel(charset *Charset, outputInfo onnxrt.InputOutputInfo, config Config) error {
-	expected := charset.Size() + 1
-	candidates := modelClassCandidates(outputInfo.Dimensions)
-	if len(candidates) == 0 {
+	classes := outputClassCount(outputInfo.Dimensions, config.ctcLayout())
+	if classes == 0 {
 		slog.Debug("Model output class dimension is dynamic; skipping dictionary/model class count check",
 			"output_shape", outputInfo.Dimensions)
 		return nil
 	}
-	if slices.Contains(candidates, expected) {
+	expected := charset.Size() + 1
+	if expected == classes {
 		return nil
 	}
 
 	hint := ""
-	if config.AppendSpaceToken && slices.Contains(candidates, charset.Size()) {
+	if config.AppendSpaceToken && classes == charset.Size() {
 		hint = "; the model declares no space class, set append_space_token=false for this dictionary"
 	}
 	return fmt.Errorf(
-		"dictionary does not match model: model output shape %v declares %v as possible class counts, "+
-			"but dictionary %s yields %d (%d tokens + 1 CTC blank)%s",
-		outputInfo.Dimensions, candidates, dictionaryDescription(config), expected, charset.Size(), hint,
+		"dictionary does not match model: model declares %d output classes, but dictionary %s yields %d "+
+			"(%d tokens + 1 CTC blank)%s",
+		classes, dictionaryDescription(config), expected, charset.Size(), hint,
 	)
 }
 
@@ -414,7 +472,7 @@ func (r *Recognizer) GetOutputShape() []int64 {
 func (r *Recognizer) OutputClasses() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return resolveOutputClasses(r.outputInfo.Dimensions, r.charset.Size()+1)
+	return outputClassCount(r.outputInfo.Dimensions, r.config.ctcLayout())
 }
 
 // GetCharset returns the loaded character set.

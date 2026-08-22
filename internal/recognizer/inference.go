@@ -183,11 +183,9 @@ func (r *Recognizer) decodeOutput(output *modelOutput, preprocessed *preprocesse
 	r.mu.RLock()
 	decodingMethod := r.config.DecodingMethod
 	beamWidth := r.config.BeamWidth
+	classesFirst := r.config.ctcLayout().classesFirst()
+	blankIndex := r.config.BlankIndex
 	r.mu.RUnlock()
-
-	classesGuess := r.charset.Size() + 1
-	classesFirst := determineClassesFirst(output.shape, classesGuess)
-	blankIndex := 0 // PaddleOCR CTC typically uses blank=0
 
 	var seq interface{}
 	if decodingMethod == "beam_search" && beamWidth > 1 {
@@ -487,11 +485,9 @@ func (r *Recognizer) RecognizeBatch(img image.Image, regions []detector.Detected
 	r.mu.RLock()
 	decodingMethod := r.config.DecodingMethod
 	beamWidth := r.config.BeamWidth
+	classesFirst := r.config.ctcLayout().classesFirst()
+	blankIndex := r.config.BlankIndex
 	r.mu.RUnlock()
-
-	classesGuess := r.charset.Size() + 1
-	classesFirst := determineClassesFirst(output.shape, classesGuess)
-	blankIndex := 0
 
 	var decoded interface{}
 	if decodingMethod == "beam_search" && beamWidth > 1 {
@@ -514,28 +510,4 @@ func toRGBA(img image.Image) *image.RGBA {
 		}
 	}
 	return dst
-}
-
-// determineClassesFirst infers whether the classes dimension comes before the time dimension.
-func determineClassesFirst(shape []int64, classesGuess int) bool {
-	if len(shape) < 3 {
-		return false
-	}
-	dims := make([]int64, len(shape))
-	copy(dims, shape)
-	for len(dims) > 3 && dims[len(dims)-1] == 1 {
-		dims = dims[:len(dims)-1]
-	}
-	if len(dims) < 3 {
-		return false
-	}
-	tDim := dims[1]
-	cDim := dims[2]
-	if int(cDim) == classesGuess {
-		return false
-	}
-	if int(tDim) == classesGuess {
-		return true
-	}
-	return false
 }
