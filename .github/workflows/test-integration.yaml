@@ -1,0 +1,28 @@
+name: test-integration
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  test-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install Just
+        uses: extractions/setup-just@v2
+        with:
+          just-version: 1.14.0
+      - name: Setup ONNX Runtime
+        uses: ./.github/actions/setup-onnxruntime
+      - name: Generate test data
+        run: just test-data-generate
+      - name: Run ONNX Runtime smoke tests
+        run: just test-onnx
+      - name: Run integration tests
+        run: just test-integration
